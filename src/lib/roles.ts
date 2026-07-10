@@ -128,6 +128,7 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
   { section: "Sistema",       path: "/erp/roles",               label: "Roles", hasEdit: true },
   { section: "Sistema",       path: "/erp/sitio-web",           label: "Gestión Web / CMS", hasEdit: true },
+  { section: "Sistema",       path: "/erp/publicidad",          label: "Publicidad / Artículos", hasEdit: true },
   { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría", hasEdit: false },
 ] as const;
 
@@ -188,6 +189,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/usuarios",            label: "Usuarios",            icon: "UserCog",          section: "Sistema",       roles: ["admin"] },
   { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
   { href: "/erp/sitio-web",           label: "Página Web / CMS",    icon: "Globe",            section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/publicidad",          label: "Publicidad",          icon: "Newspaper",        section: "Sistema",       roles: ["admin"] },
   { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },
 ];
 

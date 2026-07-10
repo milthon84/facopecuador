@@ -8,7 +8,7 @@ import {
   Package, FileText, UserCog, ShieldCheck, X, Menu,
   LogOut, Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers, GraduationCap, Award, Presentation, Megaphone, Globe
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +18,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Package, FileText, UserCog, ShieldCheck, Settings,
   ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers, GraduationCap, Award, Presentation, Megaphone, Globe
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper
 };
 
 interface Props {

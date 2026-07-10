@@ -10,8 +10,8 @@ import {
   Stethoscope,
 } from "lucide-react";
 import CursosSection from "./CursosSection";
-import ArticulosCarousel from "./ArticulosCarousel";
-import CoworkingShowcase from "./CoworkingShowcase";
+import ClinicaCarousel from "./ClinicaCarousel";
+import CoworkingCarousel from "./CoworkingCarousel";
 
 export const dynamic = "force-dynamic";
 
@@ -69,18 +69,22 @@ export default async function HomePage() {
   // 3. Obtener noticias publicadas (últimas 6)
   const { data: posts } = await supabase
     .from("web_posts")
-    .select("id, title, slug, content, image_url, created_at")
+    .select("id, title, slug, content, image_url, created_at, category")
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(6);
+
+  const cursosPosts = (posts || []).filter((p) => p.category === "cursos");
+  const clinicaPosts = (posts || []).filter((p) => p.category === "clinica");
+  const coworkingPosts = (posts || []).filter((p) => p.category === "coworking");
 
   const clinicName = process.env.NEXT_PUBLIC_CLINIC_NAME || "FACOP Ecuador";
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 selection:bg-gold-500 selection:text-white">
       {/* ── MENÚ DE NAVEGACIÓN PRINCIPAL ── */}
-      <header className="sticky top-0 z-40 w-full border-b border-lilac-100 bg-white/80 backdrop-blur-md transition-all">
-        <div className="px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+      <header className="sticky top-0 z-40 bg-slate-50/95 backdrop-blur-md transition-all">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <img src="/logo.png" alt={clinicName} className="h-14 w-auto object-contain" />
           </Link>
@@ -88,7 +92,7 @@ export default async function HomePage() {
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-ink-600">
             <Link href="#cursos" className="hover:text-gold-600 transition">Eventos y Cursos</Link>
             <Link href="#ventajas" className="hover:text-gold-600 transition">Clínica</Link>
-            <Link href="#" className="hover:text-gold-600 transition">Coworking</Link>
+            <Link href="#coworking" className="hover:text-gold-600 transition">Coworking</Link>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -129,47 +133,51 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* ── SECCIÓN HERO (BOCETO MEJORADO) ── */}
-      <section className="relative px-6 py-20 lg:py-12 overflow-hidden bg-slate-850 flex items-center justify-center">
-        {/* Imagen de fondo con opacidad */}
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        >
-          <source src="/videos/facop-intro.mp4" type="video/mp4" />
-        </video>
-        {/* Gradiente overlay elegante */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent pointer-events-none" />
+      {/* ── SECCIÓN HERO ── */}
+      <section className="px-6 pt-2 pb-8 lg:pt-3 lg:pb-10 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          <div className="relative overflow-hidden rounded-2xl shadow-lg h-[200px] sm:h-[240px] lg:h-[280px] flex items-center justify-center">
+            {/* Video de fondo */}
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover"
+            >
+              <source src="/videos/facop-intro.mp4" type="video/mp4" />
+            </video>
+            {/* Gradiente overlay sutil */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-slate-950/10 pointer-events-none" />
 
-        <div className="relative z-10 max-w-4xl mx-auto text-center text-white">
-          
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight tracking-tight">
-            {hero.title}
-          </h1>
-          <p className="text-lg sm:text-xl text-slate-350 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
-            {hero.subtitle}
-          </p>
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold-500/20 border border-gold-500/30 text-gold-400 text-xs font-semibold uppercase tracking-wider mb-6 animate-pulse">
-             Te esperamos
+            <div className="relative z-10 max-w-2xl mx-auto text-center text-white px-6">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 leading-tight tracking-tight">
+                {hero.title}
+              </h1>
+              <p className="hidden sm:block text-xs sm:text-sm text-slate-300 max-w-md mx-auto mb-4 font-light leading-relaxed">
+                {hero.subtitle}
+              </p>
+              <div className="hidden sm:inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm text-white text-[11px] font-medium tracking-wide">
+                Te esperamos
+              </div>
+            </div>
           </div>
         </div>
       </section>
       {/* ── SECCIÓN DE CURSOS Y DIPLOMADOS (SECCIÓN 1) ── */}
-      <section id="cursos" className="px-6 py-16 lg:py-24 bg-slate-100/60 border-y border-slate-200/40">
+      <section id="cursos" className="px-6 py-10 lg:py-15 bg-slate-100/60 border-y border-slate-200/40">
         <div className="max-w-6xl mx-auto">
           <CursosSection
             courses={courses || []}
+            posts={cursosPosts}
             whatsappPhone={contact.phone}
             whatsappLink={contact.whatsapp_link}
           />
         </div>
       </section>
 
-      {/* ── SECCIÓN DE LA CLÍNICA & ARTÍCULOS (SECCIÓN 2) ── */}
-      <section id="ventajas" className="px-6 py-16 lg:py-24 max-w-6xl mx-auto">
+      {/* ── SECCIÓN DE LA CLÍNICA (SECCIÓN 2) ── */}
+      <section id="ventajas" className="px-6 py-10 lg:py-15 max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
           
           {/* LADO IZQUIERDO: 6 columnas — título en 2 líneas, descripción y botón */}
@@ -195,22 +203,22 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* LADO DERECHO: 6 columnas — Carrusel de tarjetas 3D */}
+          {/* LADO DERECHO: 6 columnas — Carrusel de artículos de la Clínica */}
           <div className="lg:col-span-6 w-full">
-            <ArticulosCarousel posts={posts || []} />
+            <ClinicaCarousel posts={clinicaPosts} />
           </div>
 
         </div>
       </section>
 
       {/* ── SECCIÓN 3: COWORKING DENTAL ── */}
-      <section id="coworking" className="px-6 py-16 lg:py-24 bg-slate-100/60 border-y border-slate-200/40">
+      <section id="coworking" className="px-6 py-10 lg:py-15 bg-slate-100/60 border-y border-slate-200/40">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
 
-            {/* LADO IZQUIERDO: 6 columnas — Showcase de features coworking */}
+            {/* LADO IZQUIERDO: 6 columnas — Carrusel de artículos de CoWorking */}
             <div className="lg:col-span-6 w-full">
-              <CoworkingShowcase />
+              <CoworkingCarousel posts={coworkingPosts} />
             </div>
 
             {/* LADO DERECHO: 6 columnas — Título, descripción y botón */}

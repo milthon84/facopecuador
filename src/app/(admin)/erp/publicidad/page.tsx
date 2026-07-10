@@ -1,0 +1,33 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { assertWritePermission } from "@/lib/auth-action";
+import PublicidadClientPage from "./PublicidadClientPage";
+
+export const dynamic = "force-dynamic";
+
+export default async function PublicidadPage() {
+  // Verificar permisos de escritura en la ruta de gestión de publicidad
+  await assertWritePermission("/erp/publicidad");
+
+  const supabase = createAdminClient();
+
+  // Obtener artículos/noticias de todas las secciones (Cursos, Clínica, CoWorking)
+  const { data: postsData } = await supabase
+    .from("web_posts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  return (
+    <div className="pb-10">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">Publicidad</h1>
+          <p className="text-sm text-ink-600">
+            Administra las noticias y artículos que se muestran en los carruseles públicos de Cursos, Clínica y CoWorking.
+          </p>
+        </div>
+      </div>
+
+      <PublicidadClientPage initialPosts={postsData || []} />
+    </div>
+  );
+}

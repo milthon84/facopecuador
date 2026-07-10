@@ -15,13 +15,24 @@ interface Course {
   image_url?: string | null;
 }
 
+interface Post {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+  category?: string;
+}
+
 interface Props {
   courses: Course[];
+  posts?: Post[];
   whatsappPhone: string;
   whatsappLink: string;
 }
 
-export default function CursosSection({ courses, whatsappPhone }: Props) {
+export default function CursosSection({ courses, posts = [], whatsappPhone }: Props) {
   // activeCourseId rastrea qué curso está activo en el carrusel
   const [activeCourseId, setActiveCourseId] = useState<string>(
     courses.length > 0 ? courses[0].id : ""
@@ -35,8 +46,8 @@ export default function CursosSection({ courses, whatsappPhone }: Props) {
 
       {/* LADO IZQUIERDO: 6 columnas — Carrusel de cursos 3D */}
       <div className="lg:col-span-6 w-full">
-        {courses.length === 0 ? (
-          <div className="relative w-full h-[420px] flex items-center justify-center">
+        {courses.length === 0 && posts.length === 0 ? (
+          <div className="relative w-full h-[580px] flex items-center justify-center">
             <div className="absolute right-4 bottom-4 w-52 h-64 bg-slate-200/60 rounded-3xl rotate-3" />
             <div className="w-[73%] h-full bg-white border border-slate-100 rounded-3xl shadow-xl flex flex-col items-center justify-center gap-3 p-8 text-center">
               <BookOpen size={36} className="text-slate-200" />
@@ -48,6 +59,7 @@ export default function CursosSection({ courses, whatsappPhone }: Props) {
         ) : (
           <CursosCarousel
             courses={courses}
+            posts={posts}
             whatsappPhone={whatsappPhone}
             onCourseChange={(course) => setActiveCourseId(course.id)}
           />

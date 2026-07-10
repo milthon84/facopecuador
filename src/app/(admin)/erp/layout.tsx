@@ -4,7 +4,7 @@ import {
   Package, FileText, UserCog, ShieldCheck, ChevronRight,
   Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers, GraduationCap, Award, Presentation, Megaphone, Globe
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,6 +46,7 @@ const ICONS: Record<string, React.ReactNode> = {
   Presentation:      <Presentation size={16} />,
   Megaphone:         <Megaphone size={16} />,
   Globe:             <Globe size={16} />,
+  Newspaper:         <Newspaper size={16} />,
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

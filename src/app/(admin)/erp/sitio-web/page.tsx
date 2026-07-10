@@ -15,12 +15,6 @@ export default async function SitioWebPage() {
     .from("web_settings")
     .select("key, value");
 
-  // Obtener artículos/noticias
-  const { data: postsData } = await supabase
-    .from("web_posts")
-    .select("*")
-    .order("created_at", { ascending: false });
-
   // Mapear configuraciones a objeto estructurado
   const settings: Record<string, any> = {};
   settingsData?.forEach((item) => {
@@ -33,15 +27,12 @@ export default async function SitioWebPage() {
         <div>
           <h1 className="text-2xl font-bold text-ink-900">Gestión de Página Web (CMS)</h1>
           <p className="text-sm text-ink-600">
-            Administra los contenidos dinámicos del portal público: información general, noticias e imágenes.
+            Administra la configuración general del portal público: sección principal, misión/visión y datos de contacto.
           </p>
         </div>
       </div>
 
-      <SitioWebClientPage
-        initialSettings={settings}
-        initialPosts={postsData || []}
-      />
+      <SitioWebClientPage initialSettings={settings} />
     </div>
   );
 }
