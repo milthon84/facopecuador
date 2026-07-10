@@ -143,8 +143,6 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
               alt={activeTitle}
               className="absolute inset-0 w-full h-full object-fill"
             />
-            {/* Gradiente overlay que sube para legibilidad del texto */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
           </div>
         ) : (
           <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
@@ -155,13 +153,14 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
         {/* Contenido overlay en la parte inferior */}
         <div className="absolute bottom-0 left-0 right-0 p-6 pt-16 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-gold-400">
-              <CalendarDays size={12} />
-              <span className="text-[10px] font-semibold uppercase tracking-widest">
-                {activeItem.kind === "course" ? "Inicio: " : ""}
-                {new Date(activeDate).toLocaleDateString("es-EC", { dateStyle: "medium" })}
-              </span>
-            </div>
+            {activeItem.kind === "course" && (
+              <div className="flex items-center gap-2 text-gold-400">
+                <CalendarDays size={12} />
+                <span className="text-[10px] font-semibold uppercase tracking-widest">
+                  Inicio: {new Date(activeDate).toLocaleDateString("es-EC", { dateStyle: "medium" })}
+                </span>
+              </div>
+            )}
             <h3 className="font-bold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-sm">
               {activeTitle}
             </h3>

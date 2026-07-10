@@ -28,6 +28,7 @@ export async function savePostAction(formData: FormData) {
   const content = (formData.get("content") as string)?.trim();
   const status = formData.get("status") as "draft" | "published";
   const category = formData.get("category") as string;
+  const expiresAtInput = (formData.get("expires_at") as string)?.trim();
   const imageFile = formData.get("imageFile") as File | null;
   let imageUrl = formData.get("existingImageUrl") as string | null;
 
@@ -37,6 +38,20 @@ export async function savePostAction(formData: FormData) {
 
   if (!["cursos", "clinica", "coworking"].includes(category)) {
     throw new Error("Debes seleccionar un destino válido para el artículo");
+  }
+
+  // Fecha de expiración: si no se especifica, por defecto 2 meses desde hoy
+  let expiresAt: string;
+  if (expiresAtInput) {
+    const parsed = new Date(`${expiresAtInput}T23:59:59`);
+    if (isNaN(parsed.getTime())) {
+      throw new Error("La fecha de expiración no es válida");
+    }
+    expiresAt = parsed.toISOString();
+  } else {
+    const fallback = new Date();
+    fallback.setMonth(fallback.getMonth() + 2);
+    expiresAt = fallback.toISOString();
   }
 
   const slug = slugify(title);
@@ -73,6 +88,7 @@ export async function savePostAction(formData: FormData) {
     content,
     status,
     category,
+    expires_at: expiresAt,
     image_url: imageUrl,
     published_at: status === "published" ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),

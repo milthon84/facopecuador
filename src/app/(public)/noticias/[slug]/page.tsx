@@ -25,6 +25,10 @@ export default async function NoticiaDetailPage({ params }: Props) {
     return notFound();
   }
 
+  if (post.expires_at && new Date(post.expires_at).getTime() < Date.now()) {
+    return notFound();
+  }
+
   // Obtener teléfono y enlace de whatsapp de contacto
   const { data: settingsData } = await supabase
     .from("web_settings")
@@ -105,13 +109,13 @@ export default async function NoticiaDetailPage({ params }: Props) {
               <CalendarDays size={14} />
               Reservar Cita
             </Link>
-            <a 
+            <a
               href={contact.whatsapp_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-5 py-3 text-xs font-semibold hover:bg-slate-800 transition flex-1 sm:flex-none"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white text-slate-900 px-5 py-3 text-xs font-semibold shadow-md hover:bg-slate-100 transition flex-1 sm:flex-none"
             >
-              <Phone size={14} className="text-green-500" />
+              <Phone size={14} className="text-green-600" />
               WhatsApp
             </a>
           </div>

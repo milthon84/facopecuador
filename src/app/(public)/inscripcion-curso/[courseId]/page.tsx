@@ -29,6 +29,13 @@ interface Course {
   image_url?: string | null;
 }
 
+interface CourseOption {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+}
+
 interface FormData {
   full_name: string;
   document_number: string;
@@ -47,6 +54,7 @@ export default function InscripcionCursoPage() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loadingCourse, setLoadingCourse] = useState(true);
+  const [otherCourses, setOtherCourses] = useState<CourseOption[]>([]);
   const [step, setStep] = useState<Step>("form");
   const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -72,6 +80,20 @@ export default function InscripcionCursoPage() {
       .catch(() => router.push("/"))
       .finally(() => setLoadingCourse(false));
   }, [courseId, router]);
+
+  // Cargar lista de cursos activos para permitir cambiar de curso
+  useEffect(() => {
+    fetch("/api/cursos/publico")
+      .then((r) => r.json())
+      .then((data) => setOtherCourses(data.courses || []))
+      .catch(() => {});
+  }, []);
+
+  function handleChangeCourse(newCourseId: string) {
+    if (newCourseId && newCourseId !== courseId) {
+      router.push(`/inscripcion-curso/${newCourseId}`);
+    }
+  }
 
   function handleChange(key: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -215,6 +237,26 @@ export default function InscripcionCursoPage() {
       </header>
 
       <div className="px-4 sm:px-6 max-w-3xl mx-auto py-8 pb-16">
+
+        {/* Selector para cambiar de curso activo */}
+        {otherCourses.length > 1 && (
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              Curso seleccionado
+            </label>
+            <select
+              value={courseId}
+              onChange={(e) => handleChangeCourse(e.target.value)}
+              className="w-full sm:w-auto flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:ring-2 focus:ring-gold-300 focus:border-gold-400 transition-all"
+            >
+              {otherCourses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} — Inicio: {new Date(c.start_date).toLocaleDateString("es-EC", { dateStyle: "medium" })}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Tarjeta del curso */}
         {course && (

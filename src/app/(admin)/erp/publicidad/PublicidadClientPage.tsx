@@ -16,6 +16,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   coworking: "CoWorking",
 };
 
+// Fecha de expiración por defecto: hoy + 2 meses (formato yyyy-mm-dd para <input type="date">)
+function defaultExpiresAt(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 2);
+  return d.toISOString().slice(0, 10);
+}
+
+function isExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt).getTime() < Date.now();
+}
+
 export default function PublicidadClientPage({ initialPosts }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -27,6 +39,7 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
   const [postContent, setPostContent] = useState("");
   const [postStatus, setPostStatus] = useState<"draft" | "published">("draft");
   const [postCategory, setPostCategory] = useState<"cursos" | "clinica" | "coworking">("clinica");
+  const [postExpiresAt, setPostExpiresAt] = useState(defaultExpiresAt());
   const [postSuccess, setPostSuccess] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
 
@@ -42,6 +55,7 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
     setPostContent(post.content);
     setPostStatus(post.status);
     setPostCategory(post.category || "clinica");
+    setPostExpiresAt(post.expires_at ? new Date(post.expires_at).toISOString().slice(0, 10) : defaultExpiresAt());
     setPostSuccess(false);
     setPostError(null);
   }
@@ -53,6 +67,7 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
     setPostContent("");
     setPostStatus("draft");
     setPostCategory("clinica");
+    setPostExpiresAt(defaultExpiresAt());
     setPostSuccess(false);
     setPostError(null);
   }
@@ -79,6 +94,7 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
         setPostContent("");
         setPostStatus("draft");
         setPostCategory("clinica");
+        setPostExpiresAt(defaultExpiresAt());
         setEditingPost(null);
         // Limpiar inputs del formulario
         const form = e.target as HTMLFormElement;
@@ -156,12 +172,22 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-lilac-50 text-lilac-700 border-lilac-200">
                         {CATEGORY_LABELS[post.category] || "Clínica"}
                       </span>
+                      {isExpired(post.expires_at) && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-200">
+                          Expirado
+                        </span>
+                      )}
                       <span className="text-xs text-ink-600">
                         {new Date(post.created_at).toLocaleDateString()}
                       </span>
                     </div>
                     <h3 className="font-semibold text-ink-900 text-sm truncate">{post.title}</h3>
                     <p className="text-xs text-ink-600 line-clamp-2 mt-1">{post.content}</p>
+                    {post.expires_at && (
+                      <p className="text-[11px] text-ink-500 mt-1">
+                        Expira: {new Date(post.expires_at).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <button
@@ -275,6 +301,21 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
               </select>
               <p className="text-[11px] text-ink-500 mt-1">
                 Define en qué sección y carrusel del sitio público aparecerá este artículo.
+              </p>
+            </div>
+
+            <div>
+              <label className="label text-ink-800">Fecha de Expiración *</label>
+              <input
+                type="date"
+                name="expires_at"
+                required
+                value={postExpiresAt}
+                onChange={(e) => setPostExpiresAt(e.target.value)}
+                className="input"
+              />
+              <p className="text-[11px] text-ink-500 mt-1">
+                Después de esta fecha el artículo se desactiva automáticamente y deja de mostrarse en los carruseles públicos. Por defecto son 2 meses desde hoy.
               </p>
             </div>
 

@@ -66,17 +66,28 @@ export default async function HomePage() {
     .eq("status", "active")
     .order("start_date", { ascending: true });
 
-  // 3. Obtener noticias publicadas (últimas 6)
-  const { data: posts } = await supabase
+  // 3. Obtener noticias publicadas y vigentes (no expiradas) — últimas 6
+  const { data: posts, error: postsError } = await supabase
     .from("web_posts")
-    .select("id, title, slug, content, image_url, created_at, category")
+    .select("id, title, slug, content, image_url, created_at, category, expires_at")
     .eq("status", "published")
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
     .order("created_at", { ascending: false })
     .limit(6);
+
+  if (postsError) {
+    console.error("Error al obtener web_posts:", postsError.message);
+  }
 
   const cursosPosts = (posts || []).filter((p) => p.category === "cursos");
   const clinicaPosts = (posts || []).filter((p) => p.category === "clinica");
   const coworkingPosts = (posts || []).filter((p) => p.category === "coworking");
+
+  // Enlace de WhatsApp con mensaje específico para consultas de CoWorking
+  const coworkingWaMessage = encodeURIComponent(
+    "Hola FACOP Ecuador, quiero más información sobre el CoWorking Dental."
+  );
+  const coworkingWaLink = `${contact.whatsapp_link.split("?")[0]}?text=${coworkingWaMessage}`;
 
   const clinicName = process.env.NEXT_PUBLIC_CLINIC_NAME || "FACOP Ecuador";
 
@@ -235,7 +246,7 @@ export default async function HomePage() {
                   Disponibilidad inmediata
                 </span>
                 <a
-                  href={contact.whatsapp_link}
+                  href={coworkingWaLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-slate-950 hover:bg-slate-800 text-gold-500 hover:text-gold-400 transition-all text-xs font-semibold shadow-lg group"
