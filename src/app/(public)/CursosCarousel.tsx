@@ -95,7 +95,7 @@ export default function CursosCarousel({ courses, whatsappPhone, onCourseChange 
 
       {/* ── TARJETA PRINCIPAL — curso actual — ocupa ~73% del ancho, desde la derecha ── */}
       <div
-        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-slate-400/30 bg-white border border-slate-100/80
+        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-slate-400/30 bg-slate-900 border border-slate-800
           transition-all duration-500 ease-out
           ${animating
             ? "translate-x-8 translate-y-4 opacity-0 scale-95"
@@ -104,68 +104,69 @@ export default function CursosCarousel({ courses, whatsappPhone, onCourseChange 
         `}
         style={{ zIndex: 20, width: "73%", height: "100%" }}
       >
-        {/* Imagen de banner */}
+        {/* Imagen de fondo que ocupa todo el alto */}
         {activeCourse.image_url ? (
-          <div className="relative overflow-hidden" style={{ height: "56%" }}>
+          <div className="absolute inset-0 w-full h-full">
             <img
               src={activeCourse.image_url}
               alt={activeCourse.name}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-            {/* Badge de precio sobre imagen */}
-            <div className="absolute bottom-3 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+            {/* Gradiente overlay que sube para legibilidad del texto */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
+            
+            {/* Badge de precio en la esquina superior izquierda */}
+            <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-md z-10">
               <DollarSign size={11} className="text-gold-600" />
               <span className="text-xs font-bold text-slate-900">{Number(activeCourse.total_cost).toFixed(0)}</span>
             </div>
           </div>
         ) : (
-          <div
-            className="w-full bg-gradient-to-br from-slate-100 via-gold-50 to-slate-50 flex items-center justify-center"
-            style={{ height: "56%" }}
-          >
-            <BookOpen size={52} className="text-slate-200" />
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
+            <BookOpen size={52} className="text-slate-700 opacity-40" />
           </div>
         )}
 
-        {/* Contenido */}
-        <div className="p-6 space-y-2">
-          <div className="flex items-center gap-2">
-            <CalendarDays size={11} className="text-gold-500" />
-            <span className="text-[10px] text-gold-600 font-semibold uppercase tracking-widest">
-              Inicio: {new Date(activeCourse.start_date).toLocaleDateString("es-EC", { dateStyle: "medium" })}
-            </span>
+        {/* Contenido overlay en la parte inferior */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 pt-16 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-gold-400">
+              <CalendarDays size={12} />
+              <span className="text-[10px] font-semibold uppercase tracking-widest">
+                Inicio: {new Date(activeCourse.start_date).toLocaleDateString("es-EC", { dateStyle: "medium" })}
+              </span>
+            </div>
+            <h3 className="font-bold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-sm">
+              {activeCourse.name}
+            </h3>
+            <p className="text-slate-300 text-[11px] leading-relaxed line-clamp-2 font-light">
+              {activeCourse.description || "Programa académico de alto nivel con docentes especializados."}
+            </p>
           </div>
-          <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-snug line-clamp-2">
-            {activeCourse.name}
-          </h3>
-          <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2 font-light">
-            {activeCourse.description || "Programa académico de alto nivel con docentes especializados."}
-          </p>
-        </div>
 
-        {/* Pie */}
-        <div className="absolute bottom-4 left-6 right-6 flex justify-between items-center">
-          <a
-            href={waLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gold-600 hover:text-gold-800 transition-colors group"
-          >
-            Más información
-            <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-          </a>
+          {/* Pie / Acciones */}
+          <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+            >
+              Más información
+              <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+            </a>
 
-          {/* Botón inscribirse */}
-          <Link
-            href={`/inscripcion-curso/${activeCourse.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 text-gold-400 text-[11px] font-semibold hover:bg-slate-800 transition-all group shadow-sm"
-          >
-            <GraduationCap size={11} className="group-hover:scale-110 transition-transform" />
-            Inscribirse
-          </Link>
+            {/* Botón inscribirse */}
+            <Link
+              href={`/inscripcion-curso/${activeCourse.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold-600 text-white text-[11px] font-semibold hover:bg-gold-500 transition-all group shadow-md"
+            >
+              <GraduationCap size={11} className="group-hover:scale-110 transition-transform" />
+              Inscribirse
+            </Link>
+          </div>
         </div>
       </div>
     </div>
