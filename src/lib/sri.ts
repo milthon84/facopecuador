@@ -1,3 +1,5 @@
+import { validateCedula, validateRUC } from "./validators";
+
 export interface SRIInvoiceData {
   ambiente: "1" | "2"; // 1=Pruebas, 2=Produccion
   tipoEmision: "1"; // 1=Normal
@@ -266,4 +268,24 @@ export function generarXMLFactura(data: SRIInvoiceData): string {
   return xml
     .replace(/\n\s*/g, "")    // eliminar newlines y la indentación que sigue
     .replace(/>\s+</g, "><"); // eliminar espacios entre tags (por si quedan)
+}
+
+/**
+ * Determina el tipo de identificación del comprador según las reglas del SRI Ecuador:
+ *  04 = RUC (13 dígitos terminados en 001 y válidos)
+ *  05 = Cédula de identidad (10 dígitos válidos)
+ *  06 = Pasaporte
+ *  07 = Consumidor Final (9999999999999)
+ *  08 = Identificación del exterior
+ */
+export function getTipoIdentificacion(doc: string): string {
+  const d = doc.trim();
+  if (d === "9999999999999") return "07"; // Consumidor Final
+  
+  const cleanDoc = d.replace(/[\s\-]/g, "");
+  if (cleanDoc.length === 13 && validateRUC(cleanDoc)) return "04"; // RUC
+  if (cleanDoc.length === 10 && validateCedula(cleanDoc)) return "05"; // Cédula
+  
+  // Si no es cédula o RUC ecuatoriano válido, se asume Pasaporte (06) para pacientes extranjeros.
+  return "06";
 }

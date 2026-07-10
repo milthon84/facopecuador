@@ -26,13 +26,13 @@ export default function InventoryFilters({
       } else {
         params.delete("category");
       }
-      router.push(`/gestion/inventario?${params.toString()}`);
+      router.push(`/erp/inventario?${params.toString()}`);
     },
     [router, searchParams]
   );
 
   return (
-    <form className="flex flex-col sm:flex-row gap-2 mb-4" method="get" action="/gestion/inventario">
+    <form className="flex flex-col sm:flex-row gap-2 mb-4" method="get" action="/erp/inventario">
       <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" size={18} />
         <input

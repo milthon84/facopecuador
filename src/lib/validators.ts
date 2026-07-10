@@ -59,18 +59,39 @@ export function validateRUC(ruc: string): boolean {
   return false;
 }
 
-// ── Cédula o RUC ─────────────────────────────────────────────────────────
-export function validateDocumento(doc: string): string | null {
-  const clean = doc.replace(/[\s\-]/g, "");
+export function isPassportDocument(doc: string): boolean {
+  const clean = doc.trim();
+  if (!clean) return false;
+  // Si contiene letras es pasaporte/documento extranjero
+  if (/[a-zA-Z]/.test(clean)) return true;
+  // Si no tiene 10 ni 13 dígitos
+  if (clean.length !== 10 && clean.length !== 13) return true;
+  return false;
+}
+
+export function validateDocumento(doc: string, isPassport?: boolean): string | null {
+  const clean = doc.trim();
   if (!clean) return "Campo requerido";
-  if (clean.length === 10) {
-    if (!/^\d{10}$/.test(clean)) return "La cédula debe tener 10 dígitos numéricos";
-    if (!validateCedula(clean)) return "Cédula inválida — verifica el número";
+
+  if (isPassport) {
+    if (clean.length < 3 || clean.length > 20) {
+      return "El pasaporte debe tener entre 3 y 20 caracteres";
+    }
+    if (!/^[A-Za-z0-9\-]+$/.test(clean)) {
+      return "El pasaporte solo puede contener letras, números y guiones";
+    }
     return null;
   }
-  if (clean.length === 13) {
-    if (!/^\d{13}$/.test(clean)) return "El RUC debe tener 13 dígitos numéricos";
-    if (!validateRUC(clean)) return "RUC inválido — verifica el número";
+
+  const cleanDoc = clean.replace(/[\s\-]/g, "");
+  if (cleanDoc.length === 10) {
+    if (!/^\d{10}$/.test(cleanDoc)) return "La cédula debe tener 10 dígitos numéricos";
+    if (!validateCedula(cleanDoc)) return "Cédula inválida — verifica el número";
+    return null;
+  }
+  if (cleanDoc.length === 13) {
+    if (!/^\d{13}$/.test(cleanDoc)) return "El RUC debe tener 13 dígitos numéricos";
+    if (!validateRUC(cleanDoc)) return "RUC inválido — verifica el número";
     return null;
   }
   return "Debe ser cédula (10 dígitos) o RUC (13 dígitos)";

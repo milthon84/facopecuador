@@ -13,7 +13,7 @@ import {
   Shield,
   ToggleLeft,
 } from "lucide-react";
-import { updateUserAction } from "@/app/(admin)/gestion/usuarios/actions";
+import { updateUserAction } from "@/app/(admin)/erp/usuarios/actions";
 
 interface Props {
   user: {

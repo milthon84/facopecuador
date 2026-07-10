@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generarClaveAcceso, generarXMLFactura, SRIInvoiceData } from "@/lib/sri";
+import { generarClaveAcceso, generarXMLFactura, SRIInvoiceData, getTipoIdentificacion } from "@/lib/sri";
 import { signXMLWithP12 } from "@/lib/sri-sign";
 import { enviarYAutorizar } from "@/lib/sri-wsdl";
 import { createInvoiceJournalEntry } from "@/lib/accounting";
@@ -9,25 +9,6 @@ import { getSessionUser } from "@/lib/supabase/auth";
 
 /** Redondea un número a 2 decimales para evitar errores de punto flotante */
 const round2 = (n: number) => Math.round(n * 100) / 100;
-
-/**
- * Determina el tipo de identificación del comprador según las reglas del SRI Ecuador:
- *  04 = RUC (13 dígitos terminados en 001)
- *  05 = Cédula de identidad (10 dígitos)
- *  06 = Pasaporte
- *  07 = Consumidor Final (9999999999999)
- *  08 = Identificación del exterior
- */
-function getTipoIdentificacion(doc: string): string {
-  const d = doc.trim();
-  if (d === "9999999999999") return "07"; // Consumidor Final
-  if (d.length === 13) return "04";       // RUC
-  if (d.length === 10 && /^\d+$/.test(d)) return "05"; // Cédula ecuatoriana
-  if (/^\d{10}$/.test(d)) return "05";   // Cédula
-  // Si no es numérico puro o tiene formato distinto → pasaporte/exterior
-  if (/^[A-Za-z]/.test(d)) return "06";  // Empieza con letra → Pasaporte
-  return "08";                            // Cualquier otro → Identificación del Exterior
-}
 
 export async function POST(req: Request) {
   try {
@@ -46,7 +27,7 @@ export async function POST(req: Request) {
         .select("path")
         .eq("role_name", role);
       const paths = (data || []).map((p: any) => p.path);
-      if (!paths.includes("/gestion/facturacion/modificar")) {
+      if (!paths.includes("/erp/facturacion/modificar")) {
         return NextResponse.json({ error: "Sin permisos de facturación" }, { status: 403 });
       }
     }
@@ -64,6 +45,7 @@ export async function POST(req: Request) {
       patient_id, appointment_id, client_name, client_document, client_email, client_phone, client_address, items,
       payment_method = "efectivo", bank_account_id, payment_reference,
       card_type, card_lote, card_voucher,
+      module_enrollment_ids,
     } = body;
 
     if (!client_name || !client_document || !items || items.length === 0) {
@@ -311,6 +293,17 @@ export async function POST(req: Request) {
     }));
 
     await supabase.from("invoice_items").insert(itemsToInsert);
+
+    if (module_enrollment_ids && Array.isArray(module_enrollment_ids) && module_enrollment_ids.length > 0) {
+      await supabase
+        .from("curso_modulo_inscripciones")
+        .update({
+          invoice_id: invoice.id,
+          billing_status: "invoiced",
+          updated_at: new Date().toISOString()
+        })
+        .in("id", module_enrollment_ids);
+    }
 
     // 12. Generar RIDE y enviar por correo si fue autorizado
     if (sri_status === "authorized") {

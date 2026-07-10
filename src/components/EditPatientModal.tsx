@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { validateDocumento, isPassportDocument } from "@/lib/validators";
 import {
   Pencil,
   X,
@@ -41,6 +42,7 @@ export default function EditPatientModal({ patient }: Props) {
   const [phone, setPhone] = useState(patient.phone ?? "");
   const [email, setEmail] = useState(patient.email ?? "");
   const [docNumber, setDocNumber] = useState(patient.document_number ?? "");
+  const [isPassport, setIsPassport] = useState(() => isPassportDocument(patient.document_number ?? ""));
 
   function openModal(e: React.MouseEvent) {
     e.preventDefault();
@@ -50,6 +52,7 @@ export default function EditPatientModal({ patient }: Props) {
     setPhone(patient.phone ?? "");
     setEmail(patient.email ?? "");
     setDocNumber(patient.document_number ?? "");
+    setIsPassport(isPassportDocument(patient.document_number ?? ""));
     setToast(null);
     setOpen(true);
   }
@@ -68,6 +71,14 @@ export default function EditPatientModal({ patient }: Props) {
     if (!fullName.trim()) {
       setToast({ type: "error", msg: "El nombre del paciente es obligatorio." });
       return;
+    }
+
+    if (docNumber.trim()) {
+      const docErr = validateDocumento(docNumber, isPassport);
+      if (docErr) {
+        setToast({ type: "error", msg: docErr });
+        return;
+      }
     }
 
     setLoading(true);
@@ -166,18 +177,35 @@ export default function EditPatientModal({ patient }: Props) {
 
               {/* Cédula */}
               <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <IdCard size={12} className="text-lilac-500" />
-                    Cédula / Documento
-                  </span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-ink-700">
+                    <span className="flex items-center gap-1.5">
+                      <IdCard size={12} className="text-lilac-500" />
+                      Documento de Identidad
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isPassport}
+                      onChange={(e) => {
+                        setIsPassport(e.target.checked);
+                        setDocNumber("");
+                      }}
+                      className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 h-3.5 w-3.5"
+                    />
+                    <span className="text-xs font-semibold text-ink-700">Pasaporte</span>
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={docNumber}
-                  onChange={(e) => setDocNumber(e.target.value)}
+                  onChange={(e) => {
+                    const val = isPassport ? e.target.value.toUpperCase() : e.target.value.replace(/[^0-9]/g, "");
+                    setDocNumber(val);
+                  }}
                   disabled={loading}
-                  placeholder="Ej: 1700000001"
+                  placeholder={isPassport ? "Ej: PA987654" : "Ej: 1700000001"}
                   className="w-full px-3.5 py-2.5 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition disabled:bg-ink-50 disabled:opacity-60"
                 />
               </div>

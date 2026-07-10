@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Debe tener permiso de escritura en inventario
-    if (!hasPermission(role, "/gestion/inventario/modificar", allowedPaths)) {
+    if (!hasPermission(role, "/erp/inventario/modificar", allowedPaths)) {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     }
 

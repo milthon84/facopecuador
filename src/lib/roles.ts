@@ -18,23 +18,23 @@ export const ROLE_COLORS: Record<string, string> = {
 
 // Rutas accesibles solo por admin (fallback cuando DB no está disponible)
 const ADMIN_ONLY_ROUTES = [
-  "/gestion/horarios",
-  "/gestion/bloqueos",
-  "/gestion/inventario",
-  "/gestion/categorias",
-  "/gestion/unidades",
-  "/gestion/servicios",
-  "/gestion/facturacion/config",
-  "/gestion/usuarios",
-  "/gestion/roles",
-  "/gestion/auditoria",
+  "/erp/horarios",
+  "/erp/bloqueos",
+  "/erp/inventario",
+  "/erp/categorias",
+  "/erp/unidades",
+  "/erp/servicios",
+  "/erp/facturacion/config",
+  "/erp/usuarios",
+  "/erp/roles",
+  "/erp/auditoria",
 ];
 
 // Rutas accesibles por admin y contador (fallback)
 const CONTADOR_ROUTES = [
-  "/gestion/facturacion",
-  "/gestion/gastos",
-  "/gestion/contabilidad",
+  "/erp/facturacion",
+  "/erp/gastos",
+  "/erp/contabilidad",
 ];
 
 // Fallback: usado cuando la DB no está disponible (p.ej. durante desarrollo)
@@ -42,7 +42,7 @@ export function canAccess(role: UserRole | undefined, pathname: string): boolean
   const r = role ?? "recepcionista";
   if (r === "admin") return true;
   if (r === "contador") {
-    const allowed = ["/gestion", ...CONTADOR_ROUTES];
+    const allowed = ["/erp", ...CONTADOR_ROUTES];
     return allowed.some(p => pathname === p || pathname.startsWith(p + "/"));
   }
   const blocked = [...ADMIN_ONLY_ROUTES, ...CONTADOR_ROUTES];
@@ -52,8 +52,8 @@ export function canAccess(role: UserRole | undefined, pathname: string): boolean
 export function isWritePath(path: string): boolean {
   const normalized = path.toLowerCase();
   return (
-    normalized === "/gestion/modificar" ||
-    normalized.startsWith("/gestion/modificar/") ||
+    normalized === "/erp/modificar" ||
+    normalized.startsWith("/erp/modificar/") ||
     normalized.endsWith("/modificar") ||
     normalized.includes("/modificar/") ||
     normalized.endsWith("/crear") ||
@@ -80,8 +80,10 @@ export function hasPermission(
   return canAccess(role as UserRole, pathToCheck);
 }
 
+
+
 export interface ResourceDef {
-  section: "Principal" | "Configuración" | "Clínica" | "Sistema";
+  section: "Clínica" | "Cursos" | "General" | "Sistema";
   path: string;
   label: string;
   hasEdit: boolean;
@@ -90,86 +92,108 @@ export interface ResourceDef {
 // ── Recursos configurables por rol ────────────────────────────────────────
 // Lista de todas las rutas que se pueden asignar a un rol desde el panel
 export const ALL_RESOURCES: readonly ResourceDef[] = [
-  // Principal
-  { section: "Principal",     path: "/gestion",              label: "Agenda", hasEdit: true },
-  { section: "Principal",     path: "/gestion/calendario",   label: "Calendario", hasEdit: true },
-  { section: "Principal",     path: "/gestion/pacientes",    label: "Pacientes", hasEdit: true },
-
-  // Configuración
-  { section: "Configuración", path: "/gestion/horarios",    label: "Horarios", hasEdit: true },
-  { section: "Configuración", path: "/gestion/bloqueos",    label: "Bloqueos", hasEdit: true },
-  { section: "Configuración", path: "/gestion/categorias",  label: "Categorías de Insumos", hasEdit: true },
-  { section: "Configuración", path: "/gestion/unidades",    label: "Unidades de Medida", hasEdit: true },
-  { section: "Configuración", path: "/gestion/servicios",   label: "Catálogo de Servicios", hasEdit: true },
-
   // Clínica
-  { section: "Clínica",       path: "/gestion/inventario",   label: "Inventario", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/inventario/transacciones",   label: "Movimientos de Inventario", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/caja-general",        label: "Caja General", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/caja-chica",          label: "Caja Chica", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/cuentas-por-cobrar",  label: "Cuentas por Cobrar", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/cuentas-por-pagar",   label: "Cuentas por Pagar", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/bancos",     label: "Bancos", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/activos",  label: "Activos Fijos", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/facturacion",  label: "Facturación SRI", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/gastos",       label: "Gastos / Compras", hasEdit: true },
-  { section: "Clínica",       path: "/gestion/contabilidad", label: "Contabilidad", hasEdit: true },
+  { section: "Clínica",       path: "/erp",              label: "Agenda", hasEdit: true },
+  { section: "Clínica",       path: "/erp/calendario",   label: "Calendario", hasEdit: true },
+  { section: "Clínica",       path: "/erp/pacientes",    label: "Pacientes", hasEdit: true },
+  { section: "Clínica",       path: "/erp/horarios",     label: "Horarios", hasEdit: true },
+  { section: "Clínica",       path: "/erp/bloqueos",     label: "Bloqueos", hasEdit: true },
+  { section: "Clínica",       path: "/erp/categorias",   label: "Categorías de Insumos", hasEdit: true },
+  { section: "Clínica",       path: "/erp/unidades",     label: "Unidades de Medida", hasEdit: true },
+  { section: "Clínica",       path: "/erp/servicios",    label: "Catálogo de Servicios", hasEdit: true },
+  { section: "Clínica",       path: "/erp/inventario",   label: "Inventario", hasEdit: true },
+  { section: "Clínica",       path: "/erp/inventario/transacciones",   label: "Movimientos de Inventario", hasEdit: true },
+  { section: "Clínica",       path: "/erp/caja-chica",   label: "Caja Chica", hasEdit: true },
+
+  // Cursos
+  { section: "Cursos",        path: "/erp/cursos",       label: "Cursos (Apertura)", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/profesores", label: "Profesores", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/alumnos",    label: "Alumnos e Inscripciones", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/clases",     label: "Clases y Asistencia", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/facturacion", label: "Facturación de Módulos", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/avisos",     label: "Avisos y Comunicados", hasEdit: true },
+
+  // General
+  { section: "General",       path: "/erp/caja-general",        label: "Caja General", hasEdit: true },
+  { section: "General",       path: "/erp/bancos",              label: "Bancos", hasEdit: true },
+  { section: "General",       path: "/erp/facturacion",         label: "Facturación SRI", hasEdit: true },
+  { section: "General",       path: "/erp/gastos",              label: "Gastos / Compras", hasEdit: true },
+  { section: "General",       path: "/erp/cuentas-por-cobrar",  label: "Cuentas por Cobrar", hasEdit: true },
+  { section: "General",       path: "/erp/cuentas-por-pagar",   label: "Cuentas por Pagar", hasEdit: true },
+  { section: "General",       path: "/erp/activos",             label: "Activos Fijos", hasEdit: true },
+  { section: "General",       path: "/erp/contabilidad",        label: "Contabilidad", hasEdit: true },
 
   // Sistema
-  { section: "Sistema",       path: "/gestion/facturacion/config", label: "Config. SRI", hasEdit: true },
-  { section: "Sistema",       path: "/gestion/usuarios",     label: "Usuarios", hasEdit: true },
-  { section: "Sistema",       path: "/gestion/auditoria",    label: "Auditoría", hasEdit: false },
+  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Config. SRI", hasEdit: true },
+  { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
+  { section: "Sistema",       path: "/erp/roles",               label: "Roles", hasEdit: true },
+  { section: "Sistema",       path: "/erp/sitio-web",           label: "Gestión Web / CMS", hasEdit: true },
+  { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría", hasEdit: false },
 ] as const;
 
 export function getWritePathForResource(path: string): string {
-  if (path === "/gestion/inventario/transacciones") {
-    return "/gestion/inventario/transacciones/crear";
+  if (path === "/erp/inventario/transacciones") {
+    return "/erp/inventario/transacciones/crear";
   }
   return path + "/modificar";
 }
 
-export const RESOURCE_SECTIONS = ["Principal", "Configuración", "Clínica", "Sistema"] as const;
+export const RESOURCE_SECTIONS = ["Clínica", "Cursos", "General", "Sistema"] as const;
 
 // ── Navegación ────────────────────────────────────────────────────────────
 export interface NavItemDef {
   href: string;
   label: string;
   icon: string;
-  section: "Principal" | "Configuración" | "Clínica" | "Sistema";
+  section: "Clínica" | "Cursos" | "General" | "Sistema";
   roles: UserRole[]; // usado como fallback cuando DB no está disponible
 }
 
-export const NAV_SECTIONS = ["Principal", "Configuración", "Clínica", "Sistema"] as const;
+export const NAV_SECTIONS = ["Clínica", "Cursos", "General", "Sistema"] as const;
 
 export const NAV_ITEMS: NavItemDef[] = [
-  { href: "/gestion",              label: "Agenda",          icon: "LayoutDashboard", section: "Principal",     roles: ["admin", "recepcionista"] },
-  { href: "/gestion/calendario",   label: "Calendario",      icon: "CalendarDays",    section: "Principal",     roles: ["admin", "recepcionista"] },
-  { href: "/gestion/pacientes",    label: "Pacientes",       icon: "Users",           section: "Principal",     roles: ["admin", "recepcionista"] },
-  { href: "/gestion/horarios",     label: "Horarios",            icon: "Clock",        section: "Configuración", roles: ["admin"] },
-  { href: "/gestion/bloqueos",     label: "Bloqueos",            icon: "Ban",          section: "Configuración", roles: ["admin"] },
-  { href: "/gestion/categorias",   label: "Categorías de Insumos", icon: "Tag",        section: "Configuración", roles: ["admin"] },
-  { href: "/gestion/unidades",     label: "Unidades de Medida",  icon: "Ruler",        section: "Configuración", roles: ["admin"] },
-  { href: "/gestion/servicios",    label: "Catálogo de Servicios", icon: "Stethoscope", section: "Configuración", roles: ["admin"] },
-  { href: "/gestion/inventario",   label: "Inventario",      icon: "Package",         section: "Clínica",       roles: ["admin"] },
-  { href: "/gestion/inventario/transacciones", label: "Movimientos de Inventario", icon: "Layers", section: "Clínica", roles: ["admin"] },
-  { href: "/gestion/caja-general",        label: "Caja General",        icon: "Banknote",        section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/caja-chica",          label: "Caja Chica",          icon: "Wallet",          section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/cuentas-por-cobrar", label: "Cuentas por Cobrar",  icon: "CircleDollarSign", section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/cuentas-por-pagar",  label: "Cuentas por Pagar",   icon: "CreditCard",       section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/bancos",        label: "Bancos",           icon: "Building2",  section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/activos",       label: "Activos Fijos",    icon: "Landmark",   section: "Clínica", roles: ["admin", "contador"] },
-  { href: "/gestion/facturacion",  label: "Facturación SRI", icon: "FileText",        section: "Clínica",       roles: ["admin", "contador"] },
-  { href: "/gestion/gastos",        label: "Gastos / Compras", icon: "ShoppingCart",    section: "Clínica",       roles: ["admin", "contador"] },
-  { href: "/gestion/contabilidad", label: "Contabilidad",    icon: "FileBarChart2",   section: "Clínica",       roles: ["admin", "contador"] },
-  { href: "/gestion/facturacion/config", label: "Config. SRI",  icon: "FileKey",         section: "Sistema",       roles: ["admin"] },
-  { href: "/gestion/usuarios",     label: "Usuarios",        icon: "UserCog",         section: "Sistema",       roles: ["admin"] },
-  { href: "/gestion/roles",        label: "Roles",           icon: "Shield",          section: "Sistema",       roles: ["admin"] },
-  { href: "/gestion/auditoria",    label: "Auditoría",       icon: "ShieldCheck",     section: "Sistema",       roles: ["admin"] },
+  // Clínica
+  { href: "/erp",              label: "Agenda",              icon: "LayoutDashboard", section: "Clínica",       roles: ["admin", "recepcionista"] },
+  { href: "/erp/calendario",   label: "Calendario",          icon: "CalendarDays",    section: "Clínica",       roles: ["admin", "recepcionista"] },
+  { href: "/erp/pacientes",    label: "Pacientes",           icon: "Users",           section: "Clínica",       roles: ["admin", "recepcionista"] },
+  { href: "/erp/horarios",     label: "Horarios",            icon: "Clock",           section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/bloqueos",     label: "Bloqueos",            icon: "Ban",             section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/categorias",   label: "Categorías de Insumos", icon: "Tag",           section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/unidades",     label: "Unidades de Medida",  icon: "Ruler",           section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/servicios",    label: "Catálogo de Servicios", icon: "Stethoscope",     section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/inventario",   label: "Inventario",          icon: "Package",         section: "Clínica",       roles: ["admin"] },
+  { href: "/erp/inventario/transacciones", label: "Movimientos de Inventario", icon: "Layers", section: "Clínica", roles: ["admin"] },
+  { href: "/erp/caja-chica",          label: "Caja Chica",          icon: "Wallet",           section: "Clínica",       roles: ["admin", "contador"] },
+
+  // Cursos
+  { href: "/erp/cursos",              label: "Cursos (Apertura)",   icon: "GraduationCap",   section: "Cursos",        roles: ["admin"] },
+  { href: "/erp/cursos/profesores",   label: "Profesores",          icon: "Award",           section: "Cursos",        roles: ["admin"] },
+  { href: "/erp/cursos/alumnos",      label: "Alumnos",             icon: "Users",           section: "Cursos",        roles: ["admin", "recepcionista"] },
+  { href: "/erp/cursos/clases",       label: "Clases y Asistencia", icon: "Presentation",      section: "Cursos",        roles: ["admin", "recepcionista"] },
+  { href: "/erp/cursos/facturacion",  label: "Facturación Módulos", icon: "CreditCard",      section: "Cursos",        roles: ["admin", "contador"] },
+  { href: "/erp/cursos/avisos",       label: "Avisos y Comunicados", icon: "Megaphone",       section: "Cursos",        roles: ["admin", "recepcionista"] },
+
+  // General
+  { href: "/erp/caja-general",        label: "Caja General",        icon: "Banknote",         section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/bancos",              label: "Bancos",              icon: "Building2",        section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/facturacion",         label: "Facturación SRI",     icon: "FileText",         section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/gastos",              label: "Gastos / Compras",    icon: "ShoppingCart",     section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/cuentas-por-cobrar",  label: "Cuentas por Cobrar",  icon: "CircleDollarSign", section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/cuentas-por-pagar",   label: "Cuentas por Pagar",   icon: "CreditCard",       section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/activos",             label: "Activos Fijos",       icon: "Landmark",         section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/contabilidad",        label: "Contabilidad",        icon: "FileBarChart2",    section: "General",       roles: ["admin", "contador"] },
+
+  // Sistema
+  { href: "/erp/facturacion/config",  label: "Config. SRI",         icon: "FileKey",          section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/usuarios",            label: "Usuarios",            icon: "UserCog",          section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/sitio-web",           label: "Página Web / CMS",    icon: "Globe",            section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },
 ];
 
 // Dashboard de bienvenida para el contador (sin cambios)
 export const CONTADOR_DASHBOARD_ITEMS = [
-  { href: "/gestion/facturacion", label: "Facturación SRI", desc: "Facturas emitidas y autorizadas",  icon: "FileText" },
-  { href: "/gestion/gastos",      label: "Gastos",          desc: "Registro de gastos y compras",     icon: "ShoppingCart" },
-  { href: "/gestion/contabilidad",label: "Contabilidad",    desc: "Libros, reportes y declaraciones", icon: "FileBarChart2" },
+  { href: "/erp/facturacion", label: "Facturación SRI", desc: "Facturas emitidas y autorizadas",  icon: "FileText" },
+  { href: "/erp/gastos",      label: "Gastos",          desc: "Registro de gastos y compras",     icon: "ShoppingCart" },
+  { href: "/erp/contabilidad",label: "Contabilidad",    desc: "Libros, reportes y declaraciones", icon: "FileBarChart2" },
 ];

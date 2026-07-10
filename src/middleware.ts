@@ -48,64 +48,82 @@ function isWritePath(pathname: string): boolean {
 }
 
 function getModifyPathForPathname(pathname: string): string {
-  if (pathname.startsWith("/gestion/pacientes")) {
-    return "/gestion/pacientes/modificar";
+  if (pathname.startsWith("/erp/cursos/profesores")) {
+    return "/erp/cursos/profesores/modificar";
   }
-  if (pathname.startsWith("/gestion/inventario")) {
-    return "/gestion/inventario/modificar";
+  if (pathname.startsWith("/erp/cursos/alumnos")) {
+    return "/erp/cursos/alumnos/modificar";
   }
-  if (pathname.startsWith("/gestion/caja-general")) {
-    return "/gestion/caja-general/modificar";
+  if (pathname.startsWith("/erp/cursos/clases")) {
+    return "/erp/cursos/clases/modificar";
   }
-  if (pathname.startsWith("/gestion/caja-chica")) {
-    return "/gestion/caja-chica/modificar";
+  if (pathname.startsWith("/erp/cursos/facturacion")) {
+    return "/erp/cursos/facturacion/modificar";
   }
-  if (pathname.startsWith("/gestion/cuentas-por-cobrar")) {
-    return "/gestion/cuentas-por-cobrar/modificar";
+  if (pathname.startsWith("/erp/cursos/avisos")) {
+    return "/erp/cursos/avisos/modificar";
   }
-  if (pathname.startsWith("/gestion/cuentas-por-pagar")) {
-    return "/gestion/cuentas-por-pagar/modificar";
+  if (pathname.startsWith("/erp/cursos")) {
+    return "/erp/cursos/modificar";
   }
-  if (pathname.startsWith("/gestion/bancos")) {
-    return "/gestion/bancos/modificar";
+  if (pathname.startsWith("/erp/pacientes")) {
+    return "/erp/pacientes/modificar";
   }
-  if (pathname.startsWith("/gestion/activos")) {
-    return "/gestion/activos/modificar";
+  if (pathname.startsWith("/erp/inventario")) {
+    return "/erp/inventario/modificar";
   }
-  if (pathname.startsWith("/gestion/facturacion/config")) {
-    return "/gestion/facturacion/config/modificar";
+  if (pathname.startsWith("/erp/caja-general")) {
+    return "/erp/caja-general/modificar";
   }
-  if (pathname.startsWith("/gestion/facturacion")) {
-    return "/gestion/facturacion/modificar";
+  if (pathname.startsWith("/erp/caja-chica")) {
+    return "/erp/caja-chica/modificar";
   }
-  if (pathname.startsWith("/gestion/gastos")) {
-    return "/gestion/gastos/modificar";
+  if (pathname.startsWith("/erp/cuentas-por-cobrar")) {
+    return "/erp/cuentas-por-cobrar/modificar";
   }
-  if (pathname.startsWith("/gestion/contabilidad")) {
-    return "/gestion/contabilidad/modificar";
+  if (pathname.startsWith("/erp/cuentas-por-pagar")) {
+    return "/erp/cuentas-por-pagar/modificar";
   }
-  if (pathname.startsWith("/gestion/usuarios")) {
-    return "/gestion/usuarios/modificar";
+  if (pathname.startsWith("/erp/bancos")) {
+    return "/erp/bancos/modificar";
   }
-  if (pathname.startsWith("/gestion/horarios")) {
-    return "/gestion/horarios/modificar";
+  if (pathname.startsWith("/erp/activos")) {
+    return "/erp/activos/modificar";
   }
-  if (pathname.startsWith("/gestion/bloqueos")) {
-    return "/gestion/bloqueos/modificar";
+  if (pathname.startsWith("/erp/facturacion/config")) {
+    return "/erp/facturacion/config/modificar";
   }
-  if (pathname.startsWith("/gestion/categorias")) {
-    return "/gestion/categorias/modificar";
+  if (pathname.startsWith("/erp/facturacion")) {
+    return "/erp/facturacion/modificar";
   }
-  if (pathname.startsWith("/gestion/unidades")) {
-    return "/gestion/unidades/modificar";
+  if (pathname.startsWith("/erp/gastos")) {
+    return "/erp/gastos/modificar";
   }
-  if (pathname.startsWith("/gestion/servicios")) {
-    return "/gestion/servicios/modificar";
+  if (pathname.startsWith("/erp/contabilidad")) {
+    return "/erp/contabilidad/modificar";
   }
-  if (pathname.startsWith("/gestion/calendario")) {
-    return "/gestion/calendario/modificar";
+  if (pathname.startsWith("/erp/usuarios")) {
+    return "/erp/usuarios/modificar";
   }
-  return "/gestion/modificar";
+  if (pathname.startsWith("/erp/horarios")) {
+    return "/erp/horarios/modificar";
+  }
+  if (pathname.startsWith("/erp/bloqueos")) {
+    return "/erp/bloqueos/modificar";
+  }
+  if (pathname.startsWith("/erp/categorias")) {
+    return "/erp/categorias/modificar";
+  }
+  if (pathname.startsWith("/erp/unidades")) {
+    return "/erp/unidades/modificar";
+  }
+  if (pathname.startsWith("/erp/servicios")) {
+    return "/erp/servicios/modificar";
+  }
+  if (pathname.startsWith("/erp/calendario")) {
+    return "/erp/calendario/modificar";
+  }
+  return "/erp/modificar";
 }
 
 // Verifica acceso usando permisos almacenados en DB.
@@ -147,7 +165,7 @@ export async function middleware(req: NextRequest) {
   addSecurityHeaders(res);
 
   // ── Proteger rutas del panel de administración ─────────────────────────
-  if (pathname.startsWith("/gestion") && pathname !== "/gestion/login") {
+  if (pathname.startsWith("/erp") && pathname !== "/erp/login") {
     const supabase = buildSupabaseClient(req, res);
     let user = null;
     try {
@@ -159,7 +177,7 @@ export async function middleware(req: NextRequest) {
 
     if (!user) {
       const url = req.nextUrl.clone();
-      url.pathname = "/gestion/login";
+      url.pathname = "/erp/login";
       url.searchParams.set("redirect", pathname);
       const redirect = NextResponse.redirect(url);
       addSecurityHeaders(redirect);
@@ -170,7 +188,7 @@ export async function middleware(req: NextRequest) {
 
     if (!(await checkAccess(supabase, role, pathname))) {
       const url = req.nextUrl.clone();
-      url.pathname = "/gestion";
+      url.pathname = "/erp";
       url.searchParams.set("denied", "1");
       const redirect = NextResponse.redirect(url);
       addSecurityHeaders(redirect);
@@ -214,7 +232,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/gestion/:path*",
+    "/erp/:path*",
     "/api/admin/:path*",
     "/((?!_next/static|_next/image|favicon.ico|logo.png).*)",
   ],

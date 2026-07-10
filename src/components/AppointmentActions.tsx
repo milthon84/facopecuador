@@ -51,7 +51,7 @@ export default function AppointmentActions({
     return (
       <div className="flex flex-wrap gap-2">
         <Link
-          href={`/gestion/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
+          href={`/erp/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
           className="inline-flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
         >
           <Receipt size={14} /> Facturar
@@ -88,10 +88,10 @@ export default function AppointmentActions({
 
       if (status === "attended") {
         isRedirecting = true;
-        router.push(`/gestion/citas/${appointment.id}/atencion`);
+        router.push(`/erp/citas/${appointment.id}/atencion`);
       } else if (status === "no_show" || status === "cancelled") {
         isRedirecting = true;
-        router.push("/gestion");
+        router.push("/erp");
       }
     } catch (err: any) {
       setErrorModal({
@@ -142,7 +142,7 @@ export default function AppointmentActions({
 
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => router.push(`/gestion/citas/${appointment.id}/atencion`)}
+          onClick={() => router.push(`/erp/citas/${appointment.id}/atencion`)}
           disabled={disabled}
           className="btn-secondary text-xs"
         >

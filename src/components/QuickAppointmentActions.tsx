@@ -68,7 +68,7 @@ export default function QuickAppointmentActions({ appointmentId }: Props) {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            router.push(`/gestion/citas/${appointmentId}/atencion`);
+            router.push(`/erp/citas/${appointmentId}/atencion`);
           }}
           disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-white border-lilac-200 text-lilac-700 hover:bg-lilac-50/70 transition-all active:scale-95 disabled:opacity-50 shadow-sm"

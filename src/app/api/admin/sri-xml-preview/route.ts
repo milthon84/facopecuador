@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generarXMLFactura, generarClaveAcceso } from "@/lib/sri";
+import { generarXMLFactura, generarClaveAcceso, getTipoIdentificacion } from "@/lib/sri";
 import crypto from "crypto";
 
 /**
@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     const detalles = (items || []).map((item: any) => ({
       codigoPrincipal: item.description?.slice(0,25) ?? "ITEM",
       descripcion: item.description ?? "",
+      text: undefined,
       cantidad: Number(item.quantity),
       precioUnitario: Number(item.unit_price),
       descuento: Number(item.discount || 0),
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
       dirMatriz: config.direccion_matriz,
       fechaEmision,
       obligadoContabilidad: config.obligado_contabilidad ? "SI" : "NO" as "SI"|"NO",
-      tipoIdentificacionComprador: invoice.client_document?.length === 13 ? "04" : "05",
+      tipoIdentificacionComprador: getTipoIdentificacion(invoice.client_document),
       razonSocialComprador: invoice.client_name,
       identificacionComprador: invoice.client_document,
       direccionComprador: invoice.client_address || undefined,

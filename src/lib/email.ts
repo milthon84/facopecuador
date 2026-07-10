@@ -804,7 +804,6 @@ export async function sendInvoiceEmail(
         }
       ]
     });
-    
     if (response.error) {
       console.error(`❌ Error retornado por Resend al enviar factura a ${clientEmail}:`, response.error);
       return false;
@@ -812,6 +811,57 @@ export async function sendInvoiceEmail(
     return true;
   } catch (error) {
     console.error(`❌ Excepción de red/sistema en Resend al enviar factura a ${clientEmail}:`, error);
+    return false;
+  }
+}
+
+export async function sendCourseNoticeEmail(
+  studentEmail: string,
+  studentName: string,
+  subject: string,
+  message: string,
+  courseName: string
+): Promise<boolean> {
+  if (!resend) {
+    console.warn("⚠️ Envío de correo cancelado: Resend no está configurado.");
+    return false;
+  }
+  if (!studentEmail) return false;
+
+  const formattedMessage = message.replace(/\n/g, "<br/>");
+
+  const body = `
+    <h2 style="color:#7E5DB4; margin:0 0 8px; font-size:20px; font-weight:700; font-family:sans-serif;">Aviso de Curso: ${courseName} 📢</h2>
+    <p style="font-size:15px; line-height:1.6; margin:0 0 4px; font-family:sans-serif;">Hola <strong>${studentName}</strong>,</p>
+    <p style="font-size:15px; line-height:1.6; margin:0 0 20px; color:#333; font-family:sans-serif;">Te compartimos el siguiente comunicado oficial de tu curso:</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#ffffff; border:1px solid #e1d6f2; border-radius:12px; padding:20px; font-family:sans-serif;">
+          <div style="font-size:11px; font-weight:700; color:#604390; letter-spacing:0.8px; margin-bottom:10px; text-transform:uppercase;">Asunto: ${subject}</div>
+          <p style="font-size:14px; line-height:1.7; margin:0; color:#1a1a1a;">${formattedMessage}</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="font-size:13px; color:#7E5DB4; text-align:center; font-weight:600; margin:0; font-family:sans-serif;">FACOP ECUADOR</p>
+  `;
+
+  try {
+    const response = await resend.emails.send({
+      from: FROM_CLINICA,
+      to: studentEmail,
+      subject: `[Aviso] ${subject} - ${courseName}`,
+      html: baseHtml(subject, body),
+    });
+
+    if (response.error) {
+      console.error(`❌ Error retornado por Resend al enviar aviso a ${studentEmail}:`, response.error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(`❌ Excepción en Resend al enviar aviso a ${studentEmail}:`, error);
     return false;
   }
 }

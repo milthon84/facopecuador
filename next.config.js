@@ -7,6 +7,12 @@ if (dns && typeof dns.setDefaultResultOrder === "function") {
 const nextConfig = {
   reactStrictMode: true,
 
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "50mb",
+    },
+  },
+
   webpack: (config) => {
     config.infrastructureLogging = { level: "error" };
     return config;

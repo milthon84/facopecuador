@@ -48,7 +48,7 @@ export async function PATCH(req: Request) {
       .select("path")
       .eq("role_name", role);
     const paths = (data || []).map((p: any) => p.path);
-    if (!paths.includes("/gestion/pacientes/modificar")) {
+    if (!paths.includes("/erp/pacientes/modificar")) {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     }
   }

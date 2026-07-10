@@ -17,7 +17,7 @@ export default function SignOutButton() {
     } catch { /* ignorar */ }
 
     await supabase.auth.signOut();
-    window.location.replace("/gestion/login");
+    window.location.replace("/erp/login");
   }
 
   return (

@@ -1,103 +1,311 @@
 import Link from "next/link";
-import { CalendarDays, Clock, ShieldCheck, Facebook, Instagram } from "lucide-react";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  CalendarDays,
+  Clock,
+  Facebook,
+  Instagram,
+  MapPin,
+  Phone,
+  Stethoscope,
+} from "lucide-react";
+import CursosSection from "./CursosSection";
+import ArticulosCarousel from "./ArticulosCarousel";
+import CoworkingShowcase from "./CoworkingShowcase";
 
+export const dynamic = "force-dynamic";
+
+// Icono personalizado para TikTok
 function TikTokIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z"/>
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z" />
     </svg>
   );
 }
 
-export default function HomePage() {
-  const clinicName = process.env.NEXT_PUBLIC_CLINIC_NAME || "Consultorio";
+export default async function HomePage() {
+  const supabase = createAdminClient();
+
+  // 1. Obtener configuraciones del sitio
+  const { data: settingsData } = await supabase
+    .from("web_settings")
+    .select("key, value");
+
+  const settings: Record<string, any> = {};
+  settingsData?.forEach((item) => {
+    settings[item.key] = item.value;
+  });
+
+  // Valores por defecto si no existen en BD
+  const hero = settings.hero || {
+    title: "Facop Ecuador Quito",
+    subtitle: "Referentes en odontología clínica avanzada y formación académica de especialistas de alto nivel en Ecuador.",
+    cta_text: "",
+    cta_whatsapp_text: ""
+  };
+
+  const about = settings.about || {
+    mission: "Brindar atención dental con estándares de vanguardia, impulsar el crecimiento de la comunidad odontológica a través de capacitación continua de posgrado y facilitar espacios equipados para la práctica profesional independiente.",
+    vision: "Consolidarnos como la institución líder del Ecuador en servicios odontológicos especializados y educación odontológica continua de nivel internacional."
+  };
+
+  const contact = settings.contact || {
+    phone: "0998214857",
+    whatsapp_link: "https://wa.me/593998214857",
+    facebook_url: "https://www.facebook.com/profile.php?id=61589831153563",
+    instagram_url: "https://www.instagram.com/clinicaodontologicafacop_uio/",
+    tiktok_url: "https://www.tiktok.com/@facopquito",
+    address: "Quito, Ecuador"
+  };
+
+  // 2. Obtener cursos activos
+  const { data: courses } = await supabase
+    .from("cursos")
+    .select("id, name, description, total_cost, start_date, end_date, image_url")
+    .eq("status", "active")
+    .order("start_date", { ascending: true });
+
+  // 3. Obtener noticias publicadas (últimas 6)
+  const { data: posts } = await supabase
+    .from("web_posts")
+    .select("id, title, slug, content, image_url, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const clinicName = process.env.NEXT_PUBLIC_CLINIC_NAME || "FACOP Ecuador";
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-lilac-50 via-white to-gold-50">
-      <header className="px-6 py-5 flex items-center justify-between max-w-6xl mx-auto">
-        <div className="flex items-center">
-          <img src="/logo.png" alt={clinicName} className="h-20 w-auto object-contain" />
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="https://www.facebook.com/profile.php?id=61589831153563"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Facebook"
-            className="w-9 h-9 rounded-lg border border-ink-900/15 flex items-center justify-center text-ink-900/50 hover:text-ink-900 hover:border-ink-900/40 transition-all"
-          >
-            <Facebook size={16} />
-          </a>
-          <a
-            href="https://www.instagram.com/clinicaodontologicafacop_uio/"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Instagram"
-            className="w-9 h-9 rounded-lg border border-ink-900/15 flex items-center justify-center text-ink-900/50 hover:text-ink-900 hover:border-ink-900/40 transition-all"
-          >
-            <Instagram size={16} />
-          </a>
-          <a
-            href="https://www.tiktok.com/@facopquito"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="TikTok"
-            className="w-9 h-9 rounded-lg border border-ink-900/15 flex items-center justify-center text-ink-900/50 hover:text-ink-900 hover:border-ink-900/40 transition-all"
-          >
-            <TikTokIcon size={16} />
-          </a>
+    <main className="min-h-screen bg-slate-50 text-slate-800 selection:bg-gold-500 selection:text-white">
+      {/* ── MENÚ DE NAVEGACIÓN PRINCIPAL ── */}
+      <header className="sticky top-0 z-40 w-full border-b border-lilac-100 bg-white/80 backdrop-blur-md transition-all">
+        <div className="px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt={clinicName} className="h-14 w-auto object-contain" />
+          </Link>
+          
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-ink-600">
+            <Link href="#cursos" className="hover:text-gold-600 transition">Eventos y Cursos</Link>
+            <Link href="#ventajas" className="hover:text-gold-600 transition">Clínica</Link>
+            <Link href="#" className="hover:text-gold-600 transition">Coworking</Link>
+          </nav>
+
+          <div className="flex items-center gap-2">
+            {contact.facebook_url && (
+              <a
+                href={contact.facebook_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
+              >
+                <Facebook size={16} />
+              </a>
+            )}
+            {contact.instagram_url && (
+              <a
+                href={contact.instagram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
+              >
+                <Instagram size={16} />
+              </a>
+            )}
+            {contact.tiktok_url && (
+              <a
+                href={contact.tiktok_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+                className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-950 hover:border-slate-300 hover:bg-slate-50 transition"
+              >
+                <TikTokIcon size={16} />
+              </a>
+            )}
+          </div>
         </div>
       </header>
 
-      <section className="px-6 py-16 max-w-3xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gold-100 text-gold-700 text-xs font-medium mb-6">
-          <Clock size={14} /> Reserva en línea, 24/7
+      {/* ── SECCIÓN HERO (BOCETO MEJORADO) ── */}
+      <section className="relative px-6 py-20 lg:py-12 overflow-hidden bg-slate-850 flex items-center justify-center">
+        {/* Imagen de fondo con opacidad */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src="/videos/facop-intro.mp4" type="video/mp4" />
+        </video>
+        {/* Gradiente overlay elegante */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent pointer-events-none" />
+
+        <div className="relative z-10 max-w-4xl mx-auto text-center text-white">
+          
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight tracking-tight">
+            {hero.title}
+          </h1>
+          <p className="text-lg sm:text-xl text-slate-350 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
+            {hero.subtitle}
+          </p>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold-500/20 border border-gold-500/30 text-gold-400 text-xs font-semibold uppercase tracking-wider mb-6 animate-pulse">
+             Te esperamos
+          </div>
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-ink-900 mb-5 leading-tight">
-          Agendá tu cita en menos de un minuto
-        </h1>
-        <p className="text-lg text-ink-600 mb-10">
-          Reserva tu cita de forma rápida y sencilla.
-        </p>
-        <Link href="/reservar" className="btn-primary text-lg px-10 py-5 rounded-2xl shadow-lg hover:shadow-xl transition-all">
-          <CalendarDays size={22} />
-          Reservar cita ahora
-        </Link>
+      </section>
+      {/* ── SECCIÓN DE CURSOS Y DIPLOMADOS (SECCIÓN 1) ── */}
+      <section id="cursos" className="px-6 py-16 lg:py-24 bg-slate-100/60 border-y border-slate-200/40">
+        <div className="max-w-6xl mx-auto">
+          <CursosSection
+            courses={courses || []}
+            whatsappPhone={contact.phone}
+            whatsappLink={contact.whatsapp_link}
+          />
+        </div>
       </section>
 
-      <section className="px-6 max-w-4xl mx-auto grid gap-4 md:grid-cols-3 pb-16">
-        <FeatureCard
-          icon={<CalendarDays className="text-gold-600" size={20} />}
-          title="Disponibilidad real"
-          text="Solo se muestran los horarios libres. Cero confusiones."
-        />
-        <FeatureCard
-          icon={<ShieldCheck className="text-lilac-600" size={20} />}
-          title="Datos protegidos"
-          text="Tu información se guarda de forma segura y privada."
-        />
-        <FeatureCard
-          icon={<Clock className="text-gold-600" size={20} />}
-          title="Confirmación inmediata"
-          text="Recibís el detalle por correo al instante."
-        />
+      {/* ── SECCIÓN DE LA CLÍNICA & ARTÍCULOS (SECCIÓN 2) ── */}
+      <section id="ventajas" className="px-6 py-16 lg:py-24 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+          
+          {/* LADO IZQUIERDO: 6 columnas — título en 2 líneas, descripción y botón */}
+          <div className="lg:col-span-6 space-y-4">
+            <h2 className="text-2xl sm:text-[2rem] lg:text-[2.4rem] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
+              Centro de Especialidades Odontológicas
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed font-light max-w-xs">
+              Tratamientos odontológicos integrales respaldados por expertos y estándares internacionales.
+            </p>
+            
+            <div className="pt-2 flex flex-col items-start gap-2">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">
+                Reserva en línea, 24/7
+              </span>
+              <Link 
+                href="/cita-clinica" 
+                className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-slate-950 hover:bg-slate-800 text-gold-500 hover:text-gold-400 transition-all text-xs font-semibold shadow-lg group"
+              >
+                <CalendarDays size={15} className="text-gold-500 group-hover:scale-105 transition-transform" />
+                <span>Reservar cita ahora</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* LADO DERECHO: 6 columnas — Carrusel de tarjetas 3D */}
+          <div className="lg:col-span-6 w-full">
+            <ArticulosCarousel posts={posts || []} />
+          </div>
+
+        </div>
       </section>
 
-      <footer className="border-t border-lilac-100 py-6 text-center text-xs text-ink-600/60">
-        © {new Date().getFullYear()} {clinicName}
+      {/* ── SECCIÓN 3: COWORKING DENTAL ── */}
+      <section id="coworking" className="px-6 py-16 lg:py-24 bg-slate-100/60 border-y border-slate-200/40">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+
+            {/* LADO IZQUIERDO: 6 columnas — Showcase de features coworking */}
+            <div className="lg:col-span-6 w-full">
+              <CoworkingShowcase />
+            </div>
+
+            {/* LADO DERECHO: 6 columnas — Título, descripción y botón */}
+            <div className="lg:col-span-6 space-y-4">
+              <h2 className="text-2xl sm:text-[2rem] lg:text-[2.4rem] font-extrabold text-slate-900 leading-[1.15] tracking-tight">
+                CoWorking Dental
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed font-light max-w-xs">
+                Espacio clínico equipado y listo para atender. Arrienda por horas o días sin contratos fijos.
+              </p>
+
+              <div className="pt-2 flex flex-col items-start gap-2">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">
+                  Disponibilidad inmediata
+                </span>
+                <a
+                  href={contact.whatsapp_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-slate-950 hover:bg-slate-800 text-gold-500 hover:text-gold-400 transition-all text-xs font-semibold shadow-lg group"
+                >
+                  <Stethoscope size={15} className="text-gold-500 group-hover:scale-105 transition-transform" />
+                  <span>Reservar espacio</span>
+                </a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* ── PIE DE PÁGINA (FOOTER) ── */}
+      <footer id="nosotros" className="bg-slate-950 text-slate-400 border-t border-slate-900 px-6 py-6 text-[10px]">
+        <div className="max-w-6xl mx-auto space-y-4">
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start font-light">
+            {/* Misión */}
+            <div className="space-y-1">
+              <h5 className="font-semibold text-gold-500 uppercase tracking-wider text-[9px] border-l border-gold-500/50 pl-2">
+                Misión
+              </h5>
+              <p className="text-slate-400 leading-relaxed text-[10px]">{about.mission}</p>
+            </div>
+
+            {/* Visión */}
+            <div className="space-y-1">
+              <h5 className="font-semibold text-gold-500 uppercase tracking-wider text-[9px] border-l border-gold-500/50 pl-2">
+                Visión
+              </h5>
+              <p className="text-slate-400 leading-relaxed text-[10px]">{about.vision}</p>
+            </div>
+
+            {/* Contacto & Horario */}
+            <div className="space-y-1.5 md:border-l border-slate-900 md:pl-6">
+              <h5 className="font-semibold text-gold-500 uppercase tracking-wider text-[9px] border-l border-gold-500/50 pl-2 md:border-l-0 md:pl-0">
+                Contacto
+              </h5>
+              <div className="space-y-1 text-slate-400 text-[10px]">
+                <div className="flex items-center gap-1.5">
+                  <MapPin size={11} className="text-gold-500 flex-shrink-0" />
+                  <span className="truncate">{contact.address}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Phone size={10} className="text-gold-500 flex-shrink-0" />
+                  <span>Tel: {contact.phone}</span>
+                  {contact.whatsapp_link && (
+                    <a
+                      href={contact.whatsapp_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="WhatsApp"
+                      className="ml-0.5 text-emerald-400 hover:text-emerald-300 transition-colors flex-shrink-0"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.555 4.122 1.526 5.855L0 24l6.303-1.654A11.941 11.941 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.006-1.371l-.36-.213-3.737.98.998-3.648-.234-.374A9.818 9.818 0 0 1 2.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
+                      </svg>
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Clock size={10} className="text-gold-500 flex-shrink-0" />
+                  <span>Lun-Vie: 9-18 / Sáb: 9-13 <span className="text-red-500/80 font-medium">(Dom: Cerrado)</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-900 pt-3 flex flex-col sm:flex-row justify-between text-[9px] text-slate-600">
+            <span>© {new Date().getFullYear()} {clinicName}. Todos los derechos reservados.</span>
+            <span>Desarrollado para NIAGSA</span>
+          </div>
+
+        </div>
       </footer>
     </main>
-  );
-}
-
-function FeatureCard({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
-  return (
-    <div className="card p-5">
-      <div className="w-10 h-10 rounded-lg bg-lilac-50 flex items-center justify-center mb-3">
-        {icon}
-      </div>
-      <h3 className="font-semibold mb-1">{title}</h3>
-      <p className="text-sm text-ink-600">{text}</p>
-    </div>
   );
 }

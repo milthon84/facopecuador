@@ -21,7 +21,7 @@ export async function PATCH(req: Request) {
       .select("path")
       .eq("role_name", role);
     const paths = (data || []).map((p: any) => p.path);
-    if (!paths.includes("/gestion/calendario/modificar") && !paths.includes("/gestion/modificar")) {
+    if (!paths.includes("/erp/calendario/modificar") && !paths.includes("/erp/modificar")) {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     }
   }
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       .select("path")
       .eq("role_name", role);
     const paths = (data || []).map((p: any) => p.path);
-    if (!paths.includes("/gestion/calendario/modificar") && !paths.includes("/gestion/modificar")) {
+    if (!paths.includes("/erp/calendario/modificar") && !paths.includes("/erp/modificar")) {
       return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
     }
   }

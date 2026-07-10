@@ -8,7 +8,7 @@ import {
   Package, FileText, UserCog, ShieldCheck, X, Menu,
   LogOut, Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers,
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/client";
@@ -18,7 +18,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Package, FileText, UserCog, ShieldCheck, Settings,
   ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers,
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe
 };
 
 interface Props {
@@ -35,8 +35,8 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
 
   const visibleNav = NAV_ITEMS.filter(item => {
     if (role === "admin" || allowedPaths === null) return true;
-    if (item.href === "/gestion/inventario/transacciones") {
-      return allowedPaths.includes("/gestion/inventario") || allowedPaths.includes("/gestion/inventario/transacciones");
+    if (item.href === "/erp/inventario/transacciones") {
+      return allowedPaths.includes("/erp/inventario") || allowedPaths.includes("/erp/inventario/transacciones");
     }
     return allowedPaths.includes(item.href);
   });
@@ -44,7 +44,7 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
   const bottomItems = visibleNav.slice(0, 2);
 
   function isActive(href: string) {
-    return href === "/gestion" ? pathname === "/gestion" : pathname.startsWith(href);
+    return href === "/erp" ? pathname === "/erp" : pathname.startsWith(href);
   }
 
   async function logout() {
@@ -57,7 +57,7 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
       });
     } catch {}
     await supabase.auth.signOut();
-    window.location.replace("/gestion/login");
+    window.location.replace("/erp/login");
   }
 
   return (
