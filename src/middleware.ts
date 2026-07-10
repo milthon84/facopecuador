@@ -134,6 +134,10 @@ async function checkAccess(
   pathname: string
 ): Promise<boolean> {
   if (role === "admin") return true;
+  // "/erp" es la página de aterrizaje (Agenda) para todo usuario autenticado.
+  // Siempre debe estar permitida para evitar loops de redirección cuando un
+  // rol todavía no tiene permisos configurados en role_permissions.
+  if (pathname === "/erp") return true;
 
   try {
     const { data, error } = await supabase
