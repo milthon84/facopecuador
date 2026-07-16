@@ -163,8 +163,15 @@ async function checkAccess(
 }
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
   const { pathname } = req.nextUrl;
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+
+  const res = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    }
+  });
 
   addSecurityHeaders(res);
 
@@ -183,6 +190,23 @@ export async function middleware(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = "/erp/login";
       url.searchParams.set("redirect", pathname);
+      const redirect = NextResponse.redirect(url);
+      addSecurityHeaders(redirect);
+      return redirect;
+    }
+
+    const requireChange = user.user_metadata?.require_password_change === true;
+    if (requireChange && pathname !== "/erp/cambiar-contrasena") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/erp/cambiar-contrasena";
+      const redirect = NextResponse.redirect(url);
+      addSecurityHeaders(redirect);
+      return redirect;
+    }
+
+    if (!requireChange && pathname === "/erp/cambiar-contrasena") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/erp";
       const redirect = NextResponse.redirect(url);
       addSecurityHeaders(redirect);
       return redirect;
@@ -215,6 +239,13 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json(
         { error: "No autorizado" },
         { status: 401, headers: res.headers }
+      );
+    }
+
+    if (user.user_metadata?.require_password_change === true) {
+      return NextResponse.json(
+        { error: "Cambio de contraseña requerido" },
+        { status: 403, headers: res.headers }
       );
     }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Lock } from "lucide-react";
+import { translateAuthError } from "@/lib/error-translations";
 
 export default function LoginPage() {
   const [email, setEmail]       = useState("");
@@ -20,7 +21,7 @@ export default function LoginPage() {
 
     if (err || !data.user) {
       setLoading(false);
-      setError(err?.message || "Credenciales incorrectas");
+      setError(translateAuthError(err?.message));
       // Registrar intento fallido
       try {
         await fetch("/api/admin/audit", {

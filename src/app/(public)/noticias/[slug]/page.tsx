@@ -76,8 +76,17 @@ export default async function NoticiaDetailPage({ params }: Props) {
           {post.title}
         </h1>
 
-        {/* Imagen Destacada */}
-        {post.image_url ? (
+        {/* Video o Imagen Destacada */}
+        {post.video_url ? (
+          <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8 bg-black">
+            <video
+              src={post.video_url}
+              poster={post.image_url || undefined}
+              controls
+              className="w-full h-auto max-h-[480px] object-contain mx-auto"
+            />
+          </div>
+        ) : post.image_url ? (
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8">
             <img 
               src={post.image_url} 

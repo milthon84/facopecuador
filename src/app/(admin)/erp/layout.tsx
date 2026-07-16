@@ -13,6 +13,7 @@ import AdminMobileNav from "@/components/AdminMobileNav";
 import GlobalLoadingOverlay from "@/components/GlobalLoadingOverlay";
 import type { UserRole } from "@/lib/roles";
 import { ROLE_LABELS, ROLE_COLORS, NAV_ITEMS, NAV_SECTIONS } from "@/lib/roles";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     console.error("Error fetching user in AdminLayout:", err);
   }
 
-  if (!user) return <>{children}</>;
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") || "";
+
+  const requireChange = user?.user_metadata?.require_password_change === true;
+  if (!user || requireChange || pathname === "/erp/cambiar-contrasena") return <>{children}</>;
 
   const role = (user.app_metadata?.role as string | undefined) ?? "admin";
 

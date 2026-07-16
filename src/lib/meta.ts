@@ -1,0 +1,276 @@
+/**
+ * Utilidades para interactuar con la Graph API de Meta (Facebook e Instagram)
+ */
+
+interface PublishParams {
+  title: string;
+  content: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  publishFacebook: boolean;
+  publishInstagram: boolean;
+}
+
+interface PublishResult {
+  facebookPostId?: string;
+  instagramPostId?: string;
+  errors?: string[];
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Publica un artículo en la página de Facebook y/o cuenta comercial de Instagram configuradas.
+ */
+export async function publishToMeta({
+  title,
+  content,
+  imageUrl,
+  videoUrl,
+  publishFacebook,
+  publishInstagram,
+}: PublishParams): Promise<PublishResult> {
+  const pageId = process.env.META_PAGE_ID;
+  const pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN;
+  const instagramAccountId = process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID;
+
+  const result: PublishResult = {};
+  const errors: string[] = [];
+
+  const postText = `${title}\n\n${content}`;
+
+  // 1. PUBLICACIÓN EN FACEBOOK PAGE
+  if (publishFacebook) {
+    if (!pageId || !pageAccessToken) {
+      errors.push(
+        "Faltan credenciales de Facebook (META_PAGE_ID o META_PAGE_ACCESS_TOKEN) en el servidor."
+      );
+    } else {
+      try {
+        let res;
+        if (videoUrl) {
+          // Publicar con video en la página
+          res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/videos`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              file_url: videoUrl,
+              description: postText,
+              access_token: pageAccessToken,
+            }),
+          });
+        } else if (imageUrl) {
+          // Publicar con imagen como foto en la página
+          res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/photos`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: imageUrl,
+              caption: postText,
+              access_token: pageAccessToken,
+            }),
+          });
+        } else {
+          // Publicar feed de texto simple
+          res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/feed`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: postText,
+              access_token: pageAccessToken,
+            }),
+          });
+        }
+
+        const data = await res.json();
+        if (data.error) {
+          console.error("Meta API Facebook error:", data.error);
+          errors.push(
+            `Error en Facebook: ${data.error.message || JSON.stringify(data.error)}`
+          );
+        } else {
+          const fbPostId = data.post_id || data.id;
+          try {
+            const fbPermalinkRes = await fetch(
+              `https://graph.facebook.com/v20.0/${fbPostId}?fields=permalink_url&access_token=${pageAccessToken}`
+            );
+            const fbPermalinkData = await fbPermalinkRes.json();
+            if (fbPermalinkData.permalink_url) {
+              result.facebookPostId = fbPermalinkData.permalink_url;
+            } else {
+              result.facebookPostId = `https://facebook.com/${fbPostId}`;
+            }
+          } catch (err) {
+            result.facebookPostId = `https://facebook.com/${fbPostId}`;
+          }
+        }
+      } catch (err: any) {
+        console.error("Facebook publish exception:", err);
+        errors.push(
+          `Error de conexión al publicar en Facebook: ${err.message || err}`
+        );
+      }
+    }
+  }
+
+  // 2. PUBLICACIÓN EN INSTAGRAM BUSINESS ACCOUNT
+  if (publishInstagram) {
+    if (!instagramAccountId || !pageAccessToken) {
+      errors.push(
+        "Faltan credenciales de Instagram (META_INSTAGRAM_BUSINESS_ACCOUNT_ID o META_PAGE_ACCESS_TOKEN) en el servidor."
+      );
+    } else if (!imageUrl && !videoUrl) {
+      errors.push(
+        "Instagram requiere una imagen o un video. No se puede publicar texto sin elementos multimedia."
+      );
+    } else {
+      try {
+        let containerRes;
+        if (videoUrl) {
+          // A. Crear contenedor de video (REELS)
+          containerRes = await fetch(
+            `https://graph.facebook.com/v20.0/${instagramAccountId}/media`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                media_type: "REELS",
+                video_url: videoUrl,
+                caption: postText,
+                access_token: pageAccessToken,
+              }),
+            }
+          );
+        } else {
+          // A. Crear contenedor de imagen
+          containerRes = await fetch(
+            `https://graph.facebook.com/v20.0/${instagramAccountId}/media`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image_url: imageUrl,
+                caption: postText,
+                access_token: pageAccessToken,
+              }),
+            }
+          );
+        }
+
+        const containerData = await containerRes.json();
+        if (containerData.error) {
+          console.error("Meta API Instagram Container error:", containerData.error);
+          errors.push(
+            `Error de contenedor en Instagram: ${
+              containerData.error.message || JSON.stringify(containerData.error)
+            }`
+          );
+        } else {
+          const creationId = containerData.id;
+
+          // B. Publicar el contenedor de item multimedia
+          // Nota: El procesamiento de videos en Instagram es asíncrono y toma tiempo.
+          let publishData: any = null;
+          let success = false;
+
+          // Polling para videos (Reels)
+          if (videoUrl) {
+            let isReady = false;
+            for (let attempt = 1; attempt <= 10; attempt++) {
+              try {
+                const statusRes = await fetch(
+                  `https://graph.facebook.com/v20.0/${creationId}?fields=status_code&access_token=${pageAccessToken}`
+                );
+                const statusData = await statusRes.json();
+                if (statusData.status_code === "FINISHED") {
+                  isReady = true;
+                  break;
+                } else if (statusData.status_code === "ERROR") {
+                  errors.push("Instagram falló al procesar el video.");
+                  break;
+                }
+                console.log(`El video de Instagram se está procesando (intento ${attempt}/10). Esperando 3s...`);
+                await delay(3000);
+              } catch (pollErr: any) {
+                console.error("Error al consultar el estado del video en Instagram:", pollErr);
+              }
+            }
+
+            if (!isReady && errors.length === 0) {
+              errors.push("El video está tardando demasiado en procesarse en Instagram. Se guardó en la web pero la publicación en Instagram podría tardar.");
+            }
+          }
+
+          if (errors.length === 0 || !videoUrl) {
+            for (let attempt = 1; attempt <= 4; attempt++) {
+              const publishRes = await fetch(
+                `https://graph.facebook.com/v20.0/${instagramAccountId}/media_publish`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    creation_id: creationId,
+                    access_token: pageAccessToken,
+                  }),
+                }
+              );
+
+              publishData = await publishRes.json();
+
+              if (publishData.error) {
+                const code = publishData.error.code;
+                const msg = publishData.error.message || "";
+                const isProcessing =
+                  code === 22070 || msg.toLowerCase().includes("processing");
+
+                if (isProcessing && attempt < 4) {
+                  console.log(
+                    `El recurso multimedia de Instagram se está procesando aún. Reintentando en 3s (intento ${attempt}/4)...`
+                  );
+                  await delay(3000);
+                  continue;
+                } else {
+                  console.error("Meta API Instagram Publish error:", publishData.error);
+                  errors.push(
+                    `Error de publicación en Instagram: ${
+                      publishData.error.message || JSON.stringify(publishData.error)
+                    }`
+                  );
+                  break;
+                }
+              } else {
+                const mediaId = publishData.id;
+                try {
+                  const igPermalinkRes = await fetch(
+                    `https://graph.facebook.com/v20.0/${mediaId}?fields=permalink&access_token=${pageAccessToken}`
+                  );
+                  const igPermalinkData = await igPermalinkRes.json();
+                  if (igPermalinkData.permalink) {
+                    result.instagramPostId = igPermalinkData.permalink;
+                  } else {
+                    result.instagramPostId = `https://instagram.com/p/${mediaId}`;
+                  }
+                } catch (err) {
+                  result.instagramPostId = `https://instagram.com/p/${mediaId}`;
+                }
+                success = true;
+                break;
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error("Instagram publish exception:", err);
+        errors.push(
+          `Error de conexión al publicar en Instagram: ${err.message || err}`
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    result.errors = errors;
+  }
+
+  return result;
+}

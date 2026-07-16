@@ -10,6 +10,7 @@ interface Post {
   slug: string;
   content: string;
   image_url: string | null;
+  video_url?: string | null;
   created_at: string;
   category?: string;
 }
@@ -78,6 +79,24 @@ export default function ClinicaCarousel({ posts }: Props) {
             alt={nextPost.title}
             className="w-full h-44 object-fill"
           />
+        ) : nextPost.video_url ? (
+          <div className="w-full h-44 bg-black relative">
+            <video
+              src={nextPost.video_url}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-slate-950/20 flex items-center justify-center pointer-events-none">
+              <div className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md">
+                <svg className="w-3.5 h-3.5 text-slate-800 fill-current translate-x-0.5" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-44 bg-gradient-to-br from-gold-50 to-slate-100 flex items-center justify-center">
             <Stethoscope size={28} className="text-slate-300" />
@@ -104,8 +123,19 @@ export default function ClinicaCarousel({ posts }: Props) {
         `}
         style={{ zIndex: 20, width: "73%", height: "100%" }}
       >
-        {/* Imagen de fondo que ocupa todo el alto */}
-        {activePost.image_url ? (
+        {/* Video o Imagen de fondo que ocupa todo el alto */}
+        {activePost.video_url ? (
+          <div className="absolute inset-0 w-full h-full bg-black">
+            <video
+              src={activePost.video_url}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
+        ) : activePost.image_url ? (
           <div className="absolute inset-0 w-full h-full">
             <img
               src={activePost.image_url}

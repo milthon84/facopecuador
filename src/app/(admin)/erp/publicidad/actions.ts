@@ -29,8 +29,12 @@ export async function savePostAction(formData: FormData) {
   const status = formData.get("status") as "draft" | "published";
   const category = formData.get("category") as string;
   const expiresAtInput = (formData.get("expires_at") as string)?.trim();
+  
   const imageFile = formData.get("imageFile") as File | null;
   let imageUrl = formData.get("existingImageUrl") as string | null;
+
+  const videoFile = formData.get("videoFile") as File | null;
+  let videoUrl = formData.get("existingVideoUrl") as string | null;
 
   if (!title || !content) {
     throw new Error("El título y el contenido son obligatorios");
@@ -57,11 +61,11 @@ export async function savePostAction(formData: FormData) {
   const slug = slugify(title);
   const supabase = createAdminClient();
 
-  // Procesar archivo si fue seleccionado
+  // Procesar archivo de imagen si fue seleccionado
   if (imageFile && imageFile.size > 0) {
     try {
       const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${Date.now()}.${fileExt}`;
+      const fileName = `${Date.now()}_img.${fileExt}`;
       const arrayBuffer = await imageFile.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
@@ -82,6 +86,83 @@ export async function savePostAction(formData: FormData) {
     }
   }
 
+  // Procesar archivo de video si fue seleccionado
+  if (videoFile && videoFile.size > 0) {
+    try {
+      const fileExt = videoFile.name.split(".").pop();
+      const fileName = `${Date.now()}_vid.${fileExt}`;
+      const arrayBuffer = await videoFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      const { error: uploadError } = await supabase.storage
+        .from("web-assets")
+        .upload(fileName, buffer, {
+          contentType: videoFile.type,
+        });
+
+      if (!uploadError) {
+        const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
+        videoUrl = data.publicUrl;
+      } else {
+        console.error("Error al subir archivo de video:", uploadError.message);
+      }
+    } catch (err) {
+      console.error("Excepción al subir archivo de video:", err);
+    }
+  }
+
+  const publishFacebook = formData.get("publish_to_facebook") === "true";
+  const publishInstagram = formData.get("publish_to_instagram") === "true";
+
+  let facebookPostId: string | null = null;
+  let instagramPostId: string | null = null;
+  let publishWarning: string | null = null;
+
+  if (id) {
+    // Obtener IDs de publicación en redes sociales ya existentes
+    const { data: existingPost } = await supabase
+      .from("web_posts")
+      .select("facebook_post_id, instagram_post_id")
+      .eq("id", id)
+      .single();
+    if (existingPost) {
+      facebookPostId = existingPost.facebook_post_id;
+      instagramPostId = existingPost.instagram_post_id;
+    }
+  }
+
+  if (status === "published") {
+    const shouldPublishFacebook = publishFacebook && !facebookPostId;
+    const shouldPublishInstagram = publishInstagram && !instagramPostId;
+
+    if (shouldPublishFacebook || shouldPublishInstagram) {
+      try {
+        const { publishToMeta } = await import("@/lib/meta");
+        const publishResult = await publishToMeta({
+          title,
+          content,
+          imageUrl,
+          videoUrl,
+          publishFacebook: shouldPublishFacebook,
+          publishInstagram: shouldPublishInstagram,
+        });
+
+        if (publishResult.facebookPostId) {
+          facebookPostId = publishResult.facebookPostId;
+        }
+        if (publishResult.instagramPostId) {
+          instagramPostId = publishResult.instagramPostId;
+        }
+        if (publishResult.errors && publishResult.errors.length > 0) {
+          publishWarning = publishResult.errors.join(". ");
+        }
+      } catch (err: any) {
+        console.error("Error al publicar en Meta:", err);
+        publishWarning = `No se pudo conectar con Meta: ${err.message || err}`;
+      }
+    }
+  }
+
   const postData: any = {
     title,
     slug,
@@ -90,6 +171,9 @@ export async function savePostAction(formData: FormData) {
     category,
     expires_at: expiresAt,
     image_url: imageUrl,
+    video_url: videoUrl,
+    facebook_post_id: facebookPostId,
+    instagram_post_id: instagramPostId,
     published_at: status === "published" ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   };
@@ -120,7 +204,7 @@ export async function savePostAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/erp/publicidad");
-  return { success: true };
+  return { success: true, publishWarning };
 }
 
 // Eliminar artículo (Post)

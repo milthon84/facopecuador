@@ -20,6 +20,7 @@ interface Post {
   slug: string;
   content: string;
   image_url: string | null;
+  video_url?: string | null;
   created_at: string;
   category?: string;
 }
@@ -79,11 +80,13 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
   const nextDate = nextItem.kind === "course" ? nextItem.data.start_date : nextItem.data.created_at;
   const nextTitle = nextItem.kind === "course" ? nextItem.data.name : nextItem.data.title;
   const nextImage = nextItem.data.image_url;
+  const nextVideo = nextItem.kind === "post" ? nextItem.data.video_url : null;
 
   const activeDate = activeItem.kind === "course" ? activeItem.data.start_date : activeItem.data.created_at;
   const activeTitle = activeItem.kind === "course" ? activeItem.data.name : activeItem.data.title;
   const activeDescription = activeItem.kind === "course" ? activeItem.data.description : activeItem.data.content;
   const activeImage = activeItem.data.image_url;
+  const activeVideo = activeItem.kind === "post" ? activeItem.data.video_url : null;
 
   const waMessage = encodeURIComponent(
     `Hola FACOP Ecuador, estoy interesado en el curso: "${activeTitle}". ¿Podría darme más información?`
@@ -109,6 +112,24 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
       >
         {nextImage ? (
           <img src={nextImage} alt={nextTitle} className="w-full h-44 object-fill" />
+        ) : nextVideo ? (
+          <div className="w-full h-44 bg-black relative">
+            <video
+              src={nextVideo}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-slate-950/20 flex items-center justify-center pointer-events-none">
+              <div className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md">
+                <svg className="w-3.5 h-3.5 text-slate-800 fill-current translate-x-0.5" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-44 bg-gradient-to-br from-gold-50 to-slate-100 flex items-center justify-center">
             <BookOpen size={28} className="text-slate-300" />
@@ -135,8 +156,19 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
         `}
         style={{ zIndex: 20, width: "73%", height: "100%" }}
       >
-        {/* Imagen de fondo que ocupa todo el alto */}
-        {activeImage ? (
+        {/* Video o Imagen de fondo que ocupa todo el alto */}
+        {activeVideo ? (
+          <div className="absolute inset-0 w-full h-full bg-black">
+            <video
+              src={activeVideo}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          </div>
+        ) : activeImage ? (
           <div className="absolute inset-0 w-full h-full">
             <img
               src={activeImage}

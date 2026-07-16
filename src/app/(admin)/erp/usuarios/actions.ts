@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import type { UserRole } from "@/lib/roles";
+import { translateAuthError } from "@/lib/error-translations";
 
 export async function createUserAction(formData: FormData) {
   const supabase = createAdminClient();
@@ -36,7 +37,7 @@ export async function createUserAction(formData: FormData) {
   });
 
   if (authError || !newUser.user) {
-    throw new Error(authError?.message || "Error al crear usuario");
+    throw new Error(translateAuthError(authError?.message) || "Error al crear usuario");
   }
 
   // Insertar perfil
@@ -133,7 +134,7 @@ export async function updateUserAction(data: {
     app_metadata: { role: targetRole },
   });
 
-  if (authError) throw new Error(`Error al actualizar auth: ${authError.message}`);
+  if (authError) throw new Error(`Error al actualizar auth: ${translateAuthError(authError.message)}`);
 
   await logAudit({
     user_id: sessionUser?.id,
@@ -147,4 +148,100 @@ export async function updateUserAction(data: {
   });
 
   revalidatePath("/erp/usuarios");
+}
+
+export async function resetUserPasswordAction(userId: string, newPassword: string) {
+  const supabase = createAdminClient();
+  const sessionSupabase = createClient();
+  const { data: { user: sessionUser } } = await sessionSupabase.auth.getUser();
+  const sessionRole = (sessionUser?.app_metadata?.role as string) ?? "admin";
+  if (sessionRole !== "admin") throw new Error("Sin permisos");
+
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error("La contraseña debe tener al menos 8 caracteres");
+  }
+
+  // 1. Actualizar contraseña y user_metadata en auth.users
+  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
+    password: newPassword,
+    user_metadata: { require_password_change: true },
+  });
+
+  if (authError) {
+    throw new Error(`Error al actualizar credenciales: ${translateAuthError(authError.message)}`);
+  }
+
+  // 2. Actualizar perfil en user_profiles
+  const { error: profileError } = await supabase
+    .from("user_profiles")
+    .update({ require_password_change: true })
+    .eq("id", userId);
+
+  if (profileError) {
+    throw new Error(`Error al actualizar el perfil: ${profileError.message}`);
+  }
+
+  // 3. Registrar auditoría
+  const { data: userProfile } = await supabase
+    .from("user_profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .single();
+
+  await logAudit({
+    user_id: sessionUser?.id,
+    user_email: sessionUser?.email,
+    user_role: sessionRole,
+    action: "update",
+    resource: "user_profile",
+    resource_id: userId,
+    description: `Contraseña restablecida para el usuario: ${userProfile?.full_name || userId}. Se forzará cambio en el próximo inicio de sesión.`,
+  });
+
+  revalidatePath("/erp/usuarios");
+}
+
+export async function changeOwnPasswordAction(password: string) {
+  const sessionSupabase = createClient();
+  const { data: { user: sessionUser } } = await sessionSupabase.auth.getUser();
+  if (!sessionUser) throw new Error("Usuario no autenticado");
+
+  if (!password || password.length < 8) {
+    throw new Error("La contraseña debe tener al menos 8 caracteres");
+  }
+
+  // 1. Actualizar contraseña y limpiar require_password_change en su propia cuenta
+  const { error: authError } = await sessionSupabase.auth.updateUser({
+    password: password,
+    data: { require_password_change: false }
+  });
+
+  if (authError) {
+    throw new Error(`Error al actualizar la contraseña: ${translateAuthError(authError.message)}`);
+  }
+
+  // 2. Actualizar perfil en DB usando admin client (por bypass de RLS)
+  const supabase = createAdminClient();
+  const { error: profileError } = await supabase
+    .from("user_profiles")
+    .update({ require_password_change: false })
+    .eq("id", sessionUser.id);
+
+  if (profileError) {
+    throw new Error(`Error al actualizar el perfil: ${profileError.message}`);
+  }
+
+  // 3. Registrar auditoría
+  const sessionRole = (sessionUser?.app_metadata?.role as string) ?? "recepcionista";
+  await logAudit({
+    user_id: sessionUser?.id,
+    user_email: sessionUser?.email,
+    user_role: sessionRole,
+    action: "update",
+    resource: "user_profile",
+    resource_id: sessionUser.id,
+    description: `El usuario cambió su propia contraseña obligatoria con éxito.`,
+  });
+
+  revalidatePath("/erp");
 }
