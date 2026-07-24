@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { 
   GraduationCap, Calendar, Users, DollarSign, ArrowLeft, 
   Settings, Award, BookOpen, Plus, Trash2, UserPlus, UserMinus, 
-  CheckCircle2, Pencil 
+  CheckCircle2, Pencil, UserCheck 
 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
@@ -12,6 +12,9 @@ import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { updateExpiredCourses } from "@/lib/courses";
 import EditModuleModal from "@/components/EditModuleModal";
 import CopyCourseButton from "@/components/CopyCourseButton";
+import AttendanceListModal from "@/components/AttendanceListModal";
+import EnrollStudentModal from "@/components/EnrollStudentModal";
+import TeacherMultiSelect from "@/components/TeacherMultiSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -29,36 +32,9 @@ async function saveGeneralInfo(formData: FormData) {
   const endDate = formData.get("endDate") as string;
   const maxStudents = formData.get("maxStudents") ? Number(formData.get("maxStudents")) : null;
   const status = formData.get("status") as string;
-  const imageFile = formData.get("imageFile") as File;
+  const imageUrl = (formData.get("imageUrl") as string)?.trim();
 
-  if (!id || !name || !startDate || !endDate || isNaN(totalCost)) return;
-
-  const supabase = createAdminClient();
-  let imageUrl: string | undefined = undefined;
-
-  if (imageFile && imageFile.size > 0) {
-    try {
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const arrayBuffer = await imageFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      const { error: uploadError } = await supabase.storage
-        .from("course-banners")
-        .upload(fileName, buffer, {
-          contentType: imageFile.type,
-        });
-
-      if (!uploadError) {
-        const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
-        imageUrl = data.publicUrl;
-      } else {
-        console.error("Error uploading banner:", uploadError.message);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
+  if (!id || !name || isNaN(totalCost) || !startDate || !endDate) return;
 
   const updatePayload: any = {
     name,
@@ -67,14 +43,15 @@ async function saveGeneralInfo(formData: FormData) {
     start_date: startDate,
     end_date: endDate,
     max_students: maxStudents,
-    status,
+    image_url: imageUrl || null,
     updated_at: new Date().toISOString(),
   };
 
-  if (imageUrl !== undefined) {
-    updatePayload.image_url = imageUrl;
+  if (status) {
+    updatePayload.status = status;
   }
 
+  const supabase = createAdminClient();
   await supabase
     .from("cursos")
     .update(updatePayload)
@@ -93,19 +70,32 @@ async function addModule(formData: FormData) {
   const cost = Number(formData.get("cost"));
   const description = (formData.get("description") as string)?.trim();
   const date = (formData.get("date") as string) || null;
+  const teacherIds = formData.getAll("teacherIds") as string[];
 
   if (!courseId || !name || isNaN(number) || isNaN(cost)) return;
 
   const supabase = createAdminClient();
-  await supabase.from("curso_modulos").insert({
-    course_id: courseId,
-    number,
-    name,
-    cost,
-    description: description || null,
-    start_date: date,
-    end_date: date,
-  });
+  const { data: insertedMod, error } = await supabase
+    .from("curso_modulos")
+    .insert({
+      course_id: courseId,
+      number,
+      name,
+      cost,
+      description: description || null,
+      start_date: date,
+      end_date: date,
+    })
+    .select("id")
+    .single();
+
+  if (!error && insertedMod && teacherIds.length > 0) {
+    const modTeachers = teacherIds.map((tId) => ({
+      module_id: insertedMod.id,
+      teacher_id: tId,
+    }));
+    await supabase.from("modulo_profesores").insert(modTeachers);
+  }
 
   revalidatePath(`/erp/cursos/${courseId}`);
 }
@@ -165,12 +155,11 @@ export default async function CursoDetallePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
+  const { id } = await params;
+  const { tab } = await searchParamsPromise;
   await assertPermission("/erp/cursos");
   const canEdit = await hasWritePermission("/erp/cursos");
-
-  const { id } = await params;
-  const searchParams = await searchParamsPromise;
-  const activeTab = searchParams.tab ?? "modulos";
+  const activeTab = tab ?? "modulos";
 
   const supabase = createAdminClient();
 
@@ -178,12 +167,14 @@ export default async function CursoDetallePage({
   await updateExpiredCourses(supabase);
 
   // Cargar todos los datos requeridos en paralelo
-  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes] = await Promise.all([
+  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, moduleTeachersRes, allStudentsRes] = await Promise.all([
     supabase.from("cursos").select("*").eq("id", id).single(),
     supabase.from("curso_modulos").select("*").eq("course_id", id).order("number"),
     supabase.from("curso_profesores").select("role, profesores(*)").eq("course_id", id),
-    supabase.from("profesores").select("id, full_name").order("full_name"),
+    supabase.from("profesores").select("id, full_name, specialty").order("full_name"),
     supabase.from("curso_inscripciones").select("status, created_at, alumnos(*)").eq("course_id", id).order("created_at", { ascending: false }),
+    supabase.from("modulo_profesores").select("module_id, teacher_id, profesores(id, full_name, specialty)"),
+    supabase.from("alumnos").select("id, full_name, document_number, phone, email").order("full_name")
   ]);
 
   const course = courseRes.data;
@@ -193,6 +184,10 @@ export default async function CursoDetallePage({
   const assignedTeachers = assignedTeachersRes.data || [];
   const allTeachers = allTeachersRes.data || [];
   const students = studentsRes.data || [];
+  const moduleTeachers = moduleTeachersRes.data || [];
+  const allStudents = allStudentsRes.data || [];
+
+  const enrolledStudentIds = students.map((e: any) => e.alumnos?.id).filter(Boolean);
 
   // Filtrar profesores no asignados para el select
   const assignedTeacherIds = new Set(assignedTeachers.map((at: any) => at.profesores?.id));
@@ -307,46 +302,76 @@ export default async function CursoDetallePage({
                   <div className="p-8 text-center text-sm text-ink-500 italic">No hay módulos configurados para este curso.</div>
                 ) : (
                   <div className="divide-y divide-lilac-50">
-                    {modules.map((m) => (
-                      <div key={m.id} className="p-5 flex justify-between items-start gap-4 hover:bg-lilac-50/10 transition-colors">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold bg-lilac-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-                              {m.number}
-                            </span>
-                            <h3 className="font-bold text-ink-950 text-sm">{m.name}</h3>
-                          </div>
-                          {m.description && (
-                            <p className="text-xs text-ink-600 leading-relaxed pl-7">{m.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 text-[11px] text-ink-500 pl-7">
-                            {m.start_date && (
-                              <span className="flex items-center gap-1 font-medium text-lilac-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/50">
-                                <Calendar size={12} className="text-lilac-600" /> Fecha: {formatDateES(m.start_date)}
+                    {modules.map((m) => {
+                      const mTeachers = moduleTeachers.filter((mt: any) => mt.module_id === m.id);
+                      const mTeacherIds = mTeachers.map((mt: any) => mt.teacher_id);
+
+                      return (
+                        <div key={m.id} className="p-5 flex justify-between items-start gap-4 hover:bg-lilac-50/10 transition-colors">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold bg-lilac-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0">
+                                {m.number}
                               </span>
+                              <h3 className="font-bold text-ink-950 text-sm">{m.name}</h3>
+                            </div>
+                            {m.description && (
+                              <p className="text-xs text-ink-600 leading-relaxed pl-7">{m.description}</p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-500 pl-7">
+                              {m.start_date && (
+                                <span className="flex items-center gap-1 font-medium text-lilac-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/50">
+                                  <Calendar size={12} className="text-lilac-600" /> Fecha: {formatDateES(m.start_date)}
+                                </span>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="font-semibold text-ink-700 flex items-center gap-1">
+                                  <UserCheck size={12} className="text-lilac-600" /> Docente(s):
+                                </span>
+                                {mTeachers.length === 0 ? (
+                                  <span className="text-ink-400 italic">Sin asignar</span>
+                                ) : (
+                                  mTeachers.map((mt: any) => (
+                                    <span key={mt.teacher_id} className="bg-lilac-50 text-lilac-900 border border-lilac-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                      {mt.profesores?.full_name}
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <AttendanceListModal
+                              moduleId={m.id}
+                              moduleName={m.name}
+                              moduleNumber={m.number}
+                            />
+
+                            <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-1 rounded-xl">
+                              ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
+                            </span>
+                            {canEdit && (
+                              <div className="flex items-center gap-1">
+                                <EditModuleModal
+                                  module={m}
+                                  allTeachers={allTeachers}
+                                  assignedTeacherIds={mTeacherIds}
+                                />
+                                <ConfirmDeleteButton
+                                  action={deleteModule}
+                                  idName="moduleId"
+                                  idValue={m.id}
+                                  extraFields={{ courseId: id }}
+                                  confirmMessage="¿Estás seguro de que deseas eliminar este módulo?"
+                                />
+                              </div>
                             )}
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-1 rounded-xl">
-                            ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
-                          </span>
-                          {canEdit && (
-                            <div className="flex items-center gap-1">
-                              <EditModuleModal module={m} />
-                              <ConfirmDeleteButton
-                                action={deleteModule}
-                                idName="moduleId"
-                                idValue={m.id}
-                                extraFields={{ courseId: id }}
-                                confirmMessage="¿Estás seguro de que deseas eliminar este módulo?"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -408,6 +433,17 @@ export default async function CursoDetallePage({
                       <label className="label text-ink-800 text-[11px] font-semibold">Fecha del módulo (Día de clases)</label>
                       <input name="date" type="date" className="input text-xs" />
                     </div>
+
+                    {allTeachers.length > 0 && (
+                      <div>
+                        <label className="label text-ink-800 font-bold mb-1 block">Seleccionar Profesor(es)</label>
+                        <TeacherMultiSelect
+                          teachers={allTeachers}
+                          placeholder="Seleccionar profesor(es)..."
+                        />
+                      </div>
+                    )}
+
                     <button type="submit" className="w-full btn-primary text-xs py-2.5 mt-2 shadow-sm">
                       Agregar Módulo
                     </button>
@@ -528,10 +564,21 @@ export default async function CursoDetallePage({
         {activeTab === "alumnos" && (
           <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-              <span className="text-sm font-semibold text-ink-800">Alumnos matriculados</span>
-              <span className="text-xs text-ink-400 bg-lilac-50 px-2.5 py-0.5 rounded-full font-bold">
-                {students.length} alumnos
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-ink-800">Alumnos matriculados</span>
+                <span className="text-xs text-ink-400 bg-lilac-50 px-2.5 py-0.5 rounded-full font-bold">
+                  {students.length} alumnos
+                </span>
+              </div>
+
+              {canEdit && (
+                <EnrollStudentModal
+                  courseId={id}
+                  courseName={course.name}
+                  allStudents={allStudents}
+                  enrolledStudentIds={enrolledStudentIds}
+                />
+              )}
             </div>
 
             {students.length === 0 ? (

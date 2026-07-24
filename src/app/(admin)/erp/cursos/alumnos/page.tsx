@@ -25,6 +25,7 @@ async function addStudent(formData: FormData) {
   const email = (formData.get("email") as string)?.trim();
   const title = (formData.get("professionalTitle") as string)?.trim();
   const notes = (formData.get("notes") as string)?.trim();
+  const courseId = (formData.get("courseId") as string)?.trim();
 
   if (!fullName || !docNumber || !phone || !email) return;
 
@@ -44,6 +45,35 @@ async function addStudent(formData: FormData) {
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  // Matricular inmediatamente si se eligió curso
+  if (courseId) {
+    const { data: enrollment } = await supabase
+      .from("curso_inscripciones")
+      .insert({
+        course_id: courseId,
+        student_id: newStudent.id,
+        status: "enrolled",
+      })
+      .select("id")
+      .single();
+
+    if (enrollment) {
+      const { data: modules } = await supabase
+        .from("curso_modulos")
+        .select("id")
+        .eq("course_id", courseId);
+
+      if (modules && modules.length > 0) {
+        const moduleInscriptions = modules.map((m) => ({
+          enrollment_id: enrollment.id,
+          module_id: m.id,
+          billing_status: "pending",
+        }));
+        await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+      }
+    }
   }
 
   revalidatePath("/erp/cursos/alumnos");
@@ -445,7 +475,13 @@ export default async function AlumnosPage({
     );
   }
 
-  const { data: alumnos } = await query.order("full_name");
+  const [alumnosRes, activeCoursesRes] = await Promise.all([
+    query.order("full_name"),
+    supabaseAdmin.from("cursos").select("id, name, total_cost").neq("status", "cancelled").order("name")
+  ]);
+
+  const alumnos = alumnosRes.data || [];
+  const activeCourses = activeCoursesRes.data || [];
 
   return (
     <div className="max-w-6xl mx-auto pb-10">
@@ -485,6 +521,17 @@ export default async function AlumnosPage({
                 <div>
                   <label className="label text-ink-800">Título profesional</label>
                   <input name="professionalTitle" placeholder="Ej: Odontólogo General, Endodoncista" className="input" />
+                </div>
+                <div>
+                  <label className="label text-ink-800 font-bold">Matricular en Curso (Opcional)</label>
+                  <select name="courseId" className="input text-xs">
+                    <option value="">-- No matricular aún --</option>
+                    {activeCourses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} (${Number(c.total_cost).toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="label text-ink-800">Notas internas</label>
@@ -567,9 +614,9 @@ export default async function AlumnosPage({
                       <td className="px-5 py-3 text-right">
                         <Link
                           href={`/erp/cursos/alumnos?id=${student.id}`}
-                          className="inline-flex items-center text-xs font-semibold text-lilac-600 hover:text-lilac-800"
+                          className="inline-flex items-center justify-center gap-1 bg-lilac-700 hover:bg-lilac-800 text-white font-bold text-xs px-3 py-1 rounded-xl transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
                         >
-                          Ver Ficha →
+                          Gestionar →
                         </Link>
                       </td>
                     </tr>

@@ -107,10 +107,11 @@ export async function updateModuleAction(payload: {
   cost: number;
   description?: string | null;
   date?: string | null;
+  teacherIds?: string[];
 }) {
   await assertWritePermission("/erp/cursos");
 
-  const { id, courseId, number, name, cost, description, date } = payload;
+  const { id, courseId, number, name, cost, description, date, teacherIds } = payload;
 
   if (!id || !courseId || !name || isNaN(number) || isNaN(cost)) {
     throw new Error("Datos de módulo inválidos.");
@@ -133,6 +134,18 @@ export async function updateModuleAction(payload: {
 
   if (error) {
     throw new Error(error.message || "Error al actualizar el módulo.");
+  }
+
+  // Actualizar asignaciones de profesores del módulo
+  if (teacherIds !== undefined) {
+    await supabase.from("modulo_profesores").delete().eq("module_id", id);
+    if (teacherIds.length > 0) {
+      const inserts = teacherIds.map((tId) => ({
+        module_id: id,
+        teacher_id: tId,
+      }));
+      await supabase.from("modulo_profesores").insert(inserts);
+    }
   }
 
   revalidatePath(`/erp/cursos/${courseId}`);
@@ -203,4 +216,151 @@ export async function createCourseAction(formData: FormData) {
 
   revalidatePath("/erp/cursos");
   return { success: true, courseId: newCourse.id };
+}
+
+export async function enrollStudentInCourseAction(studentId: string, courseId: string) {
+  await assertWritePermission("/erp/cursos");
+  if (!studentId || !courseId) throw new Error("Parámetros requeridos faltantes.");
+
+  const supabase = createAdminClient();
+  const { data: enrollment, error: enrollError } = await supabase
+    .from("curso_inscripciones")
+    .insert({
+      course_id: courseId,
+      student_id: studentId,
+      status: "enrolled",
+    })
+    .select("id")
+    .single();
+
+  if (enrollError) {
+    if (enrollError.code === "23505") {
+      throw new Error("El alumno ya se encuentra matriculado en este curso.");
+    }
+    throw new Error(enrollError.message);
+  }
+
+  const { data: modules } = await supabase
+    .from("curso_modulos")
+    .select("id")
+    .eq("course_id", courseId);
+
+  if (modules && modules.length > 0) {
+    const moduleInscriptions = modules.map((m) => ({
+      enrollment_id: enrollment.id,
+      module_id: m.id,
+      billing_status: "pending",
+    }));
+    await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+  }
+
+  revalidatePath(`/erp/cursos/${courseId}`);
+  revalidatePath("/erp/cursos/alumnos");
+  return { success: true };
+}
+
+export async function registerAndEnrollStudentAction(data: {
+  fullName: string;
+  documentNumber: string;
+  phone: string;
+  email: string;
+  professionalTitle?: string;
+  notes?: string;
+  courseId: string;
+}) {
+  await assertWritePermission("/erp/cursos");
+  if (!data.fullName || !data.documentNumber || !data.phone || !data.email || !data.courseId) {
+    throw new Error("Por favor completa los datos obligatorios del alumno.");
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: newStudent, error: studentError } = await supabase
+    .from("alumnos")
+    .insert({
+      full_name: data.fullName,
+      document_number: data.documentNumber,
+      phone: data.phone,
+      email: data.email,
+      professional_title: data.professionalTitle || null,
+      notes: data.notes || null,
+    })
+    .select("id")
+    .single();
+
+  if (studentError) {
+    throw new Error(`Error al registrar el alumno: ${studentError.message}`);
+  }
+
+  await enrollStudentInCourseAction(newStudent.id, data.courseId);
+
+  return { success: true, studentId: newStudent.id };
+}
+
+export async function getModuleAttendanceDataAction(moduleId: string) {
+  try {
+    const supabase = createAdminClient();
+
+    const { data: moduleInfo } = await supabase
+      .from("curso_modulos")
+      .select("*, cursos(name)")
+      .eq("id", moduleId)
+      .single();
+
+    if (!moduleInfo) throw new Error("Módulo no encontrado.");
+
+    const { data: modTeachers } = await supabase
+      .from("modulo_profesores")
+      .select("profesores(full_name, specialty)")
+      .eq("module_id", moduleId);
+
+    const { data: moduleInscriptions } = await supabase
+      .from("curso_modulo_inscripciones")
+      .select("id, billing_status, curso_inscripciones(status, alumnos(id, full_name, document_number, phone, email))")
+      .eq("module_id", moduleId);
+
+    const students = (moduleInscriptions || [])
+      .map((mi: any) => {
+        const student = mi.curso_inscripciones?.alumnos;
+        if (!student) return null;
+        return {
+          moduloInscripcionId: mi.id,
+          billingStatus: mi.billing_status as string,
+          enrollmentStatus: mi.curso_inscripciones.status as string,
+          studentId: student.id,
+          fullName: student.full_name,
+          documentNumber: student.document_number,
+          phone: student.phone,
+          email: student.email,
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
+
+    return {
+      success: true,
+      courseName: moduleInfo.cursos?.name || "Curso",
+      moduleNumber: moduleInfo.number,
+      moduleName: moduleInfo.name,
+      moduleDate: moduleInfo.start_date,
+      teachers: (modTeachers || []).map((t: any) => t.profesores).filter(Boolean),
+      students,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function updateModuleBillingStatusAction(moduloInscripcionId: string, billingStatus: string, moduleId: string) {
+  await assertWritePermission("/erp/cursos");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("curso_modulo_inscripciones")
+    .update({ billing_status: billingStatus, updated_at: new Date().toISOString() })
+    .eq("id", moduloInscripcionId);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/erp/cursos`);
+  return { success: true };
 }

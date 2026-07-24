@@ -9,8 +9,8 @@ if (!resend) {
 }
 
 
-const FROM_CLINICA = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
-const FROM_CONTABILIDAD = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const FROM_CLINICA = process.env.RESEND_FROM_CLINICA || "Facop Clínica <clinica@facop.com.ec>";
+const FROM_CONTABILIDAD = process.env.RESEND_FROM_CONTABILIDAD || "Facop Contabilidad <contabilidad@facop.com.ec>";
 const CLINIC = process.env.NEXT_PUBLIC_CLINIC_NAME || "Consultorio";
 const ADDRESS = process.env.NEXT_PUBLIC_CLINIC_ADDRESS || "";
 const PHONE = process.env.NEXT_PUBLIC_CLINIC_PHONE || "";

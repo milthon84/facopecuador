@@ -81,7 +81,7 @@ export default async function PacientesPage({
                       />
                       <Link
                         href={`/erp/pacientes/${p.id}`}
-                        className="inline-flex items-center justify-center bg-lilac-100 hover:bg-lilac-200 text-lilac-800 font-semibold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                        className="inline-flex items-center justify-center bg-lilac-700 hover:bg-lilac-800 text-white font-bold text-xs px-2.5 py-1 rounded-xl transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
                       >
                         Ver Ficha e Historial
                       </Link>

@@ -169,9 +169,10 @@ export default async function CursosPage() {
                     )}
                     <Link
                       href={`/erp/cursos/${c.id}`}
-                      className="inline-flex items-center gap-1 text-xs text-lilac-700 hover:text-lilac-900 font-semibold transition-colors font-medium"
+                      className="inline-flex items-center justify-center gap-1.5 bg-lilac-700 hover:bg-lilac-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
                     >
-                      Gestionar <ArrowRight size={13} />
+                      <span>Gestionar</span>
+                      <ArrowRight size={13} />
                     </Link>
                   </div>
                 </div>

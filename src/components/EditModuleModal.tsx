@@ -4,6 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, X, Save, Loader2, Calendar, DollarSign, BookOpen, AlertCircle } from "lucide-react";
 import { updateModuleAction } from "@/app/(admin)/erp/cursos/actions";
+import TeacherMultiSelect from "@/components/TeacherMultiSelect";
+
+interface TeacherOption {
+  id: string;
+  full_name: string;
+  specialty?: string | null;
+}
 
 interface ModuleData {
   id: string;
@@ -17,9 +24,11 @@ interface ModuleData {
 
 interface EditModuleModalProps {
   module: ModuleData;
+  allTeachers?: TeacherOption[];
+  assignedTeacherIds?: string[];
 }
 
-export default function EditModuleModal({ module }: EditModuleModalProps) {
+export default function EditModuleModal({ module, allTeachers = [], assignedTeacherIds = [] }: EditModuleModalProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,6 +39,7 @@ export default function EditModuleModal({ module }: EditModuleModalProps) {
   const [cost, setCost] = useState(module.cost);
   const [description, setDescription] = useState(module.description || "");
   const [date, setDate] = useState(module.start_date || "");
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>(assignedTeacherIds);
 
   function handleOpen(e: React.MouseEvent) {
     e.preventDefault();
@@ -39,6 +49,7 @@ export default function EditModuleModal({ module }: EditModuleModalProps) {
     setCost(module.cost);
     setDescription(module.description || "");
     setDate(module.start_date || "");
+    setSelectedTeacherIds(assignedTeacherIds);
     setErrorMsg(null);
     setOpen(true);
   }
@@ -79,6 +90,7 @@ export default function EditModuleModal({ module }: EditModuleModalProps) {
         cost: Number(cost),
         description: description.trim() || null,
         date: date || null,
+        teacherIds: selectedTeacherIds,
       });
 
       setOpen(false);
@@ -207,6 +219,20 @@ export default function EditModuleModal({ module }: EditModuleModalProps) {
                   className="w-full px-3.5 py-2 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition"
                 />
               </div>
+
+              {allTeachers && allTeachers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-ink-800 mb-1">
+                    Profesor(es) del módulo
+                  </label>
+                  <TeacherMultiSelect
+                    teachers={allTeachers}
+                    initialSelectedIds={selectedTeacherIds}
+                    onChange={(ids) => setSelectedTeacherIds(ids)}
+                    placeholder="Seleccionar profesor(es)..."
+                  />
+                </div>
+              )}
 
               {errorMsg && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
