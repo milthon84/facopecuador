@@ -184,7 +184,7 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
           
           <div className="space-y-4">
             <div className="bg-lilac-50/50 rounded-xl p-4 border border-lilac-100">
-              <h3 className="text-xs font-bold text-lilac-800 uppercase mb-2">Evolución y Procedimientos Realizados</h3>
+              <h3 className="text-xs font-bold text-lilac-800 uppercase mb-2">Procedimientos Realizados</h3>
               <p className="text-sm text-ink-900 whitespace-pre-wrap leading-relaxed">{consultation.treatment_notes}</p>
             </div>
 
@@ -208,6 +208,13 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
                       perdida: "Ausente",
                       extraccion: "Extracción requerida"
                     };
+                    const surfaceNames: Record<string, string> = {
+                      center: "Centro",
+                      top: "Superior",
+                      bottom: "Inferior",
+                      left: "Izquierda",
+                      right: "Derecha"
+                    };
                     const list: string[] = [];
                     Object.entries(consultation.odontogram_snapshot).forEach(([tooth, info]: [string, any]) => {
                       const conditions: string[] = [];
@@ -217,7 +224,8 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
                       }
                       Object.entries(toothInfo.surfaces || {}).forEach(([surf, cond]: [string, any]) => {
                         if (cond && cond !== "sano" && toothStates[cond]) {
-                          conditions.push(`${toothStates[cond]} (${surf})`);
+                          const surfEs = surfaceNames[surf] || surf;
+                          conditions.push(`${toothStates[cond]} (${surfEs})`);
                         }
                       });
                       if (conditions.length > 0) {

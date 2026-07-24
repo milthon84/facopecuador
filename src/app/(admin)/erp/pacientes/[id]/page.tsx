@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { formatTimeLocal } from "@/lib/availability";
 import EditPatientModal from "@/components/EditPatientModal";
+import CotizacionesPacienteSection from "@/components/CotizacionesPacienteSection";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 
@@ -27,7 +28,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const supabase = createAdminClient();
   
   // Ejecutar todas las consultas del perfil del paciente y permisos en paralelo
-  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes] = await Promise.all([
+  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes, quotationsRes] = await Promise.all([
     supabase
       .from("patients")
       .select("*")
@@ -48,6 +49,11 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
       .from("dental_consultations")
       .select("*")
       .eq("patient_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("patient_quotations")
+      .select("*")
+      .eq("patient_id", id)
       .order("created_at", { ascending: false })
   ]);
     
@@ -60,6 +66,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const dentalRecord = dentalRecordRes.data;
   const appts = apptsRes.data;
   const consultations = consultationsRes.data;
+  const quotations = quotationsRes.data || [];
 
   // Help format date nicely
   const formatDateES = (d: string) => {
@@ -106,6 +113,14 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
     extraccion: "Extracción requerida"
   };
 
+  const surfaceNames: Record<string, string> = {
+    center: "Centro",
+    top: "Superior",
+    bottom: "Inferior",
+    left: "Izquierda",
+    right: "Derecha"
+  };
+
   const odontogramIssues: string[] = [];
   if (dentalRecord?.odontogram_state) {
     Object.entries(dentalRecord.odontogram_state).forEach(([tooth, info]: [string, any]) => {
@@ -115,7 +130,8 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
       }
       Object.entries(info.surfaces || {}).forEach(([surf, cond]: [string, any]) => {
         if (cond && cond !== "sano" && toothStates[cond]) {
-          conditions.push(`${toothStates[cond]} (${surf})`);
+          const surfEs = surfaceNames[surf] || surf;
+          conditions.push(`${toothStates[cond]} (${surfEs})`);
         }
       });
       if (conditions.length > 0) {
@@ -307,6 +323,16 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
               </div>
             )}
           </div>
+
+          {/* Cotizaciones y Presupuestos Odontológicos */}
+          <CotizacionesPacienteSection
+            patientId={patient.id}
+            patientName={patient.full_name}
+            patientEmail={patient.email}
+            patientPhone={patient.phone}
+            odontogramState={dentalRecord?.odontogram_state}
+            initialQuotations={quotations}
+          />
 
           {/* Historical Appointments & Session Evolutions */}
           <div className="card overflow-hidden bg-white border border-lilac-100 shadow-sm">

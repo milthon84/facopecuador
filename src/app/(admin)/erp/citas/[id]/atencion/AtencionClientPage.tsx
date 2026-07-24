@@ -973,7 +973,7 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
               <div className="space-y-5">
                 <div>
                   <label className="block text-xs font-bold text-ink-700 uppercase mb-1">
-                    Evolución y Procedimientos Realizados <span className="text-red-500">*</span>
+                    Procedimientos Realizados <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     rows={6}

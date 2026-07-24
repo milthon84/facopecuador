@@ -150,6 +150,14 @@ export async function POST(req: Request) {
         extraccion: "Extracción requerida"
       };
 
+      const surfaceNames: Record<string, string> = {
+        center: "Centro",
+        top: "Superior",
+        bottom: "Inferior",
+        left: "Izquierda",
+        right: "Derecha"
+      };
+
       const odontogramList: string[] = [];
       Object.entries(odontogram_state || {}).forEach(([tooth, info]: [string, any]) => {
         const toothNum = parseInt(tooth, 10);
@@ -159,7 +167,8 @@ export async function POST(req: Request) {
         }
         Object.entries(info.surfaces || {}).forEach(([surf, cond]: [string, any]) => {
           if (cond && cond !== "sano" && toothStates[cond]) {
-            conditions.push(`${toothStates[cond]} (cara ${surf})`);
+            const surfEs = surfaceNames[surf] || surf;
+            conditions.push(`${toothStates[cond]} (${surfEs})`);
           }
         });
         if (conditions.length > 0) {

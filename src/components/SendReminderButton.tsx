@@ -69,8 +69,7 @@ function buildWhatsAppUrl(
     `${TOOTH} *Motivo:* ${reason || "consulta odontológica"}\n\n` +
     `${CLOCK} Si necesita cancelar o reprogramar, contactenos al menos 24 horas antes.`;
 
-  // Usamos whatsapp:// (mismo esquema del enlace original del usuario)
-  return `whatsapp://send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
+  return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
 }
 
 

@@ -9,8 +9,8 @@ if (!resend) {
 }
 
 
-const FROM_CLINICA = "Facop Clínica <clinica@facop.com.ec>";
-const FROM_CONTABILIDAD = "Facop Contabilidad <contabilidad@facop.com.ec>";
+const FROM_CLINICA = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const FROM_CONTABILIDAD = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 const CLINIC = process.env.NEXT_PUBLIC_CLINIC_NAME || "Consultorio";
 const ADDRESS = process.env.NEXT_PUBLIC_CLINIC_ADDRESS || "";
 const PHONE = process.env.NEXT_PUBLIC_CLINIC_PHONE || "";
@@ -444,109 +444,6 @@ function generateOdontogramHtml(odontogramStateRaw: any, dentitionMode?: "adulta
       <div>
         ${odontogramHtml}
       </div>
-
-      <!-- Leyenda Clínica Premium y Pedagógica -->
-      <div style="margin-top: 18px; padding: 14px; background: #faf9fc; border-radius: 10px; border: 1.5px solid #e1d6f2;">
-        <div style="font-size: 12px; font-weight: bold; color: #604390; margin-bottom: 12px; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; font-family: sans-serif;">
-          Guía de Colores y Tratamientos para el Paciente
-        </div>
-        
-        <table style="width: 100%; border-collapse: collapse; border: none; font-family: sans-serif;">
-          <tr>
-            <!-- Columna Izquierda: Lo que ya está realizado -->
-            <td style="width: 50%; padding: 10px; vertical-align: top; background: #edf7ed; border-radius: 8px 0 0 8px; border-right: 3px solid #ffffff;">
-              <div style="font-size: 11px; font-weight: bold; color: #1e4620; margin-bottom: 8px;">
-                ✅ TRATAMIENTOS REALIZADOS
-              </div>
-              
-              <!-- Item 1: Azul -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; margin-bottom: 8px; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 11px; height: 11px; background: #3b82f6; border-radius: 2px; vertical-align: middle;"></span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #1e4620; vertical-align: top;">
-                    <strong>Azul: Calza o Sellante Realizado</strong>
-                    <div style="font-size: 9px; color: #3d7a40; margin-top: 1px;">Protección o restauración colocada con éxito en la consulta.</div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Item 2: Dorado -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 10px; height: 10px; border: 2px solid #C9A961; border-radius: 50%; box-sizing: border-box; vertical-align: middle; background: #ffffff;"></span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #1e4620; vertical-align: top;">
-                    <strong>Dorado: Corona Protésica</strong>
-                    <div style="font-size: 9px; color: #3d7a40; margin-top: 1px;">Funda permanente de protección sobre toda la pieza.</div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-
-            <!-- Columna Derecha: Lo que está pendiente -->
-            <td style="width: 50%; padding: 10px; vertical-align: top; background: #fff5f5; border-radius: 0 8px 8px 0;">
-              <div style="font-size: 11px; font-weight: bold; color: #9b2c2c; margin-bottom: 8px;">
-                ⚠️ PENDIENTES POR TRATAR
-              </div>
-              
-              <!-- Item 1: Rojo -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; margin-bottom: 8px; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 11px; height: 11px; background: #ef4444; border-radius: 2px; vertical-align: middle;"></span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #7c2d12; vertical-align: top;">
-                    <strong>Rojo: Caries Activa (Calza Faltante)</strong>
-                    <div style="font-size: 9px; color: #9a482b; margin-top: 1px;">Daño en la superficie que requiere limpieza y calza.</div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Item 2: Celeste Dashed -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; margin-bottom: 8px; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 11px; height: 11px; background: #e0f2fe; border: 1px dashed #0ea5e9; border-radius: 2px; vertical-align: middle;"></span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #7c2d12; vertical-align: top;">
-                    <strong>Celeste Línea: Calza / Sellante Requerido</strong>
-                    <div style="font-size: 9px; color: #9a482b; margin-top: 1px;">Tratamiento preventivo para proteger la pieza del paciente.</div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Item 3: Cruz X -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; margin-bottom: 8px; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 11px; height: 11px; border: 1px solid #ef4444; color: #ef4444; font-size: 8px; font-weight: bold; text-align: center; line-height: 9px; border-radius: 2px; vertical-align: middle; background: #ffffff; box-sizing: border-box;">X</span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #7c2d12; vertical-align: top;">
-                    <strong>Cruz Roja (X): Pieza Ausente</strong>
-                    <div style="font-size: 9px; color: #9a482b; margin-top: 1px;">Pieza dental no presente en la boca del paciente.</div>
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Item 4: Diagonal / -->
-              <table style="width: 100%; border: none; font-size: 10.5px; border-collapse: collapse; font-family: sans-serif;">
-                <tr>
-                  <td style="width: 16px; padding: 2px 0; vertical-align: top;">
-                    <span style="display: inline-block; width: 11px; height: 11px; border: 1px solid #ef4444; color: #ef4444; font-size: 8px; font-weight: bold; text-align: center; line-height: 9px; border-radius: 2px; vertical-align: middle; background: #ffffff; box-sizing: border-box;">/</span>
-                  </td>
-                  <td style="padding: 0 0 0 6px; color: #7c2d12; vertical-align: top;">
-                    <strong>Diagonal Roja (/): Extracción Requerida</strong>
-                    <div style="font-size: 9px; color: #9a482b; margin-top: 1px;">Pieza que requiere ser removida por indicación clínica.</div>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      </div>
     </div>
   `;
 }
@@ -602,44 +499,12 @@ function generateMedicalHistoryHtml(medicalHistoryRaw: any): string {
   `;
 }
 
-function generateStomatognathicHtml(stomatognathicExamRaw: any): string {
-  const examKeys: Record<string, string> = {
-    labios: "Labios",
-    mejillas: "Mejillas",
-    maxilar_superior: "Maxilar Superior",
-    maxilar_inferior: "Maxilar Inferior",
-    lengua: "Lengua",
-    paladar: "Paladar",
-    amigdalas: "Amígdalas",
-    otros: "Otros"
-  };
-
-  const raw = stomatognathicExamRaw || {};
-  let badges = "";
-  
-  Object.keys(examKeys).forEach(k => {
-    const label = examKeys[k];
-    const item = raw[k];
-    if (item?.status === "alteracion") {
-      badges += `
-        <div style="display: inline-block; background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: bold; margin: 3px; font-family: sans-serif; vertical-align: top; box-sizing: border-box;">
-          ⚠️ ${label}: Alteración (${item.desc || "Sin detalle"})
-        </div>
-      `;
-    } else {
-      badges += `
-        <div style="display: inline-block; background: #f5f1fb; border: 1px solid #e1d6f2; color: #604390; padding: 5px 9px; border-radius: 6px; font-size: 11px; margin: 3px; font-family: sans-serif; vertical-align: top; box-sizing: border-box;">
-          ✓ ${label}: Normal
-        </div>
-      `;
-    }
-  });
-
+function generateOdontogramSummaryHtml(odontogramSummary: string): string {
   return `
-    <div style="padding: 12px; background: #ffffff; border: 1px solid #e1d6f2; border-radius: 8px; font-family: sans-serif; margin-top: 12px;">
-      <div style="font-size: 12px; font-weight: bold; color: #604390; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Examen Estomatognático:</div>
-      <div style="line-height: 1.6;">
-        ${badges}
+    <div style="padding: 14px 16px; background: #ffffff; border: 1px solid #e1d6f2; border-radius: 8px; font-family: sans-serif; margin-top: 12px;">
+      <div style="font-size: 12px; font-weight: bold; color: #604390; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Resumen del Odontograma:</div>
+      <div style="font-size: 13px; color: #333333; line-height: 1.6;">
+        ${odontogramSummary || "Todos los dientes sin novedades o sanos"}
       </div>
     </div>
   `;
@@ -662,27 +527,11 @@ export async function sendDentalConsultationEmail(d: DentalEmailData) {
       </table>
     `;
 
-  const stomatognathicSection = d.stomatognathicExamRaw
-    ? generateStomatognathicHtml(d.stomatognathicExamRaw)
-    : `
-      <table style="font-size:14px; width:100%; border-collapse:collapse; font-family:sans-serif; margin-top:8px;">
-        <tr style="border-bottom:1px solid #f0eaf8;">
-          <td style="padding:8px 0; color:#604390; font-weight:600; width:150px;">Examen Estomatognático:</td>
-          <td style="padding:8px 0; line-height:1.4;">${d.stomatognathicSummary}</td>
-        </tr>
-      </table>
-    `;
+  const odontogramSummarySection = generateOdontogramSummaryHtml(d.odontogramSummary);
 
   const odontogramSection = d.odontogramStateRaw
     ? generateOdontogramHtml(d.odontogramStateRaw, d.dentitionMode)
-    : `
-      <table style="font-size:14px; width:100%; border-collapse:collapse; font-family:sans-serif; margin-top:8px;">
-        <tr>
-          <td style="padding:8px 0; color:#604390; font-weight:600; vertical-align:top; width:150px;">Estado del Odontograma:</td>
-          <td style="padding:8px 0; line-height:1.4; white-space:pre-line;">${d.odontogramSummary}</td>
-        </tr>
-      </table>
-    `;
+    : "";
 
   const body = `
     <h2 style="color:#7E5DB4; margin:0 0 8px; font-size:22px; font-weight:700; font-family:sans-serif;">Resumen de tu atención odontológica 🦷</h2>
@@ -703,7 +552,7 @@ export async function sendDentalConsultationEmail(d: DentalEmailData) {
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
       <tr>
         <td style="background:#ffffff; border:1px solid #e1d6f2; border-radius:10px; padding:20px; font-family:sans-serif;">
-          <div style="font-size:13px; font-weight:700; color:#604390; letter-spacing:0.5px; margin-bottom:10px; text-transform:uppercase;">Evolución y Procedimientos Realizados</div>
+          <div style="font-size:13px; font-weight:700; color:#604390; letter-spacing:0.5px; margin-bottom:10px; text-transform:uppercase;">Procedimientos Realizados</div>
           <p style="font-size:14px; line-height:1.7; margin:0; white-space:pre-line; color:#333;">${d.treatmentNotes}</p>
         </td>
       </tr>
@@ -727,7 +576,7 @@ export async function sendDentalConsultationEmail(d: DentalEmailData) {
         <td style="background:#ffffff; border:1px solid #e1d6f2; border-radius:10px; padding:20px; font-family:sans-serif;">
           <div style="font-size:13px; font-weight:700; color:#604390; letter-spacing:0.5px; margin-bottom:16px; padding-bottom:10px; border-bottom:1.5px solid #f5f1fb; text-transform:uppercase;">Resumen Clínico Dental</div>
           ${medicalHistorySection}
-          ${stomatognathicSection}
+          ${odontogramSummarySection}
           ${odontogramSection}
         </td>
       </tr>
@@ -865,3 +714,142 @@ export async function sendCourseNoticeEmail(
     return false;
   }
 }
+
+export interface QuotationItem {
+  tooth?: string;
+  treatment: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface QuotationEmailData {
+  patientName: string;
+  patientEmail: string;
+  quotationNumber: string;
+  dateStr: string;
+  items: QuotationItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  notes?: string | null;
+}
+
+export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean> {
+  if (!resend) {
+    console.warn("⚠️ Envío de correo cancelado: Resend no está configurado.");
+    return false;
+  }
+  if (!d.patientEmail) return false;
+
+  const itemsHtml = d.items.map(item => `
+    <tr style="border-bottom: 1px solid #f0eaf8;">
+      <td style="padding: 10px 8px; font-size: 13px; color: #604390; font-weight: bold; font-family: sans-serif;">
+        ${item.tooth ? `Diente ${item.tooth}` : "General"}
+      </td>
+      <td style="padding: 10px 8px; font-size: 13px; color: #333333; font-family: sans-serif;">
+        ${item.treatment}
+      </td>
+      <td style="padding: 10px 8px; font-size: 13px; color: #555555; text-align: center; font-family: sans-serif;">
+        ${item.quantity}
+      </td>
+      <td style="padding: 10px 8px; font-size: 13px; color: #555555; text-align: right; font-family: sans-serif;">
+        $${item.unitPrice.toFixed(2)}
+      </td>
+      <td style="padding: 10px 8px; font-size: 13px; color: #1a1a1a; font-weight: bold; text-align: right; font-family: sans-serif;">
+        $${item.subtotal.toFixed(2)}
+      </td>
+    </tr>
+  `).join("");
+
+  const body = `
+    <h2 style="color:#7E5DB4; margin:0 0 8px; font-size:22px; font-weight:700; font-family:sans-serif;">Presupuesto de Tratamiento Odontológico 📋</h2>
+    <p style="font-size:15px; line-height:1.6; margin:0 0 4px; font-family:sans-serif;">Hola <strong>${d.patientName}</strong>,</p>
+    <p style="font-size:15px; line-height:1.6; margin:0 0 20px; color:#444; font-family:sans-serif;">A continuación detallamos el presupuesto personalizado para tu plan de tratamiento odontológico en <strong>${CLINIC}</strong>.</p>
+
+    <!-- Info Cotización -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
+      <tr>
+        <td style="background:#f5f1fb; border-left:4px solid #7E5DB4; padding:14px 20px; border-radius:0 8px 8px 0; font-family:sans-serif;">
+          <div style="font-size:11px; font-weight:700; color:#604390; letter-spacing:0.8px; margin-bottom:4px; text-transform:uppercase;">N° de Cotización: ${d.quotationNumber}</div>
+          <div style="font-size:14px; font-weight:700; color:#1a1a1a;">Fecha de emisión: ${d.dateStr}</div>
+          <div style="font-size:12px; color:#7E5DB4; font-weight:600; margin-top:2px;">⏳ Válido por 30 días</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Tabla de Ítems -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px; border-collapse:collapse; background:#ffffff; border:1px solid #e1d6f2; border-radius:10px; overflow:hidden;">
+      <thead>
+        <tr style="background:#f5f1fb; border-bottom:1.5px solid #e1d6f2;">
+          <th style="padding:10px 8px; text-align:left; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Pieza</th>
+          <th style="padding:10px 8px; text-align:left; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Tratamiento</th>
+          <th style="padding:10px 8px; text-align:center; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Cant.</th>
+          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">P. Unit</th>
+          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+    </table>
+
+    <!-- Totales -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px; font-family:sans-serif;">
+      <tr>
+        <td style="width:50%;"></td>
+        <td style="width:50%; background:#faf9fc; border:1px solid #e1d6f2; border-radius:8px; padding:12px 16px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="font-size:13px; color:#666666; padding:3px 0;">Subtotal:</td>
+              <td style="font-size:13px; color:#1a1a1a; font-weight:600; text-align:right; padding:3px 0;">$${d.subtotal.toFixed(2)}</td>
+            </tr>
+            ${d.discount > 0 ? `
+            <tr>
+              <td style="font-size:13px; color:#16a34a; padding:3px 0;">Descuento:</td>
+              <td style="font-size:13px; color:#16a34a; font-weight:600; text-align:right; padding:3px 0;">-$${d.discount.toFixed(2)}</td>
+            </tr>
+            ` : ""}
+            <tr style="border-top:1.5px solid #e1d6f2;">
+              <td style="font-size:15px; font-weight:bold; color:#604390; padding:8px 0 0;">Total Estimado:</td>
+              <td style="font-size:17px; font-weight:bold; color:#604390; text-align:right; padding:8px 0 0;">$${d.total.toFixed(2)} USD</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    ${d.notes ? `
+    <!-- Notas / Indicaciones -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#fffcf6; border:1px solid #f8e8c8; border-radius:8px; padding:14px 18px; font-family:sans-serif;">
+          <div style="font-size:12px; font-weight:bold; color:#9e7920; letter-spacing:0.5px; margin-bottom:6px; text-transform:uppercase;">Formas de Pago y Observaciones:</div>
+          <p style="font-size:13px; line-height:1.6; margin:0; color:#444; white-space:pre-line;">${d.notes}</p>
+        </td>
+      </tr>
+    </table>
+    ` : ""}
+
+    <p style="font-size:14px; color:#7E5DB4; text-align:center; font-weight:600; margin:0; font-family:sans-serif;">Si deseas agendar tus citas de tratamiento o solicitar facilidades de pago, responde a este correo o escríbenos a nuestro WhatsApp. 😊</p>
+  `;
+
+  try {
+    const response = await resend.emails.send({
+      from: FROM_CLINICA,
+      to: d.patientEmail,
+      subject: `Presupuesto de Tratamiento Odontológico N° ${d.quotationNumber} – ${CLINIC}`,
+      html: baseHtml("Presupuesto Odontológico", body),
+    });
+
+    if (response.error) {
+      console.error(`❌ Error retornado por Resend al enviar cotización a ${d.patientEmail}:`, response.error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error(`❌ Excepción en Resend al enviar cotización a ${d.patientEmail}:`, error);
+    return false;
+  }
+}
+

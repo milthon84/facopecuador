@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Search } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 
+import QuickQuotationButton from "@/components/QuickQuotationButton";
+
 export const dynamic = "force-dynamic";
 
 interface SearchParams { q?: string }
@@ -70,12 +72,20 @@ export default async function PacientesPage({
                   <td className="px-4 py-3 hidden md:table-cell text-ink-600">{p.phone}</td>
                   <td className="px-4 py-3 hidden md:table-cell text-ink-600">{p.email}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/erp/pacientes/${p.id}`}
-                      className="inline-flex items-center justify-center bg-lilac-100 hover:bg-lilac-200 text-lilac-800 font-semibold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      Ver Ficha e Historial
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      <QuickQuotationButton
+                        patientId={p.id}
+                        patientName={p.full_name}
+                        patientPhone={p.phone}
+                        patientEmail={p.email}
+                      />
+                      <Link
+                        href={`/erp/pacientes/${p.id}`}
+                        className="inline-flex items-center justify-center bg-lilac-100 hover:bg-lilac-200 text-lilac-800 font-semibold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        Ver Ficha e Historial
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
