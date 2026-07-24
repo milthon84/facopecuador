@@ -12,7 +12,7 @@ import {
 import CursosSection from "./CursosSection";
 import ClinicaCarousel from "./ClinicaCarousel";
 import CoworkingCarousel from "./CoworkingCarousel";
-import { updateExpiredCourses } from "@/lib/courses";
+import { updateExpiredCourses, getPublicCourseVisibilityCutoffDate } from "@/lib/courses";
 
 export const dynamic = "force-dynamic";
 
@@ -63,12 +63,22 @@ export default async function HomePage() {
     address: "Quito, Ecuador"
   };
 
-  // 2. Obtener cursos activos
-  const { data: courses } = await supabase
+  // 2. Auto-actualizar estados de cursos y obtener cursos públicos
+  await updateExpiredCourses(supabase);
+  const cutoffDate = getPublicCourseVisibilityCutoffDate();
+
+  const { data: rawCourses } = await supabase
     .from("cursos")
-    .select("id, name, description, total_cost, start_date, end_date, image_url")
-    .eq("status", "active")
+    .select("id, name, description, total_cost, start_date, end_date, image_url, status")
+    .in("status", ["active", "in_progress", "completed"])
     .order("start_date", { ascending: true });
+
+  const courses = (rawCourses || []).filter((c) => {
+    if (c.status === "completed") {
+      return c.end_date >= cutoffDate;
+    }
+    return true;
+  });
 
   // 3. Obtener noticias publicadas y vigentes (no expiradas) — últimas 6
   const { data: posts, error: postsError } = await supabase

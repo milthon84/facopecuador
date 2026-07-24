@@ -39,15 +39,16 @@ export default async function CursosPage() {
   });
 
   // Estadísticas básicas
-  const totalActive = cursos.filter(c => c.status === "active").length;
+  const totalActive = cursos.filter(c => c.status === "active" || c.status === "in_progress").length;
   const totalDraft = cursos.filter(c => c.status === "draft").length;
   const totalStudents = enrollments.filter(e => e.status === "enrolled").length;
 
   const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
-    draft:     { label: "Borrador", cls: "bg-gray-100 text-gray-700 border-gray-200" },
-    active:    { label: "Activo", cls: "bg-green-100 text-green-700 border-green-200" },
-    completed: { label: "Completado", cls: "bg-lilac-100 text-lilac-700 border-lilac-200" },
-    cancelled: { label: "Cancelado", cls: "bg-red-100 text-red-700 border-red-200" },
+    draft:       { label: "Borrador", cls: "bg-gray-100 text-gray-700 border-gray-200" },
+    active:      { label: "Abierto", cls: "bg-green-100 text-green-700 border-green-200" },
+    in_progress: { label: "En Ejecución", cls: "bg-blue-100 text-blue-700 border-blue-200" },
+    completed:   { label: "Finalizado", cls: "bg-lilac-100 text-lilac-700 border-lilac-200" },
+    cancelled:   { label: "Cancelado", cls: "bg-red-100 text-red-700 border-red-200" },
   };
 
   const formatDateES = (d: string) => {

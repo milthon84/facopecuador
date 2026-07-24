@@ -117,8 +117,9 @@ export default function NuevoCursoForm() {
       <div>
         <label className="label text-ink-800">Estado inicial</label>
         <select name="status" className="input" disabled={loading}>
-          <option value="draft">Borrador (No visible en inscripciones aún)</option>
-          <option value="active">Activo (Abierto para inscripciones)</option>
+          <option value="draft">Borrador (No visible en la web)</option>
+          <option value="active">Abierto (Abierto para inscripciones)</option>
+          <option value="in_progress">En Ejecución (Curso en desarrollo)</option>
         </select>
       </div>
 

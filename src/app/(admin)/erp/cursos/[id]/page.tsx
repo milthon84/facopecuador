@@ -235,13 +235,15 @@ export default async function CursoDetallePage({
               <h1 className="text-xl font-bold text-ink-900">{course.name}</h1>
             <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
               course.status === "active" ? "bg-green-50 text-green-700 border-green-200" :
+              course.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" :
               course.status === "draft" ? "bg-gray-50 text-gray-600 border-gray-200" :
               course.status === "completed" ? "bg-lilac-50 text-lilac-700 border-lilac-200" :
               "bg-red-50 text-red-700 border-red-200"
             }`}>
-              {course.status === "active" ? "Activo" :
+              {course.status === "active" ? "Abierto" :
+               course.status === "in_progress" ? "En Ejecución" :
                course.status === "draft" ? "Borrador" :
-               course.status === "completed" ? "Completado" : "Cancelado"}
+               course.status === "completed" ? "Finalizado" : "Cancelado"}
             </span>
           </div>
           <p className="text-xs text-ink-500">
@@ -670,9 +672,10 @@ export default async function CursoDetallePage({
                 <div>
                   <label className="label text-ink-800">Estado del Curso</label>
                   <select name="status" defaultValue={course.status} className="input">
-                    <option value="draft">Borrador (No visible en inscripciones aún)</option>
-                    <option value="active">Activo (Abierto para inscripciones)</option>
-                    <option value="completed">Completado / Finalizado</option>
+                    <option value="draft">Borrador (No visible en la web)</option>
+                    <option value="active">Abierto (Abierto para inscripciones)</option>
+                    <option value="in_progress">En Ejecución (Curso en desarrollo)</option>
+                    <option value="completed">Finalizado (Terminado)</option>
                     <option value="cancelled">Cancelado</option>
                   </select>
                 </div>
