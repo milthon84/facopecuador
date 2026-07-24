@@ -30,9 +30,10 @@ export default function TeacherMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync state if initialSelectedIds changes externally
+  const initialKey = initialSelectedIds.join(",");
   useEffect(() => {
     setSelectedIds(initialSelectedIds);
-  }, [initialSelectedIds]);
+  }, [initialKey]);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -135,7 +136,7 @@ export default function TeacherMultiSelect({
           )}
 
           {/* Opciones */}
-          <div className="max-h-48 overflow-y-auto divide-y divide-lilac-50 p-1">
+          <div className="max-h-56 overflow-y-auto divide-y divide-lilac-50 p-1">
             {filteredTeachers.length === 0 ? (
               <div className="p-3 text-center text-xs text-ink-400 italic">
                 No se encontraron profesores.

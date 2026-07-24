@@ -13,6 +13,7 @@ import { updateExpiredCourses } from "@/lib/courses";
 import EditModuleModal from "@/components/EditModuleModal";
 import CopyCourseButton from "@/components/CopyCourseButton";
 import AttendanceListModal from "@/components/AttendanceListModal";
+import EditCourseModal from "@/components/EditCourseModal";
 import EnrollStudentModal from "@/components/EnrollStudentModal";
 import TeacherMultiSelect from "@/components/TeacherMultiSelect";
 
@@ -90,11 +91,15 @@ async function addModule(formData: FormData) {
     .single();
 
   if (!error && insertedMod && teacherIds.length > 0) {
-    const modTeachers = teacherIds.map((tId) => ({
-      module_id: insertedMod.id,
-      teacher_id: tId,
-    }));
-    await supabase.from("modulo_profesores").insert(modTeachers);
+    try {
+      const modTeachers = teacherIds.map((tId) => ({
+        module_id: insertedMod.id,
+        teacher_id: tId,
+      }));
+      await supabase.from("modulo_profesores").insert(modTeachers);
+    } catch (e: any) {
+      console.error("[addModule] Error al guardar profesores:", e.message);
+    }
   }
 
   revalidatePath(`/erp/cursos/${courseId}`);
@@ -204,9 +209,7 @@ export default async function CursoDetallePage({
 
   const tabs = [
     { id: "modulos", label: "Módulos", icon: <BookOpen size={16} /> },
-    { id: "profesores", label: "Profesores", icon: <Award size={16} /> },
     { id: "alumnos", label: "Alumnos Matriculados", icon: <Users size={16} /> },
-    { id: "info", label: "Información General", icon: <Settings size={16} /> },
   ];
 
   return (
@@ -255,12 +258,7 @@ export default async function CursoDetallePage({
           {canEdit && (
             <div className="flex items-center gap-2 border-l border-lilac-100 pl-3">
               <CopyCourseButton courseId={id} courseName={course.name} />
-              <Link
-                href={`/erp/cursos/${id}?tab=info`}
-                className="inline-flex items-center gap-1 bg-lilac-50 hover:bg-lilac-100 text-lilac-700 text-xs px-3 py-1.5 rounded-xl transition font-semibold border border-lilac-200"
-              >
-                <Pencil size={13} /> Editar Datos
-              </Link>
+              <EditCourseModal course={course} />
             </div>
           )}
         </div>
@@ -458,109 +456,6 @@ export default async function CursoDetallePage({
           </div>
         )}
 
-        {activeTab === "profesores" && (
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Listado de Docentes Asignados */}
-            <div className="md:col-span-2 space-y-4">
-              <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink-800">Profesores asignados al curso</span>
-                  <span className="text-xs text-ink-400 bg-lilac-50 px-2.5 py-0.5 rounded-full font-bold">
-                    {assignedTeachers.length} profesores
-                  </span>
-                </div>
-
-                {assignedTeachers.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-ink-500 italic">No hay profesores asignados a este curso.</div>
-                ) : (
-                  <div className="divide-y divide-lilac-50">
-                    {assignedTeachers.map((at: any) => {
-                      const prof = at.profesores;
-                      if (!prof) return null;
-                      return (
-                        <div key={prof.id} className="p-5 flex justify-between items-center gap-4 hover:bg-lilac-50/10 transition-colors">
-                          <div className="space-y-1">
-                            <h3 className="font-bold text-ink-950 text-sm">{prof.full_name}</h3>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                at.role === "principal" ? "bg-lilac-100 text-lilac-700 border-lilac-200" :
-                                at.role === "auxiliar" ? "bg-blue-50 text-blue-700 border-blue-100" :
-                                "bg-amber-50 text-amber-700 border-amber-100"
-                              }`}>
-                                {at.role === "principal" ? "Profesor Principal" :
-                                 at.role === "auxiliar" ? "Auxiliar" : "Invitado Especial"}
-                              </span>
-                              {prof.specialty && (
-                                <span className="text-[10px] text-ink-500 font-medium">({prof.specialty})</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {canEdit && (
-                            <form action={removeTeacher}>
-                              <input type="hidden" name="courseId" value={id} />
-                              <input type="hidden" name="teacherId" value={prof.id} />
-                              <button
-                                type="submit"
-                                className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition flex items-center gap-1 text-xs font-semibold"
-                                title="Desasignar"
-                              >
-                                <UserMinus size={14} /> Desasignar
-                              </button>
-                            </form>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Asignar Docente */}
-            <div className="md:col-span-1">
-              {canEdit ? (
-                <div className="card p-5 bg-white border border-lilac-100 shadow-sm">
-                  <h2 className="text-sm font-bold text-ink-950 mb-4 flex items-center gap-1.5 pb-2 border-b border-lilac-50">
-                    <UserPlus size={15} className="text-lilac-600" /> Asignar Profesor
-                  </h2>
-                  {unassignedTeachers.length === 0 ? (
-                    <p className="text-xs text-ink-500 italic text-center py-4">Todos los profesores ya están asignados.</p>
-                  ) : (
-                    <form action={assignTeacher} className="space-y-4">
-                      <input type="hidden" name="courseId" value={id} />
-                      <div>
-                        <label className="label text-ink-800">Seleccionar profesor *</label>
-                        <select name="teacherId" required className="input text-xs">
-                          <option value="">Selecciona un profesor...</option>
-                          {unassignedTeachers.map((t) => (
-                            <option key={t.id} value={t.id}>{t.full_name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="label text-ink-800">Rol en el curso</label>
-                        <select name="role" className="input text-xs">
-                          <option value="principal">Profesor Principal</option>
-                          <option value="auxiliar">Profesor Auxiliar</option>
-                          <option value="invitado">Profesor Invitado</option>
-                        </select>
-                      </div>
-                      <button type="submit" className="w-full btn-primary text-xs py-2.5 mt-2 shadow-sm">
-                        Asignar al Curso
-                      </button>
-                    </form>
-                  )}
-                </div>
-              ) : (
-                <div className="card p-5 bg-lilac-50/50 border border-lilac-100 text-center text-xs text-ink-500 italic">
-                  No tienes permisos para asignar profesores.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {activeTab === "alumnos" && (
           <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
@@ -632,130 +527,6 @@ export default async function CursoDetallePage({
                   })}
                 </tbody>
               </table>
-            )}
-          </div>
-        )}
-
-        {activeTab === "info" && (
-          <div className="card p-6 bg-white border border-lilac-100 shadow-sm max-w-2xl">
-            <h2 className="text-sm font-bold text-ink-950 mb-4 flex items-center gap-1.5 pb-2 border-b border-lilac-50">
-              <Pencil size={15} className="text-gold-600" /> Editar Datos del Curso
-            </h2>
-            {canEdit ? (
-              <form action={saveGeneralInfo} className="space-y-4">
-                <input type="hidden" name="id" value={id} />
-                <div>
-                  <label className="label text-ink-800">Nombre del Curso *</label>
-                  <input
-                    name="name"
-                    defaultValue={course.name}
-                    required
-                    placeholder="Ej: Diplomado en Implantología Oral Avanzada"
-                    className="input"
-                  />
-                </div>
-
-                <div>
-                  <label className="label text-ink-800">Descripción / Detalles</label>
-                  <textarea
-                    name="description"
-                    rows={3}
-                    defaultValue={course.description || ""}
-                    placeholder="Escribe detalles del curso, temarios generales, etc."
-                    className="input resize-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label text-ink-800">Costo total ($) *</label>
-                    <input
-                      name="totalCost"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      required
-                      defaultValue={course.total_cost}
-                      placeholder="Ej: 1200.00"
-                      className="input"
-                    />
-                  </div>
-                  <div>
-                    <label className="label text-ink-800">Límite de alumnos</label>
-                    <input
-                      name="maxStudents"
-                      type="number"
-                      min="1"
-                      defaultValue={course.max_students || ""}
-                      placeholder="Ej: 20 (opcional)"
-                      className="input"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label text-ink-800">Fecha de Inicio *</label>
-                    <input
-                      name="startDate"
-                      type="date"
-                      defaultValue={course.start_date}
-                      required
-                      className="input"
-                    />
-                  </div>
-                  <div>
-                    <label className="label text-ink-800">Fecha de Finalización *</label>
-                    <input
-                      name="endDate"
-                      type="date"
-                      defaultValue={course.end_date}
-                      required
-                      className="input"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label text-ink-800">Estado del Curso</label>
-                  <select name="status" defaultValue={course.status} className="input">
-                    <option value="draft">Borrador (No visible en la web)</option>
-                    <option value="active">Abierto (Abierto para inscripciones)</option>
-                    <option value="in_progress">En Ejecución (Curso en desarrollo)</option>
-                    <option value="completed">Finalizado (Terminado)</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                </div>
-
-                <div className="pt-2 border-t border-lilac-50">
-                  <label className="label text-ink-800 font-semibold mb-2">Boceto o Portada del Curso (Imagen)</label>
-                  {course.image_url && (
-                    <div className="mb-3">
-                      <div className="text-[10px] text-ink-500 font-bold mb-1">Imagen Actual:</div>
-                      <img 
-                        src={course.image_url} 
-                        alt="Boceto actual" 
-                        className="w-32 h-20 object-cover rounded-xl border border-lilac-200 shadow-sm"
-                      />
-                    </div>
-                  )}
-                  <input
-                    name="imageFile"
-                    type="file"
-                    accept="image/*"
-                    className="w-full text-xs text-ink-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none"
-                  />
-                  <p className="text-[10px] text-ink-400 mt-1">Sube una nueva imagen para cambiar o establecer el boceto de portada del curso.</p>
-                </div>
-
-                <button type="submit" className="w-full btn-primary text-sm py-3 mt-4 shadow-sm">
-                  Guardar Datos Generales
-                </button>
-              </form>
-            ) : (
-              <div className="text-sm text-ink-500 italic text-center py-4">
-                No tienes permisos de modificación para este curso.
-              </div>
             )}
           </div>
         )}

@@ -138,13 +138,20 @@ export async function updateModuleAction(payload: {
 
   // Actualizar asignaciones de profesores del módulo
   if (teacherIds !== undefined) {
-    await supabase.from("modulo_profesores").delete().eq("module_id", id);
-    if (teacherIds.length > 0) {
-      const inserts = teacherIds.map((tId) => ({
-        module_id: id,
-        teacher_id: tId,
-      }));
-      await supabase.from("modulo_profesores").insert(inserts);
+    try {
+      await supabase.from("modulo_profesores").delete().eq("module_id", id);
+      if (teacherIds.length > 0) {
+        const inserts = teacherIds.map((tId) => ({
+          module_id: id,
+          teacher_id: tId,
+        }));
+        const { error: insErr } = await supabase.from("modulo_profesores").insert(inserts);
+        if (insErr) {
+          console.error("[updateModuleAction] Error al asignar profesores:", insErr.message);
+        }
+      }
+    } catch (e: any) {
+      console.error("[updateModuleAction] Excepción al guardar profesores del módulo:", e.message);
     }
   }
 
@@ -216,6 +223,47 @@ export async function createCourseAction(formData: FormData) {
 
   revalidatePath("/erp/cursos");
   return { success: true, courseId: newCourse.id };
+}
+
+export async function updateCourseAction(payload: {
+  id: string;
+  name: string;
+  description?: string | null;
+  totalCost: number;
+  maxStudents?: number | null;
+  startDate: string;
+  endDate: string;
+  status: string;
+}) {
+  await assertWritePermission("/erp/cursos");
+  const { id, name, description, totalCost, maxStudents, startDate, endDate, status } = payload;
+
+  if (!id || !name || isNaN(totalCost)) {
+    throw new Error("Datos de curso inválidos.");
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("cursos")
+    .update({
+      name: name.trim(),
+      description: description?.trim() || null,
+      total_cost: totalCost,
+      max_students: maxStudents || null,
+      start_date: startDate,
+      end_date: endDate,
+      status: status || "draft",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(error.message || "Error al actualizar el curso.");
+  }
+
+  revalidatePath(`/erp/cursos/${id}`);
+  revalidatePath("/erp/cursos");
+  return { success: true };
 }
 
 export async function enrollStudentInCourseAction(studentId: string, courseId: string) {

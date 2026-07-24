@@ -28,6 +28,11 @@ interface EditModuleModalProps {
   assignedTeacherIds?: string[];
 }
 
+function formatDateForInput(d?: string | null): string {
+  if (!d) return "";
+  return d.split("T")[0];
+}
+
 export default function EditModuleModal({ module, allTeachers = [], assignedTeacherIds = [] }: EditModuleModalProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -38,7 +43,7 @@ export default function EditModuleModal({ module, allTeachers = [], assignedTeac
   const [name, setName] = useState(module.name);
   const [cost, setCost] = useState(module.cost);
   const [description, setDescription] = useState(module.description || "");
-  const [date, setDate] = useState(module.start_date || "");
+  const [date, setDate] = useState(formatDateForInput(module.start_date));
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>(assignedTeacherIds);
 
   function handleOpen(e: React.MouseEvent) {
@@ -48,7 +53,7 @@ export default function EditModuleModal({ module, allTeachers = [], assignedTeac
     setName(module.name);
     setCost(module.cost);
     setDescription(module.description || "");
-    setDate(module.start_date || "");
+    setDate(formatDateForInput(module.start_date));
     setSelectedTeacherIds(assignedTeacherIds);
     setErrorMsg(null);
     setOpen(true);
@@ -118,9 +123,8 @@ export default function EditModuleModal({ module, allTeachers = [], assignedTeac
           onClick={handleClose}
         >
           <div
-            className="bg-white border border-lilac-100 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
+            className="bg-white border border-lilac-100 rounded-3xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-150 relative"
             onClick={(e) => {
-              e.preventDefault();
               e.stopPropagation();
             }}
           >
