@@ -16,6 +16,9 @@ export default async function PublicidadPage() {
     .select("*")
     .order("created_at", { ascending: false });
 
+  const hasFacebookCredentials = !!(process.env.META_PAGE_ID && process.env.META_PAGE_ACCESS_TOKEN);
+  const hasInstagramCredentials = !!(process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID && process.env.META_PAGE_ACCESS_TOKEN);
+
   return (
     <div className="pb-10">
       <div className="flex items-center justify-between mb-6">
@@ -27,7 +30,11 @@ export default async function PublicidadPage() {
         </div>
       </div>
 
-      <PublicidadClientPage initialPosts={postsData || []} />
+      <PublicidadClientPage 
+        initialPosts={postsData || []} 
+        hasFacebookCredentials={hasFacebookCredentials}
+        hasInstagramCredentials={hasInstagramCredentials}
+      />
     </div>
   );
 }

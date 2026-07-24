@@ -9,6 +9,9 @@ import {
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
+import { updateExpiredCourses } from "@/lib/courses";
+import EditModuleModal from "@/components/EditModuleModal";
+import CopyCourseButton from "@/components/CopyCourseButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,8 +92,7 @@ async function addModule(formData: FormData) {
   const number = Number(formData.get("number"));
   const cost = Number(formData.get("cost"));
   const description = (formData.get("description") as string)?.trim();
-  const startDate = formData.get("startDate") as string || null;
-  const endDate = formData.get("endDate") as string || null;
+  const date = (formData.get("date") as string) || null;
 
   if (!courseId || !name || isNaN(number) || isNaN(cost)) return;
 
@@ -101,8 +103,8 @@ async function addModule(formData: FormData) {
     name,
     cost,
     description: description || null,
-    start_date: startDate,
-    end_date: endDate,
+    start_date: date,
+    end_date: date,
   });
 
   revalidatePath(`/erp/cursos/${courseId}`);
@@ -171,6 +173,9 @@ export default async function CursoDetallePage({
   const activeTab = searchParams.tab ?? "modulos";
 
   const supabase = createAdminClient();
+
+  // Auto-completar cursos expirados
+  await updateExpiredCourses(supabase);
 
   // Cargar todos los datos requeridos en paralelo
   const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes] = await Promise.all([
@@ -244,9 +249,23 @@ export default async function CursoDetallePage({
           </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 font-bold text-lilac-800 text-lg md:text-xl shrink-0">
-          <DollarSign size={18} className="text-lilac-600" />
-          <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-1 font-bold text-lilac-800 text-lg md:text-xl">
+            <DollarSign size={18} className="text-lilac-600" />
+            <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
+          </div>
+
+          {canEdit && (
+            <div className="flex items-center gap-2 border-l border-lilac-100 pl-3">
+              <CopyCourseButton courseId={id} courseName={course.name} />
+              <Link
+                href={`/erp/cursos/${id}?tab=info`}
+                className="inline-flex items-center gap-1 bg-lilac-50 hover:bg-lilac-100 text-lilac-700 text-xs px-3 py-1.5 rounded-xl transition font-semibold border border-lilac-200"
+              >
+                <Pencil size={13} /> Editar Datos
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
@@ -299,26 +318,29 @@ export default async function CursoDetallePage({
                             <p className="text-xs text-ink-600 leading-relaxed pl-7">{m.description}</p>
                           )}
                           <div className="flex items-center gap-4 text-[11px] text-ink-500 pl-7">
-                            {(m.start_date && m.end_date) && (
-                              <span className="flex items-center gap-1">
-                                <Calendar size={12} /> Del {formatDateES(m.start_date)} al {formatDateES(m.end_date)}
+                            {m.start_date && (
+                              <span className="flex items-center gap-1 font-medium text-lilac-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/50">
+                                <Calendar size={12} className="text-lilac-600" /> Fecha: {formatDateES(m.start_date)}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-1 rounded-xl">
                             ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
                           </span>
                           {canEdit && (
-                            <ConfirmDeleteButton
-                              action={deleteModule}
-                              idName="moduleId"
-                              idValue={m.id}
-                              extraFields={{ courseId: id }}
-                              confirmMessage="¿Estás seguro de que deseas eliminar este módulo?"
-                            />
+                            <div className="flex items-center gap-1">
+                              <EditModuleModal module={m} />
+                              <ConfirmDeleteButton
+                                action={deleteModule}
+                                idName="moduleId"
+                                idValue={m.id}
+                                extraFields={{ courseId: id }}
+                                confirmMessage="¿Estás seguro de que deseas eliminar este módulo?"
+                              />
+                            </div>
                           )}
                         </div>
                       </div>
@@ -380,15 +402,9 @@ export default async function CursoDetallePage({
                         className="input resize-none"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="label text-ink-800 text-[10px]">Fecha Inicio</label>
-                        <input name="startDate" type="date" className="input text-xs" />
-                      </div>
-                      <div>
-                        <label className="label text-ink-800 text-[10px]">Fecha Fin</label>
-                        <input name="endDate" type="date" className="input text-xs" />
-                      </div>
+                    <div>
+                      <label className="label text-ink-800 text-[11px] font-semibold">Fecha del módulo (Día de clases)</label>
+                      <input name="date" type="date" className="input text-xs" />
                     </div>
                     <button type="submit" className="w-full btn-primary text-xs py-2.5 mt-2 shadow-sm">
                       Agregar Módulo

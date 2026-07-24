@@ -26,6 +26,7 @@ export default async function BillingDashboard() {
       case 'rejected': return { bg: 'bg-red-100 text-red-700', icon: <XCircle size={14} />, text: 'Rechazado' };
       case 'error': return { bg: 'bg-red-100 text-red-700', icon: <AlertCircle size={14} />, text: 'Error' };
       case 'draft': return { bg: 'bg-amber-100 text-amber-700', icon: <Clock size={14} />, text: 'Borrador' };
+      case 'cancelled': return { bg: 'bg-slate-100 text-slate-700 border-slate-200', icon: <XCircle size={14} />, text: 'Anulado' };
       default: return { bg: 'bg-lilac-100 text-lilac-700', icon: <Clock size={14} />, text: status };
     }
   };

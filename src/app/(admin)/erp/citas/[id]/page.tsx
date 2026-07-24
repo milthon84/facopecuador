@@ -34,6 +34,7 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
       .from("invoices")
       .select("id, invoice_number")
       .eq("xml_url", id)
+      .neq("sri_status", "cancelled")
       .limit(1)
   ]);
 

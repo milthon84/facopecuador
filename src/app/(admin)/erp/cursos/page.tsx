@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { GraduationCap, Plus, Calendar, Users, DollarSign, ArrowRight, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import { updateExpiredCourses } from "@/lib/courses";
+import CopyCourseButton from "@/components/CopyCourseButton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,10 @@ export default async function CursosPage() {
 
   const supabase = createAdminClient();
 
-  // 1. Cargar cursos, alumnos matriculados por curso, y estadísticas
+  // 1. Auto-completar cursos expirados
+  await updateExpiredCourses(supabase);
+
+  // 2. Cargar cursos, alumnos matriculados por curso, y estadísticas
   const [cursosRes, enrolRes] = await Promise.all([
     supabase
       .from("cursos")
@@ -60,8 +65,8 @@ export default async function CursosPage() {
         <div className="flex items-center gap-2">
           <GraduationCap size={24} className="text-lilac-600" />
           <div>
-            <h1 className="text-2xl font-bold text-ink-900">Apertura y Control de Cursos</h1>
-            <p className="text-sm text-ink-600">Apertura cursos, configura módulos, asocia profesores y gestiona alumnos.</p>
+            <h1 className="text-2xl font-bold text-ink-900">Gestión y Control de Cursos</h1>
+            <p className="text-sm text-ink-600">Administra cursos, configura módulos, asocia profesores y gestiona alumnos.</p>
           </div>
         </div>
         {canEdit && (
@@ -157,12 +162,17 @@ export default async function CursosPage() {
                     <span>{Number(c.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
                   </div>
                   
-                  <Link
-                    href={`/erp/cursos/${c.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-lilac-700 hover:text-lilac-900 font-semibold transition-colors"
-                  >
-                    Gestionar <ArrowRight size={13} />
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    {canEdit && (
+                      <CopyCourseButton courseId={c.id} courseName={c.name} variant="icon" />
+                    )}
+                    <Link
+                      href={`/erp/cursos/${c.id}`}
+                      className="inline-flex items-center gap-1 text-xs text-lilac-700 hover:text-lilac-900 font-semibold transition-colors font-medium"
+                    >
+                      Gestionar <ArrowRight size={13} />
+                    </Link>
+                  </div>
                 </div>
               </div>
             );

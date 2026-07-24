@@ -178,7 +178,7 @@ export default function CourseBillingTable({ billingItems, canEdit }: Props) {
                         ${Number(bi.curso_modulos.cost).toFixed(2)}
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        {bi.billing_status === "invoiced" && bi.invoices ? (
+                        {bi.billing_status === "invoiced" && bi.invoices && bi.invoices.sri_status !== "cancelled" ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
                             <CheckCircle2 size={10} /> Facturado (#{bi.invoices.invoice_number})
                           </span>

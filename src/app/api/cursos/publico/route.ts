@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { updateExpiredCourses } from "@/lib/courses";
 
 export async function GET() {
   try {
     const supabase = createAdminClient();
+
+    // Auto-completar cursos expirados
+    await updateExpiredCourses(supabase);
 
     const { data: courses, error } = await supabase
       .from("cursos")

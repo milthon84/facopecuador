@@ -12,6 +12,7 @@ import {
 import CursosSection from "./CursosSection";
 import ClinicaCarousel from "./ClinicaCarousel";
 import CoworkingCarousel from "./CoworkingCarousel";
+import { updateExpiredCourses } from "@/lib/courses";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ function TikTokIcon({ size = 20 }: { size?: number }) {
 
 export default async function HomePage() {
   const supabase = createAdminClient();
+
+  // Auto-completar cursos expirados
+  await updateExpiredCourses(supabase);
 
   // 1. Obtener configuraciones del sitio
   const { data: settingsData } = await supabase

@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
+import { updateExpiredCourses } from "@/lib/courses";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,9 @@ export default async function AlumnosPage({
   const editMode = searchParams.edit === "true";
 
   const supabase = createAdminClient();
+
+  // Auto-completar cursos expirados
+  await updateExpiredCourses(supabase);
 
   if (studentId) {
     // === VISTA DE DETALLE DEL ALUMNO ===
@@ -392,7 +396,7 @@ export default async function AlumnosPage({
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  {mi.billing_status === "invoiced" && mi.invoices ? (
+                                  {mi.billing_status === "invoiced" && mi.invoices && mi.invoices.sri_status !== "cancelled" ? (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
                                       <CheckCircle2 size={11} /> Facturado (#{mi.invoices.invoice_number})
                                     </span>

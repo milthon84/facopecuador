@@ -106,7 +106,7 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "Clínica",       path: "/erp/caja-chica",   label: "Caja Chica", hasEdit: true },
 
   // Cursos
-  { section: "Cursos",        path: "/erp/cursos",       label: "Cursos (Apertura)", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos",       label: "Cursos", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/profesores", label: "Profesores", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/alumnos",    label: "Alumnos e Inscripciones", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/clases",     label: "Clases y Asistencia", hasEdit: true },
@@ -167,7 +167,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/caja-chica",          label: "Caja Chica",          icon: "Wallet",           section: "Clínica",       roles: ["admin", "contador"] },
 
   // Cursos
-  { href: "/erp/cursos",              label: "Cursos (Apertura)",   icon: "GraduationCap",   section: "Cursos",        roles: ["admin"] },
+  { href: "/erp/cursos",              label: "Cursos",              icon: "GraduationCap",   section: "Cursos",        roles: ["admin"] },
   { href: "/erp/cursos/profesores",   label: "Profesores",          icon: "Award",           section: "Cursos",        roles: ["admin"] },
   { href: "/erp/cursos/alumnos",      label: "Alumnos",             icon: "Users",           section: "Cursos",        roles: ["admin", "recepcionista"] },
   { href: "/erp/cursos/clases",       label: "Clases y Asistencia", icon: "Presentation",      section: "Cursos",        roles: ["admin", "recepcionista"] },

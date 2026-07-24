@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import CopyButton from "@/components/CopyButton";
 import ReintentoSriButton from "@/components/ReintentoSriButton";
+import AnularFacturaButton from "@/components/AnularFacturaButton";
 import { getTipoIdentificacion } from "@/lib/sri";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ function StatusBadge({ status, env }: { status: string; env?: string }) {
     error:      { bg: "bg-red-100 text-red-700 border-red-200",       icon: <AlertCircle size={14} />,  label: "Error"      },
     submitted:  { bg: "bg-blue-100 text-blue-700 border-blue-200",    icon: <Clock size={14} />,        label: "Enviado"    },
     draft:      { bg: "bg-amber-100 text-amber-700 border-amber-200", icon: <Clock size={14} />,        label: "Borrador"   },
+    cancelled:  { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} />,      label: "Anulado"    },
   };
   const s = map[status] ?? map.draft;
   return (
@@ -32,9 +35,10 @@ function StatusBadge({ status, env }: { status: string; env?: string }) {
 
 function PaymentBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
-    paid:    { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} />, label: "Cobrado" },
-    partial: { bg: "bg-blue-100 text-blue-700 border-blue-200",   icon: <Clock size={14} />,        label: "Cobro Parcial" },
-    pending: { bg: "bg-amber-100 text-amber-700 border-amber-200",icon: <Clock size={14} />,        label: "Por Cobrar" },
+    paid:      { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} />, label: "Cobrado" },
+    partial:   { bg: "bg-blue-100 text-blue-700 border-blue-200",   icon: <Clock size={14} />,        label: "Cobro Parcial" },
+    pending:   { bg: "bg-amber-100 text-amber-700 border-amber-200",icon: <Clock size={14} />,        label: "Por Cobrar" },
+    cancelled: { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} />,      label: "Anulado" },
   };
   const s = map[status] ?? map.pending;
   return (
@@ -63,6 +67,9 @@ function getDocumentLabel(doc: string): string {
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await assertPermission("/erp/facturacion");
+  const canEdit = await hasWritePermission("/erp/facturacion");
+
   const supabase = createAdminClient();
 
   const [{ data: invoice }, { data: items }] = await Promise.all([
@@ -99,10 +106,23 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
           <p className="text-xs text-ink-500 mt-0.5">{issuedAt}</p>
         </div>
-        {/* Botón reintento para facturas en estado submitted */}
-        {invoice.sri_status === "submitted" && (
-          <ReintentoSriButton invoiceId={invoice.id} />
-        )}
+        {/* Acciones de Factura */}
+        <div className="flex items-center gap-2">
+          {invoice.sri_status !== "cancelled" && canEdit && (
+            <AnularFacturaButton
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoice_number}
+              sriStatus={invoice.sri_status || "draft"}
+              clientDocument={invoice.client_document}
+              issueDate={invoice.issue_date}
+              sriAccessKey={invoice.sri_access_key}
+            />
+          )}
+          {/* Botón reintento para facturas en estado submitted */}
+          {invoice.sri_status === "submitted" && (
+            <ReintentoSriButton invoiceId={invoice.id} />
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">

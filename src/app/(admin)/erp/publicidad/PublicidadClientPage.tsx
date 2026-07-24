@@ -8,6 +8,8 @@ import { savePostAction, deletePostAction } from "./actions";
 
 interface Props {
   initialPosts: any[];
+  hasFacebookCredentials?: boolean;
+  hasInstagramCredentials?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -28,7 +30,11 @@ function isExpired(expiresAt: string | null | undefined): boolean {
   return new Date(expiresAt).getTime() < Date.now();
 }
 
-export default function PublicidadClientPage({ initialPosts }: Props) {
+export default function PublicidadClientPage({ 
+  initialPosts,
+  hasFacebookCredentials = false,
+  hasInstagramCredentials = false,
+}: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -459,8 +465,8 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
                   const val = e.target.value as "draft" | "published";
                   setPostStatus(val);
                   if (val === "published") {
-                    if (!editingPost?.facebook_post_id) setPublishFacebook(true);
-                    if (!editingPost?.instagram_post_id && (hasImage || hasVideo)) setPublishInstagram(true);
+                    if (!editingPost?.facebook_post_id && hasFacebookCredentials) setPublishFacebook(true);
+                    if (!editingPost?.instagram_post_id && (hasImage || hasVideo) && hasInstagramCredentials) setPublishInstagram(true);
                   } else {
                     setPublishFacebook(false);
                     setPublishInstagram(false);
@@ -493,14 +499,18 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
                     </a>
                   </div>
                 ) : (
-                  <label className="flex items-center gap-2.5 text-xs text-ink-700 cursor-pointer select-none">
+                  <label className={`flex items-center gap-2.5 text-xs select-none ${!hasFacebookCredentials ? 'text-ink-400 opacity-60 cursor-not-allowed' : 'text-ink-700 cursor-pointer'}`}>
                     <input
                       type="checkbox"
+                      disabled={!hasFacebookCredentials}
                       checked={publishFacebook}
                       onChange={(e) => setPublishFacebook(e.target.checked)}
-                      className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 w-4 h-4 cursor-pointer"
+                      className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 w-4 h-4 cursor-pointer disabled:opacity-50"
                     />
-                    <span>Compartir en Facebook Page al guardar</span>
+                    <span>
+                      Compartir en Facebook Page al guardar
+                      {!hasFacebookCredentials && <span className="text-[10px] text-amber-600 block">(No configurado en el servidor)</span>}
+                    </span>
                   </label>
                 )}
 
@@ -518,17 +528,21 @@ export default function PublicidadClientPage({ initialPosts }: Props) {
                     </a>
                   </div>
                 ) : (
-                  <label className={`flex items-center gap-2.5 text-xs select-none ${(!hasImage && !hasVideo) ? 'text-ink-400 opacity-60 cursor-not-allowed' : 'text-ink-700 cursor-pointer'}`}>
+                  <label className={`flex items-center gap-2.5 text-xs select-none ${(!hasInstagramCredentials || (!hasImage && !hasVideo)) ? 'text-ink-400 opacity-60 cursor-not-allowed' : 'text-ink-700 cursor-pointer'}`}>
                     <input
                       type="checkbox"
-                      disabled={!hasImage && !hasVideo}
+                      disabled={!hasInstagramCredentials || (!hasImage && !hasVideo)}
                       checked={publishInstagram}
                       onChange={(e) => setPublishInstagram(e.target.checked)}
                       className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 w-4 h-4 cursor-pointer disabled:opacity-50"
                     />
                     <span>
                       Compartir en Instagram al guardar
-                      {(!hasImage && !hasVideo) && <span className="text-[10px] text-gold-600 block">(Requiere subir una imagen o un video)</span>}
+                      {!hasInstagramCredentials ? (
+                        <span className="text-[10px] text-amber-600 block">(No configurado en el servidor)</span>
+                      ) : (!hasImage && !hasVideo) ? (
+                        <span className="text-[10px] text-gold-600 block">(Requiere subir una imagen o un video)</span>
+                      ) : null}
                     </span>
                   </label>
                 )}

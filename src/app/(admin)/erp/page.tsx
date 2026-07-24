@@ -106,6 +106,7 @@ export default async function AdminDashboard({
         .from("invoices")
         .select("xml_url, invoice_number")
         .in("xml_url", apptIds)
+        .neq("sri_status", "cancelled")
     : { data: [] };
   
   const billedApptInvoices = new Map<string, string>();
