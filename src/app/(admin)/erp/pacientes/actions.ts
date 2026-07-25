@@ -270,3 +270,103 @@ export async function deletePatientPhotoAction(photoId: string, patientId: strin
     return { success: false, error: err.message || "Error al eliminar foto." };
   }
 }
+
+export async function deletePatientAction(patientId: string) {
+  try {
+    await assertWritePermission("/erp/pacientes");
+    const supabase = createAdminClient();
+
+    // 1. Fetch patient info
+    const { data: patient, error: pErr } = await supabase
+      .from("patients")
+      .select("id, full_name, document_number")
+      .eq("id", patientId)
+      .single();
+
+    if (pErr || !patient) {
+      return { success: false, error: "Paciente no encontrado." };
+    }
+
+    // 2. Check if patient has invoices (facturas) by patient_id or document_number
+    let invoicesQuery = supabase.from("invoices").select("id").limit(1);
+    if (patient.document_number) {
+      invoicesQuery = invoicesQuery.or(`patient_id.eq.${patient.id},client_document.eq.${patient.document_number}`);
+    } else {
+      invoicesQuery = invoicesQuery.eq("patient_id", patient.id);
+    }
+    const { data: invoices } = await invoicesQuery;
+
+    if (invoices && invoices.length > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar a "${patient.full_name}" porque registra facturas o comprobantes emitidos.`
+      };
+    }
+
+    // 3. Check if patient has completed attentions / clinical consultations
+    const { data: consultations } = await supabase
+      .from("dental_consultations")
+      .select("id")
+      .eq("patient_id", patient.id)
+      .limit(1);
+
+    if (consultations && consultations.length > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar a "${patient.full_name}" porque posee consultas o evoluciones médicas registradas.`
+      };
+    }
+
+    // Check if patient has attended/completed appointments
+    const { data: attendedAppts } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("patient_id", patient.id)
+      .in("status", ["atendida", "completada", "finalizada"])
+      .limit(1);
+
+    if (attendedAppts && attendedAppts.length > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar a "${patient.full_name}" porque registra citas médicas con estado Atendida o Completada.`
+      };
+    }
+
+    // 4. Patient has NO invoices and NO completed attentions!
+    // Safe to delete dependent records:
+    // a) Delete non-completed appointments (pendientes/canceladas)
+    await supabase.from("appointments").delete().eq("patient_id", patient.id);
+
+    // b) Delete patient photos from storage and DB
+    const { data: photos } = await supabase.from("patient_photos").select("storage_path").eq("patient_id", patient.id);
+    if (photos && photos.length > 0) {
+      const paths = photos.map(p => p.storage_path).filter(Boolean) as string[];
+      if (paths.length > 0) {
+        await supabase.storage.from("patient-photos").remove(paths);
+      }
+      await supabase.from("patient_photos").delete().eq("patient_id", patient.id);
+    }
+
+    // c) Delete quotations
+    await supabase.from("patient_quotations").delete().eq("patient_id", patient.id);
+
+    // d) Delete dental records
+    await supabase.from("dental_records").delete().eq("patient_id", patient.id);
+
+    // 5. Delete patient record
+    const { error: deleteError } = await supabase
+      .from("patients")
+      .delete()
+      .eq("id", patient.id);
+
+    if (deleteError) {
+      return { success: false, error: `Error al eliminar paciente: ${deleteError.message}` };
+    }
+
+    revalidatePath("/erp/pacientes");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error en deletePatientAction:", err);
+    return { success: false, error: err.message || "Error inesperado al eliminar el paciente." };
+  }
+}

@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 
 import QuickQuotationButton from "@/components/QuickQuotationButton";
+import DeletePatientButton from "@/components/DeletePatientButton";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,11 @@ export default async function PacientesPage({
                       >
                         Ver Ficha e Historial
                       </Link>
+                      <DeletePatientButton
+                        patientId={p.id}
+                        patientName={p.full_name}
+                        variant="icon"
+                      />
                     </div>
                   </td>
                 </tr>

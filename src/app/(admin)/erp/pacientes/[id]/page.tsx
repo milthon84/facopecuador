@@ -19,6 +19,7 @@ import { formatTimeLocal } from "@/lib/availability";
 import EditPatientModal from "@/components/EditPatientModal";
 import CotizacionesPacienteSection from "@/components/CotizacionesPacienteSection";
 import FotosPacienteSection from "@/components/FotosPacienteSection";
+import DeletePatientButton from "@/components/DeletePatientButton";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 
@@ -180,6 +181,12 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
                   >
                     <PlusCircle size={14} /> Editar Ficha Permanente
                   </Link>
+                  <DeletePatientButton
+                    patientId={patient.id}
+                    patientName={patient.full_name}
+                    redirectTo="/erp/pacientes"
+                    variant="button"
+                  />
                 </>
               )}
             </div>
