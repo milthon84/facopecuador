@@ -111,6 +111,16 @@ export default function CotizacionesPacienteSection({
         <div className="space-y-3">
           {initialQuotations.map((q) => {
             const isExpanded = expandedId === q.id;
+
+            // Safe parsing of items array
+            const safeItems = Array.isArray(q.items) 
+              ? q.items 
+              : (typeof q.items === "string" ? (() => { try { return JSON.parse(q.items); } catch { return []; } })() : []);
+
+            const qSubtotal = Number(q.subtotal) || 0;
+            const qDiscount = Number(q.discount) || 0;
+            const qTotal = Number(q.total) || 0;
+
             return (
               <div
                 key={q.id}
@@ -127,7 +137,7 @@ export default function CotizacionesPacienteSection({
                     </div>
                     <div>
                       <span className="text-xs font-bold text-ink-900 block">
-                        Presupuesto Odontológico – ${q.total.toFixed(2)} USD
+                        Presupuesto Odontológico – ${qTotal.toFixed(2)} USD
                       </span>
                       <span className="text-[10px] text-ink-500 flex items-center gap-1">
                         <Clock size={11} /> Creado el {formatDate(q.created_at)}
@@ -138,6 +148,7 @@ export default function CotizacionesPacienteSection({
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {/* Reenviar Email */}
                     <button
+                      type="button"
                       onClick={() => handleSendEmail(q.id)}
                       disabled={sendingEmailId === q.id || !patientEmail}
                       title={patientEmail ? "Reenviar por Correo Electrónico" : "Sin correo registrado"}
@@ -150,7 +161,8 @@ export default function CotizacionesPacienteSection({
 
                     {/* WhatsApp Direct Link */}
                     <button
-                      onClick={() => handleOpenWhatsApp(q)}
+                      type="button"
+                      onClick={() => handleOpenWhatsApp({ ...q, items: safeItems, total: qTotal })}
                       disabled={!patientPhone}
                       title={patientPhone ? "Enviar por WhatsApp" : "Sin teléfono registrado"}
                       className="px-2.5 py-1.5 bg-green-50 border border-green-200 hover:bg-green-100 text-green-800 font-bold text-xs rounded-lg shadow-2xs transition-colors flex items-center gap-1 disabled:opacity-40"
@@ -159,6 +171,7 @@ export default function CotizacionesPacienteSection({
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => setExpandedId(isExpanded ? null : q.id)}
                       className="p-1 text-ink-400 hover:text-ink-700 rounded-md"
                     >
@@ -182,17 +195,21 @@ export default function CotizacionesPacienteSection({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-lilac-50">
-                          {q.items.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-lilac-50/20">
-                              <td className="p-2 font-bold text-lilac-900">
-                                {item.tooth ? `Diente ${item.tooth}` : "General"}
-                              </td>
-                              <td className="p-2 text-ink-900">{item.treatment}</td>
-                              <td className="p-2 text-center text-ink-600">{item.quantity}</td>
-                              <td className="p-2 text-right text-ink-600">${item.unitPrice.toFixed(2)}</td>
-                              <td className="p-2 text-right font-bold text-ink-900">${item.subtotal.toFixed(2)}</td>
-                            </tr>
-                          ))}
+                          {safeItems.map((item: any, idx: number) => {
+                            const uPrice = Number(item.unitPrice) || 0;
+                            const sub = Number(item.subtotal) || 0;
+                            return (
+                              <tr key={idx} className="hover:bg-lilac-50/20">
+                                <td className="p-2 font-bold text-lilac-900">
+                                  {item.tooth ? `Diente ${item.tooth}` : "General"}
+                                </td>
+                                <td className="p-2 text-ink-900">{item.treatment}</td>
+                                <td className="p-2 text-center text-ink-600">{item.quantity}</td>
+                                <td className="p-2 text-right text-ink-600">${uPrice.toFixed(2)}</td>
+                                <td className="p-2 text-right font-bold text-ink-900">${sub.toFixed(2)}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -206,12 +223,12 @@ export default function CotizacionesPacienteSection({
                       ) : <div />}
 
                       <div className="text-xs space-y-1 text-right ml-auto bg-lilac-50/50 p-2.5 border border-lilac-100 rounded-lg">
-                        <div className="text-ink-600">Subtotal: <span className="font-semibold text-ink-900">${q.subtotal.toFixed(2)}</span></div>
-                        {q.discount > 0 && (
-                          <div className="text-green-700 font-semibold">Descuento: -${q.discount.toFixed(2)}</div>
+                        <div className="text-ink-600">Subtotal: <span className="font-semibold text-ink-900">${qSubtotal.toFixed(2)}</span></div>
+                        {qDiscount > 0 && (
+                          <div className="text-green-700 font-semibold">Descuento: -${qDiscount.toFixed(2)}</div>
                         )}
                         <div className="text-sm font-extrabold text-lilac-950 pt-1 border-t border-lilac-200">
-                          TOTAL: ${q.total.toFixed(2)} USD
+                          TOTAL: ${qTotal.toFixed(2)} USD
                         </div>
                       </div>
                     </div>

@@ -742,7 +742,8 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
   }
   if (!d.patientEmail) return false;
 
-  const itemsHtml = d.items.map(item => `
+  const safeItems = Array.isArray(d.items) ? d.items : [];
+  const itemsHtml = safeItems.map(item => `
     <tr style="border-bottom: 1px solid #f0eaf8;">
       <td style="padding: 10px 8px; font-size: 13px; color: #604390; font-weight: bold; font-family: sans-serif;">
         ${item.tooth ? `Diente ${item.tooth}` : "General"}
@@ -754,13 +755,17 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
         ${item.quantity}
       </td>
       <td style="padding: 10px 8px; font-size: 13px; color: #555555; text-align: right; font-family: sans-serif;">
-        $${item.unitPrice.toFixed(2)}
+        $${(Number(item.unitPrice) || 0).toFixed(2)}
       </td>
       <td style="padding: 10px 8px; font-size: 13px; color: #1a1a1a; font-weight: bold; text-align: right; font-family: sans-serif;">
-        $${item.subtotal.toFixed(2)}
+        $${(Number(item.subtotal) || 0).toFixed(2)}
       </td>
     </tr>
   `).join("");
+
+  const subtotalVal = Number(d.subtotal) || 0;
+  const discountVal = Number(d.discount) || 0;
+  const totalVal = Number(d.total) || 0;
 
   const body = `
     <h2 style="color:#7E5DB4; margin:0 0 8px; font-size:22px; font-weight:700; font-family:sans-serif;">Presupuesto de Tratamiento Odontológico 📋</h2>
@@ -802,17 +807,17 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
           <table width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td style="font-size:13px; color:#666666; padding:3px 0;">Subtotal:</td>
-              <td style="font-size:13px; color:#1a1a1a; font-weight:600; text-align:right; padding:3px 0;">$${d.subtotal.toFixed(2)}</td>
+              <td style="font-size:13px; color:#1a1a1a; font-weight:600; text-align:right; padding:3px 0;">$${subtotalVal.toFixed(2)}</td>
             </tr>
-            ${d.discount > 0 ? `
+            ${discountVal > 0 ? `
             <tr>
               <td style="font-size:13px; color:#16a34a; padding:3px 0;">Descuento:</td>
-              <td style="font-size:13px; color:#16a34a; font-weight:600; text-align:right; padding:3px 0;">-$${d.discount.toFixed(2)}</td>
+              <td style="font-size:13px; color:#16a34a; font-weight:600; text-align:right; padding:3px 0;">-$${discountVal.toFixed(2)}</td>
             </tr>
             ` : ""}
             <tr style="border-top:1.5px solid #e1d6f2;">
               <td style="font-size:15px; font-weight:bold; color:#604390; padding:8px 0 0;">Total Estimado:</td>
-              <td style="font-size:17px; font-weight:bold; color:#604390; text-align:right; padding:8px 0 0;">$${d.total.toFixed(2)} USD</td>
+              <td style="font-size:17px; font-weight:bold; color:#604390; text-align:right; padding:8px 0 0;">$${totalVal.toFixed(2)} USD</td>
             </tr>
           </table>
         </td>

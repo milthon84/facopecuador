@@ -377,7 +377,7 @@ export default function NuevaCotizacionModal({
                         />
                       </td>
                       <td className="p-2 text-right font-bold text-ink-900">
-                        ${item.subtotal.toFixed(2)}
+                        ${(Number(item.subtotal) || 0).toFixed(2)}
                       </td>
                       <td className="p-2 text-center">
                         <button
@@ -402,7 +402,7 @@ export default function NuevaCotizacionModal({
                 <Plus size={14} /> Añadir Fila de Tratamiento
               </button>
               <div className="text-xs font-bold text-ink-700">
-                Subtotal Ítems: <span className="text-lilac-900 text-sm font-extrabold">${subtotal.toFixed(2)} USD</span>
+                Subtotal Ítems: <span className="text-lilac-900 text-sm font-extrabold">${(Number(subtotal) || 0).toFixed(2)} USD</span>
               </div>
             </div>
           </div>
@@ -452,7 +452,7 @@ export default function NuevaCotizacionModal({
 
             <div className="flex items-center gap-2">
               <span className="text-xs font-extrabold text-ink-600 uppercase">TOTAL ESTIMADO:</span>
-              <span className="text-lg font-black text-lilac-950">${subtotal.toFixed(2)} USD</span>
+              <span className="text-lg font-black text-lilac-950">${(Number(subtotal) || 0).toFixed(2)} USD</span>
             </div>
           </div>
 

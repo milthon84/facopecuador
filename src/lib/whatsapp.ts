@@ -20,15 +20,19 @@ export function buildQuotationWhatsAppUrl(
   const MONEY = String.fromCodePoint(0x1F4B0);  // 💰
   const CAL = String.fromCodePoint(0x1F4C5);    // 📅
 
-  const itemsList = items.map(item => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const itemsList = safeItems.map(item => {
     const pStr = item.tooth ? `Diente ${item.tooth}` : "General";
-    return `• ${pStr}: ${item.treatment} ($${item.subtotal.toFixed(2)})`;
+    const subVal = (Number(item.subtotal) || 0).toFixed(2);
+    return `• ${pStr}: ${item.treatment} ($${subVal})`;
   }).join("\n");
+
+  const totalVal = (Number(total) || 0).toFixed(2);
 
   let msg = `Hola *${patientName}* ${HAND}\n\n`;
   msg += `Adjuntamos tu presupuesto odontológico de *Facop Quito Clínica* ${TOOTH} (N° ${quotationNumber}):\n\n`;
   msg += `${CLIP} *TRATAMIENTOS:*\n${itemsList}\n\n`;
-  msg += `${MONEY} *TOTAL ESTIMADO:* $${total.toFixed(2)} USD\n\n`;
+  msg += `${MONEY} *TOTAL ESTIMADO:* $${totalVal} USD\n\n`;
   if (notes && notes.trim() !== "") {
     msg += `📝 *Observaciones:* ${notes.trim()}\n\n`;
   }
