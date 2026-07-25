@@ -18,6 +18,7 @@ import {
 import { formatTimeLocal } from "@/lib/availability";
 import EditPatientModal from "@/components/EditPatientModal";
 import CotizacionesPacienteSection from "@/components/CotizacionesPacienteSection";
+import FotosPacienteSection from "@/components/FotosPacienteSection";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 
@@ -28,7 +29,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const supabase = createAdminClient();
   
   // Ejecutar todas las consultas del perfil del paciente y permisos en paralelo
-  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes, quotationsRes] = await Promise.all([
+  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes, quotationsRes, photosRes] = await Promise.all([
     supabase
       .from("patients")
       .select("*")
@@ -54,6 +55,11 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
       .from("patient_quotations")
       .select("*")
       .eq("patient_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("patient_photos")
+      .select("*")
+      .eq("patient_id", id)
       .order("created_at", { ascending: false })
   ]);
     
@@ -67,6 +73,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const appts = apptsRes.data;
   const consultations = consultationsRes.data;
   const quotations = quotationsRes.data || [];
+  const photos = photosRes.data || [];
 
   // Help format date nicely
   const formatDateES = (d: string) => {
@@ -204,6 +211,13 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
               </div>
             )}
           </div>
+
+          {/* Fotos e Imágenes del Paciente */}
+          <FotosPacienteSection
+            patientId={patient.id}
+            initialPhotos={photos}
+            canModify={canModify}
+          />
 
           {/* Permanent Medical Background */}
           <div className="card p-6 bg-white border border-lilac-100 shadow-sm">

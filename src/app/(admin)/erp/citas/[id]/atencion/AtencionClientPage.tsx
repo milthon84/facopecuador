@@ -19,6 +19,7 @@ import {
   FileText,
   CheckCircle2,
 } from "lucide-react";
+import FotosPacienteSection from "@/components/FotosPacienteSection";
 
 interface Patient {
   id: string;
@@ -41,9 +42,10 @@ interface AtencionClientPageProps {
   patient: Patient;
   initialConsultation?: any;
   pastConsultations?: any[];
+  patientPhotos?: any[];
 }
 
-export default function AtencionClientPage({ appointment, patient, initialConsultation, pastConsultations = [] }: AtencionClientPageProps) {
+export default function AtencionClientPage({ appointment, patient, initialConsultation, pastConsultations = [], patientPhotos = [] }: AtencionClientPageProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"ficha" | "odontogram" | "evolucion">("ficha");
 
@@ -966,9 +968,19 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
         {activeTab === "evolucion" && (
           <div className="space-y-6">
             <div className="card p-6 bg-white border border-lilac-100 shadow-sm">
-              <h2 className="text-lg font-bold text-ink-900 mb-4 flex items-center gap-2">
-                <FileText className="text-lilac-600" size={18} /> Registro Clínico de la Cita
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-lilac-50">
+                <h2 className="text-base font-bold text-ink-950 flex items-center gap-2 shrink-0">
+                  <FileText className="text-lilac-600" size={18} /> Registro Clínico de la Cita
+                </h2>
+                
+                {/* Fotos e Imágenes del Procedimiento (Ultra-compacto en cabecera) */}
+                <FotosPacienteSection
+                  patientId={patient.id}
+                  initialPhotos={patientPhotos}
+                  canModify={true}
+                  compact={true}
+                />
+              </div>
               
               <div className="space-y-5">
                 <div>

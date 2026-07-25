@@ -162,6 +162,57 @@ async function checkAccess(
   }
 }
 
+// Fallback para obtener usuario desde cookies/JWT en caso de timeout de red con Supabase Auth
+function getUserFromCookieFallback(req: NextRequest): any | null {
+  try {
+    const cookies = req.cookies.getAll();
+    const tokenChunks: { index: number; value: string }[] = [];
+    let singleToken: string | null = null;
+
+    for (const c of cookies) {
+      if (c.name.includes("-auth-token")) {
+        if (c.name.includes(".")) {
+          const idx = parseInt(c.name.split(".").pop() || "", 10);
+          if (!isNaN(idx)) tokenChunks.push({ index: idx, value: c.value });
+        } else {
+          singleToken = c.value;
+        }
+      }
+    }
+
+    let cookieVal = "";
+    if (singleToken) {
+      cookieVal = singleToken;
+    } else if (tokenChunks.length > 0) {
+      tokenChunks.sort((a, b) => a.index - b.index);
+      cookieVal = tokenChunks.map((c) => c.value).join("");
+    }
+
+    if (!cookieVal) return null;
+
+    const parsed = JSON.parse(decodeURIComponent(cookieVal));
+    if (parsed?.user) return parsed.user;
+    if (parsed?.access_token) {
+      const parts = parsed.access_token.split(".");
+      if (parts.length === 3) {
+        const payloadJson = Buffer.from(parts[1], "base64").toString("utf-8");
+        const payload = JSON.parse(payloadJson);
+        if (payload.exp && payload.exp * 1000 > Date.now()) {
+          return {
+            id: payload.sub,
+            email: payload.email,
+            app_metadata: payload.app_metadata || {},
+            user_metadata: payload.user_metadata || {},
+          };
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const requestHeaders = new Headers(req.headers);
@@ -184,6 +235,10 @@ export async function middleware(req: NextRequest) {
       user = data.user;
     } catch (err) {
       console.error("Error fetching user in middleware path check:", err);
+    }
+
+    if (!user) {
+      user = getUserFromCookieFallback(req);
     }
 
     if (!user) {
@@ -233,6 +288,10 @@ export async function middleware(req: NextRequest) {
       user = data.user;
     } catch (err) {
       console.error("Error fetching user in middleware API check:", err);
+    }
+
+    if (!user) {
+      user = getUserFromCookieFallback(req);
     }
 
     if (!user) {

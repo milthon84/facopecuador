@@ -10,10 +10,12 @@ import { createClient } from "@/lib/supabase/server";
 export async function POST(req: NextRequest) {
   try {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      // Para logout ya no hay sesión - aceptamos el payload directamente
+    let user = null;
+    try {
+      const { data } = await supabase.auth.getUser();
+      user = data?.user || null;
+    } catch (uErr) {
+      // ignora fallo de red temporal en consulta de usuario
     }
 
     const body = await req.json();

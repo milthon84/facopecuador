@@ -27,20 +27,28 @@ export default async function AtencionPage({ params }: { params: Promise<{ id: s
     .eq("appointment_id", appt.id)
     .single();
 
-  // Buscar historial de consultas pasadas (excluyendo la actual) para referencia clínica
-  const { data: pastConsultations } = await supabase
-    .from("dental_consultations")
-    .select("*")
-    .eq("patient_id", patient.id)
-    .neq("appointment_id", appt.id)
-    .order("created_at", { ascending: false });
+  // Buscar historial de consultas pasadas y fotos del paciente para referencia clínica
+  const [pastConsultationsRes, photosRes] = await Promise.all([
+    supabase
+      .from("dental_consultations")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .neq("appointment_id", appt.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("patient_photos")
+      .select("*")
+      .eq("patient_id", patient.id)
+      .order("created_at", { ascending: false })
+  ]);
 
   return (
     <AtencionClientPage
       appointment={appt}
       patient={patient}
       initialConsultation={consultation || null}
-      pastConsultations={pastConsultations || []}
+      pastConsultations={pastConsultationsRes.data || []}
+      patientPhotos={photosRes.data || []}
     />
   );
 }

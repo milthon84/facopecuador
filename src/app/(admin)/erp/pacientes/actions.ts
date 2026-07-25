@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { sendQuotationEmail, QuotationItem } from "@/lib/email";
 import { buildQuotationWhatsAppUrl } from "@/lib/whatsapp";
+import { assertWritePermission } from "@/lib/auth-action";
 
 export async function createPatientQuotationAction(data: {
   patientId: string;
@@ -172,5 +173,100 @@ export async function getPatientOdontogramStateAction(patientId: string) {
   } catch (err: any) {
     console.error("Error al obtener odontograma:", err);
     return { success: false, error: err.message };
+  }
+}
+
+export async function uploadPatientPhotoAction(formData: FormData) {
+  try {
+    await assertWritePermission("/erp/pacientes");
+    const supabase = createAdminClient();
+
+    const patientId = formData.get("patientId") as string;
+    const title = (formData.get("title") as string)?.trim();
+    const notes = (formData.get("notes") as string)?.trim() || null;
+    const imageFile = formData.get("imageFile") as File | null;
+
+    if (!patientId || !title || !imageFile || imageFile.size === 0) {
+      return { success: false, error: "El asunto y la foto son obligatorios." };
+    }
+
+    const fileExt = imageFile.name.split(".").pop() || "jpg";
+    const fileName = `${patientId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const { error: uploadError } = await supabase.storage
+      .from("patient-photos")
+      .upload(fileName, buffer, {
+        contentType: imageFile.type,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Error al subir foto a Supabase storage:", uploadError);
+      return { success: false, error: `Error al guardar archivo: ${uploadError.message}` };
+    }
+
+    const { data: urlData } = supabase.storage.from("patient-photos").getPublicUrl(fileName);
+    const imageUrl = urlData.publicUrl;
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("patient_photos")
+      .insert({
+        patient_id: patientId,
+        title,
+        notes,
+        image_url: imageUrl,
+        storage_path: fileName,
+      })
+      .select("*")
+      .single();
+
+    if (insertError) {
+      console.error("Error al insertar foto en BD:", insertError);
+      return { success: false, error: `Error al guardar en base de datos: ${insertError.message}` };
+    }
+
+    revalidatePath(`/erp/pacientes/${patientId}`);
+    return { success: true, photo: inserted };
+  } catch (err: any) {
+    console.error("Excepción al subir foto del paciente:", err);
+    return { success: false, error: err.message || "Error al procesar la foto." };
+  }
+}
+
+export async function deletePatientPhotoAction(photoId: string, patientId: string) {
+  try {
+    await assertWritePermission("/erp/pacientes");
+    const supabase = createAdminClient();
+
+    const { data: photo, error: fetchError } = await supabase
+      .from("patient_photos")
+      .select("storage_path")
+      .eq("id", photoId)
+      .single();
+
+    if (fetchError || !photo) {
+      return { success: false, error: "Foto no encontrada." };
+    }
+
+    if (photo.storage_path) {
+      await supabase.storage.from("patient-photos").remove([photo.storage_path]);
+    }
+
+    const { error: deleteError } = await supabase
+      .from("patient_photos")
+      .delete()
+      .eq("id", photoId);
+
+    if (deleteError) {
+      return { success: false, error: `Error al eliminar de base de datos: ${deleteError.message}` };
+    }
+
+    revalidatePath(`/erp/pacientes/${patientId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error al eliminar foto:", err);
+    return { success: false, error: err.message || "Error al eliminar foto." };
   }
 }

@@ -1,3 +1,8 @@
+const dns = require("dns");
+if (dns && typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 const { createServer } = require("http");
 const next = require("next");
 
