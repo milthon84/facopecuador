@@ -44,12 +44,18 @@ export default async function EstadoResultadosPage({
   }
 
   const supabase = createAdminClient();
-  const { data: rawLines } = await supabase
-    .from("journal_lines")
-    .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
-    .gte("journal_entries.entry_date", from)
-    .lte("journal_entries.entry_date", to)
-    .eq("journal_entries.status", "posted");
+
+  const [{ data: closedRecords }, { data: rawLines }] = await Promise.all([
+    supabase.from("monthly_closures").select("period").eq("status", "closed"),
+    supabase
+      .from("journal_lines")
+      .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
+      .gte("journal_entries.entry_date", from)
+      .lte("journal_entries.entry_date", to)
+      .eq("journal_entries.status", "posted"),
+  ]);
+
+  const closedSet = new Set((closedRecords ?? []).map((c: any) => c.period));
 
   const lines = (rawLines || []).map((l: any) => ({
     account_code: l.account_code,
@@ -111,7 +117,14 @@ export default async function EstadoResultadosPage({
             <label className="text-xs font-semibold text-ink-600">Por mes:</label>
             <select name="period" defaultValue={mode === "period" ? (searchParams.period ?? currentPeriod) : currentPeriod}
               className="border border-lilac-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
-              {months.map(m => <option key={m} value={m}>{periodLabel(m)}</option>)}
+              {months.map(m => {
+                const isClosed = closedSet.has(m);
+                return (
+                  <option key={m} value={m}>
+                    {periodLabel(m)}{isClosed ? " 🔒 (Cerrado)" : ""}
+                  </option>
+                );
+              })}
             </select>
             <button type="submit" className="bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">Ver</button>
           </form>

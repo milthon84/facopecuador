@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatTimeLocal } from "@/lib/availability";
-import { hasPermission } from "@/lib/roles";
+import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 
 // Ecuador siempre UTC-5, sin horario de verano
@@ -36,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  ShieldAlert,
 } from "lucide-react";
 import SendReminderButton from "@/components/SendReminderButton";
 import QuickAppointmentActions from "@/components/QuickAppointmentActions";
@@ -46,9 +48,35 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboard({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; denied?: string }>;
 }) {
   const searchParams = await searchParamsPromise;
+
+  // Verificar permisos del usuario primero
+  const authData = await getCachedUserAndPermissions();
+  const { role, allowedPaths } = authData;
+
+  const hasAgendaAccess = hasPermission(role, "/erp", allowedPaths);
+
+  if (!hasAgendaAccess) {
+    const firstAllowed = getFirstAllowedPath(role, allowedPaths);
+    if (firstAllowed !== "/erp") {
+      redirect(firstAllowed);
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h1 className="text-xl font-bold text-ink-900 mb-2">Acceso Denegado</h1>
+        <p className="text-sm text-ink-600 max-w-md">
+          No tienes permisos asignados para ver la Agenda ni para acceder a ningún otro módulo. Por favor, solicita a un administrador que configure los permisos de tu rol.
+        </p>
+      </div>
+    );
+  }
+
   const supabase = createAdminClient();
 
   // Determinar la fecha objetivo en timezone Ecuador
@@ -77,20 +105,16 @@ export default async function AdminDashboard({
         weekday: "long",
       });
 
-  // Ejecutar consulta de citas y datos de usuario en paralelo
-  const [authData, todayRes] = await Promise.all([
-    getCachedUserAndPermissions(),
-    supabase
-      .from("appointments")
-      .select(
-        "id, starts_at, ends_at, status, reason, reminder_sent_at, patient:patients(id, full_name, phone, document_number, email), dental_consultation:dental_consultations(id)"
-      )
-      .gte("starts_at", startOfDay)
-      .lte("starts_at", endOfDay)
-      .order("starts_at")
-  ]);
+  // Ejecutar consulta de citas de hoy
+  const todayRes = await supabase
+    .from("appointments")
+    .select(
+      "id, starts_at, ends_at, status, reason, reminder_sent_at, patient:patients(id, full_name, phone, document_number, email), dental_consultation:dental_consultations(id)"
+    )
+    .gte("starts_at", startOfDay)
+    .lte("starts_at", endOfDay)
+    .order("starts_at");
 
-  const { role, allowedPaths } = authData;
   const canModify = hasPermission(role, "/erp/modificar", allowedPaths);
   const canModifyBilling = hasPermission(role, "/erp/facturacion/modificar", allowedPaths);
 
@@ -157,6 +181,13 @@ export default async function AdminDashboard({
 
   return (
     <div>
+      {searchParams?.denied === "1" && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm flex items-center gap-2 shadow-sm">
+          <AlertCircle size={18} className="text-amber-600 shrink-0" />
+          <span>No tienes permisos para acceder al módulo al que intentaste ingresar.</span>
+        </div>
+      )}
+
       {/* Encabezado */}
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>

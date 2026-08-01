@@ -171,17 +171,7 @@ export async function resetUserPasswordAction(userId: string, newPassword: strin
     throw new Error(`Error al actualizar credenciales: ${translateAuthError(authError.message)}`);
   }
 
-  // 2. Actualizar perfil en user_profiles
-  const { error: profileError } = await supabase
-    .from("user_profiles")
-    .update({ require_password_change: true })
-    .eq("id", userId);
-
-  if (profileError) {
-    throw new Error(`Error al actualizar el perfil: ${profileError.message}`);
-  }
-
-  // 3. Registrar auditoría
+  // 2. Registrar auditoría
   const { data: userProfile } = await supabase
     .from("user_profiles")
     .select("full_name")
@@ -220,18 +210,7 @@ export async function changeOwnPasswordAction(password: string) {
     throw new Error(`Error al actualizar la contraseña: ${translateAuthError(authError.message)}`);
   }
 
-  // 2. Actualizar perfil en DB usando admin client (por bypass de RLS)
-  const supabase = createAdminClient();
-  const { error: profileError } = await supabase
-    .from("user_profiles")
-    .update({ require_password_change: false })
-    .eq("id", sessionUser.id);
-
-  if (profileError) {
-    throw new Error(`Error al actualizar el perfil: ${profileError.message}`);
-  }
-
-  // 3. Registrar auditoría
+  // 2. Registrar auditoría
   const sessionRole = (sessionUser?.app_metadata?.role as string) ?? "recepcionista";
   await logAudit({
     user_id: sessionUser?.id,

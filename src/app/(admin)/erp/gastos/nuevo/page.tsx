@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createExpenseJournalEntry } from "@/lib/accounting";
+import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import NuevaCompraForm from "./NuevaCompraForm";
 import { assertWritePermission } from "@/lib/auth-action";
 
@@ -12,18 +12,34 @@ export const dynamic = "force-dynamic";
 async function saveExpense(formData: FormData) {
   "use server";
   await assertWritePermission("/erp/gastos");
+  const expense_date = formData.get("expense_date") as string;
+  await assertMonthOpen(expense_date);
+
   const supabase   = createAdminClient();
   const authClient = createClient();
   const { data: { user } } = await authClient.auth.getUser();
 
-  const subtotal0  = Number(formData.get("subtotal_0")  || 0);
-  const subtotal15 = Number(formData.get("subtotal_15") || 0);
-  const ivaAmount  = Math.round(subtotal15 * 0.15 * 100) / 100;
-  const total      = Math.round((subtotal0 + subtotal15 + ivaAmount) * 100) / 100;
+  const rawSubtotal = Number(formData.get("subtotal_0") || 0);
+  const rawIva      = Number(formData.get("iva_amount") || 0);
+
+  let subtotal0  = rawSubtotal;
+  let subtotal15 = 0;
+  let ivaAmount  = Math.round(rawIva * 100) / 100;
+
+  if (ivaAmount > 0) {
+    subtotal15 = Math.round((ivaAmount / 0.15) * 100) / 100;
+    if (rawSubtotal >= subtotal15) {
+      subtotal0 = Math.round((rawSubtotal - subtotal15) * 100) / 100;
+    } else {
+      subtotal15 = rawSubtotal;
+      subtotal0 = 0;
+    }
+  }
+
+  const total = Math.round((rawSubtotal + ivaAmount) * 100) / 100;
 
   const category          = formData.get("category") as string;
   const payment_method    = formData.get("payment_method") as string;
-  const expense_date      = formData.get("expense_date") as string;
   const supplier_name     = (formData.get("supplier_name") as string).trim();
   const bank_account_id   = (formData.get("bank_account_id") as string) || null;
   let payment_reference = (formData.get("payment_reference") as string)?.trim() || null;

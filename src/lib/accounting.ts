@@ -40,8 +40,8 @@ interface JournalLine {
 async function insertJournalEntry(params: {
   entry_date:      string;
   description:     string;
-  reference_type:  "invoice" | "expense" | "manual" | "asset_purchase" | "depreciation" | "disposal";
-  reference_id:    string;
+  reference_type:  "invoice" | "expense" | "manual" | "asset_purchase" | "depreciation" | "disposal" | "monthly_closure";
+  reference_id?:   string | null;
   lines:           JournalLine[];
   user_id?:        string | null;
   user_email?:     string | null;
@@ -61,7 +61,7 @@ async function insertJournalEntry(params: {
       entry_date:      params.entry_date,
       description:     params.description,
       reference_type:  params.reference_type,
-      reference_id:    params.reference_id,
+      reference_id:    params.reference_id ?? null,
       status:          "posted",
       created_by_id:   params.user_id   ?? null,
       created_by_email: params.user_email ?? null,
@@ -270,5 +270,206 @@ export async function createDepreciationJournalEntry(params: {
     ],
     user_id:    params.user_id,
     user_email: params.user_email,
+  });
+}
+
+// ── Asiento: Cierre Mensual Contable (Liquidador de Cuentas de Resultado) ──
+export async function createMonthlyClosingJournalEntry(params: {
+  period:       string;   // 'YYYY-MM'
+  closing_date: string;   // 'YYYY-MM-DD'
+  incomeLines:  { code: string; name: string; amount: number }[];
+  expenseLines: { code: string; name: string; amount: number }[];
+  net_profit:   number;
+  user_id?:     string | null;
+  user_email?:  string | null;
+}) {
+  const lines: JournalLine[] = [];
+
+  // 1. Cancelar Cuentas de Ingreso (Débito)
+  for (const inc of params.incomeLines) {
+    if (inc.amount > 0) {
+      lines.push({
+        account_code: inc.code,
+        account_name: inc.name,
+        debit:  r2(inc.amount),
+        credit: 0,
+        description: `Cierre Ingresos ${params.period}`,
+      });
+    }
+  }
+
+  // 2. Si hay pérdida, debitar a Utilidad/Pérdida del Ejercicio
+  if (params.net_profit < 0) {
+    lines.push({
+      account_code: "3.2.02",
+      account_name: "Utilidad / Pérdida del Ejercicio",
+      debit:  r2(Math.abs(params.net_profit)),
+      credit: 0,
+      description: `Pérdida del Período ${params.period}`,
+    });
+  }
+
+  // 3. Cancelar Cuentas de Gasto (Crédito)
+  for (const exp of params.expenseLines) {
+    if (exp.amount > 0) {
+      lines.push({
+        account_code: exp.code,
+        account_name: exp.name,
+        debit:  0,
+        credit: r2(exp.amount),
+        description: `Cierre Gastos ${params.period}`,
+      });
+    }
+  }
+
+  // 4. Si hay utilidad, me acreditar a Utilidad/Pérdida del Ejercicio
+  if (params.net_profit > 0) {
+    lines.push({
+      account_code: "3.2.02",
+      account_name: "Utilidad / Pérdida del Ejercicio",
+      debit:  0,
+      credit: r2(params.net_profit),
+      description: `Utilidad del Período ${params.period}`,
+    });
+  }
+
+  return insertJournalEntry({
+    entry_date:     params.closing_date,
+    description:    `Asiento de Cierre Contable — Período ${params.period}`,
+    reference_type: "manual",
+    reference_id:   null,
+    lines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
+  });
+}
+
+// ── Anular Asiento de Cierre Contable ─────────────────────────────────────
+export async function voidMonthlyClosingJournalEntry(entryId: string) {
+  const supabase = createAdminClient();
+  await supabase
+    .from("journal_entries")
+    .update({ status: "void" })
+    .eq("id", entryId);
+}
+
+// ── Validar Cierre de Mes ──────────────────────────────────────────────────
+export async function isMonthClosed(dateStr: string): Promise<boolean> {
+  if (!dateStr) return false;
+  const period = dateStr.slice(0, 7); // "YYYY-MM"
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("monthly_closures")
+    .select("status")
+    .eq("period", period)
+    .single();
+
+  return data?.status === "closed";
+}
+
+export async function assertMonthOpen(dateStr: string): Promise<void> {
+  if (!dateStr) return;
+  const closed = await isMonthClosed(dateStr);
+  if (closed) {
+    const period = dateStr.slice(0, 7);
+    const [y, m] = period.split("-");
+    const monthName = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
+    throw new Error(`El período contable ${monthName} (${period}) se encuentra CERRADO. No es posible registrar ni modificar gastos o facturas en un mes cerrado. Reabre el mes en Contabilidad si requieres realizar ajustes.`);
+  }
+}
+
+// ── Asiento: Cierre Anual Fiscal / Contable ────────────────────────────────
+export async function createAnnualClosingJournalEntry(params: {
+  year:                    number;
+  closing_date:            string; // 'YYYY-12-31'
+  incomeLines:             { code: string; name: string; amount: number }[];
+  expenseLines:            { code: string; name: string; amount: number }[];
+  gross_profit:            number;
+  employee_profit_sharing: number;
+  income_tax:              number;
+  net_profit:              number;
+  user_id?:                string | null;
+  user_email?:             string | null;
+}) {
+  const lines: JournalLine[] = [];
+
+  // 1. Cancelar Cuentas de Ingreso acumuladas del año (Débito)
+  for (const inc of params.incomeLines) {
+    if (inc.amount > 0) {
+      lines.push({
+        account_code: inc.code,
+        account_name: inc.name,
+        debit:  r2(inc.amount),
+        credit: 0,
+        description: `Cierre Anual Ingresos ${params.year}`,
+      });
+    }
+  }
+
+  // 2. Si hay pérdida bruta en el año, debitar a Utilidad/Pérdida del Ejercicio
+  if (params.gross_profit < 0) {
+    lines.push({
+      account_code: "3.2.02",
+      account_name: "Utilidad / Pérdida del Ejercicio",
+      debit:  r2(Math.abs(params.gross_profit)),
+      credit: 0,
+      description: `Pérdida Neta del Ejercicio ${params.year}`,
+    });
+  }
+
+  // 3. Cancelar Cuentas de Gasto acumuladas del año (Crédito)
+  for (const exp of params.expenseLines) {
+    if (exp.amount > 0) {
+      lines.push({
+        account_code: exp.code,
+        account_name: exp.name,
+        debit:  0,
+        credit: r2(exp.amount),
+        description: `Cierre Anual Gastos ${params.year}`,
+      });
+    }
+  }
+
+  // 4. Si hay utilidad positiva: acreditar Pasivos de Impuestos/Trabajadores y Utilidad Neta a Patrimonio
+  if (params.gross_profit > 0) {
+    if (params.employee_profit_sharing > 0) {
+      lines.push({
+        account_code: "2.1.03.03",
+        account_name: "15% Participación Trabajadores por Pagar",
+        debit:  0,
+        credit: r2(params.employee_profit_sharing),
+        description: `15% Utilidad Trabajadores ${params.year}`,
+      });
+    }
+
+    if (params.income_tax > 0) {
+      lines.push({
+        account_code: "2.1.02.04",
+        account_name: "25% Impuesto a la Renta por Pagar",
+        debit:  0,
+        credit: r2(params.income_tax),
+        description: `Impuesto a la Renta SRI ${params.year}`,
+      });
+    }
+
+    if (params.net_profit > 0) {
+      lines.push({
+        account_code: "3.2.02",
+        account_name: "Utilidad / Pérdida del Ejercicio",
+        debit:  0,
+        credit: r2(params.net_profit),
+        description: `Utilidad Neta del Ejercicio ${params.year}`,
+      });
+    }
+  }
+
+  return insertJournalEntry({
+    entry_date:     params.closing_date,
+    description:    `Asiento de Cierre Anual Fiscal y Contable — Ejercicio ${params.year}`,
+    reference_type: "manual",
+    reference_id:   null,
+    lines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
   });
 }

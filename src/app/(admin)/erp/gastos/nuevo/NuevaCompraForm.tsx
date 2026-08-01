@@ -20,6 +20,14 @@ interface Props {
 export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, saveExpense }: Props) {
   const [method, setMethod] = useState("efectivo");
   const [docType, setDocType] = useState("factura"); // "factura" | "nota_venta" | "sin_documento"
+  const [subtotal, setSubtotal] = useState<number | string>(0);
+  const [ivaAmount, setIvaAmount] = useState<number | string>(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const numSubtotal = Number(subtotal) || 0;
+  const numIva = Number(ivaAmount) || 0;
+  const calculatedTotal = Math.round((numSubtotal + numIva) * 100) / 100;
 
   const needsAccount   = method === "efectivo" || method === "transferencia";
   const needsReference = method === "transferencia";
@@ -28,16 +36,46 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
 
   const isSinDocumento = docType === "sin_documento";
 
+  function handleAutoCalcIva() {
+    if (numSubtotal > 0) {
+      const calc = Math.round(numSubtotal * 0.15 * 100) / 100;
+      setIvaAmount(calc.toFixed(2));
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setErrorMsg(null);
+    setLoading(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      await saveExpense(formData);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al guardar el gasto.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <form action={saveExpense} noValidate className="space-y-3">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3">
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 text-red-800 text-xs p-3 rounded-xl font-medium">
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       {/* Tipo de Comprobante */}
       <div className="space-y-1">
         <label className="text-xs font-semibold text-ink-700">Tipo de Comprobante *</label>
         <select
           value={docType}
-          onChange={(e) => setDocType(e.target.value)}
-          className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+          onChange={(e) => {
+            const val = e.target.value;
+            setDocType(val);
+            if (val !== "factura") setIvaAmount(0);
+          }}
+          className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-medium"
         >
           <option value="factura">Factura</option>
           <option value="nota_venta">Nota de Venta</option>
@@ -107,22 +145,75 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
         </div>
       </div>
 
-      {/* Montos */}
-      <div className="grid grid-cols-2 gap-3 bg-lilac-50/30 border border-lilac-100 rounded-xl p-3">
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-ink-700">Base IVA 0%</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs">$</span>
-            <input type="number" name="subtotal_0" min="0" step="0.01" defaultValue="0"
-              className="w-full border border-lilac-200 rounded-xl pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
+      {/* Montos y Totales */}
+      <div className="bg-lilac-50/40 border border-lilac-100 rounded-xl p-3.5 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-ink-700">
+              Monto Sin IVA / Subtotal ($) *
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs">$</span>
+              <input
+                type="number"
+                name="subtotal_0"
+                min="0"
+                step="0.01"
+                value={subtotal}
+                onChange={(e) => setSubtotal(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-lilac-200 rounded-xl pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono font-semibold text-ink-900"
+              />
+            </div>
+            <p className="text-[11px] text-ink-500">
+              Valor neto o subtotal sin impuestos
+            </p>
           </div>
+
+          {docType === "factura" && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-ink-700">IVA ($)</label>
+                {numSubtotal > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAutoCalcIva}
+                    className="text-[10px] text-lilac-600 hover:underline font-semibold"
+                  >
+                    + Calc 15%
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs">$</span>
+                <input
+                  type="number"
+                  name="iva_amount"
+                  min="0"
+                  step="0.01"
+                  value={ivaAmount}
+                  onChange={(e) => setIvaAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-lilac-200 rounded-xl pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
+                />
+              </div>
+              <p className="text-[11px] text-ink-500">Monto del IVA (si aplica en factura)</p>
+            </div>
+          )}
+          {docType !== "factura" && (
+            <input type="hidden" name="iva_amount" value="0" />
+          )}
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-ink-700">Base IVA 15%</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs">$</span>
-            <input type="number" name="subtotal_15" min="0" step="0.01" defaultValue="0"
-              className="w-full border border-lilac-200 rounded-xl pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
+
+        {/* Resumen en vivo */}
+        <div className="flex items-center justify-between pt-2.5 border-t border-lilac-200/60 text-xs flex-wrap gap-2">
+          <div className="flex gap-4 text-ink-600 flex-wrap">
+            {numSubtotal > 0 && <span>Subtotal: <strong>${numSubtotal.toFixed(2)}</strong></span>}
+            {numIva > 0 && <span>+ IVA: <strong className="text-lilac-700">${numIva.toFixed(2)}</strong></span>}
+          </div>
+          <div className="text-right ml-auto">
+            <span className="text-xs font-semibold text-ink-600 mr-2">TOTAL A PAGAR:</span>
+            <span className="text-base font-bold text-lilac-700">${calculatedTotal.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -234,9 +325,12 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
       </div>
 
       <div className="flex justify-end pt-1">
-        <button type="submit"
-          className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl transition-colors font-semibold text-sm shadow-md shadow-lilac-200">
-          <Save size={16} /> Guardar Gasto
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl transition-colors font-semibold text-sm shadow-md shadow-lilac-200 disabled:opacity-50"
+        >
+          <Save size={16} /> {loading ? "Guardando..." : "Guardar Gasto"}
         </button>
       </div>
     </form>

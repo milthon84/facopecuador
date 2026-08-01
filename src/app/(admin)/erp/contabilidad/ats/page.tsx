@@ -36,7 +36,9 @@ export default async function ATSPage({
 
   const supabase = createAdminClient();
 
-  const [{ data: invoices }, { data: expenses }] = await Promise.all([
+  const [{ data: monthlyRecords }, { data: annualRecords }, { data: invoices }, { data: expenses }] = await Promise.all([
+    supabase.from("monthly_closures").select("period").eq("status", "closed"),
+    supabase.from("annual_closures").select("year").eq("status", "closed"),
     supabase
       .from("invoices")
       .select("invoice_number, created_at, client_name, client_document, subtotal_0, subtotal_15, iva_amount, total, sri_authorization_number, sri_environment")
@@ -52,6 +54,9 @@ export default async function ATSPage({
       .eq("status", "registered")
       .order("expense_date"),
   ]);
+
+  const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
+  const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
   const ventas   = invoices  ?? [];
   const compras  = expenses  ?? [];
@@ -85,18 +90,48 @@ export default async function ATSPage({
 
       {/* Selector período */}
       <div className="flex gap-1 mb-5 overflow-x-auto">
-        {months.map(m => (
-          <Link
-            key={m}
-            href={`/erp/contabilidad/ats?period=${m}`}
-            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-              m === period ? "bg-lilac-600 text-white" : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
-            }`}
-          >
-            {new Date(Number(m.split("-")[0]), Number(m.split("-")[1]) - 1, 1)
-              .toLocaleDateString("es-EC", { month: "short", year: "2-digit" })}
-          </Link>
-        ))}
+        {months.map(m => {
+          const yearNum = Number(m.split("-")[0]);
+          const isAnnualClosed = annualClosedYears.has(yearNum);
+          const isMonthlyClosed = monthlyClosedSet.has(m);
+          const isSelected = m === period;
+          const label = new Date(Number(m.split("-")[0]), Number(m.split("-")[1]) - 1, 1)
+            .toLocaleDateString("es-EC", { month: "short", year: "2-digit" });
+
+          let pillStyle = "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50";
+          let badgeText = null;
+
+          if (isAnnualClosed) {
+            badgeText = "🏢 ANUAL";
+            pillStyle = isSelected
+              ? "bg-orange-600 text-white font-bold ring-2 ring-orange-400 shadow-sm"
+              : "bg-orange-100 border border-orange-300 text-orange-950 hover:bg-orange-200 font-semibold";
+          } else if (isMonthlyClosed) {
+            badgeText = "🔒 CERRADO";
+            pillStyle = isSelected
+              ? "bg-yellow-500 text-white font-bold ring-2 ring-yellow-300 shadow-sm"
+              : "bg-yellow-100 border border-yellow-300 text-yellow-950 hover:bg-yellow-200 font-semibold";
+          } else if (isSelected) {
+            pillStyle = "bg-lilac-600 text-white font-medium";
+          }
+
+          return (
+            <Link
+              key={m}
+              href={`/erp/contabilidad/ats?period=${m}`}
+              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors flex flex-col items-center justify-center leading-tight ${pillStyle}`}
+            >
+              {badgeText && (
+                <span className={`text-[8px] font-bold tracking-tight uppercase leading-none mb-0.5 ${
+                  isSelected ? "text-white opacity-90" : isAnnualClosed ? "text-orange-800" : "text-yellow-800"
+                }`}>
+                  {badgeText}
+                </span>
+              )}
+              <span>{label}</span>
+            </Link>
+          );
+        })}
       </div>
 
       <div className="space-y-5">

@@ -2,13 +2,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2 } from "lucide-react";
+import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
+import { assertMonthOpen } from "@/lib/accounting";
 
 export const dynamic = "force-dynamic";
 
 async function voidExpense(formData: FormData) {
   "use server";
+  await assertWritePermission("/erp/gastos");
   const id = formData.get("id") as string;
   const supabase = createAdminClient();
+
+  const { data: exp } = await supabase.from("expenses").select("expense_date").eq("id", id).single();
+  if (exp?.expense_date) {
+    await assertMonthOpen(exp.expense_date);
+  }
+
   await supabase.from("expenses").update({ status: "void" }).eq("id", id);
   redirect("/erp/gastos");
 }
@@ -22,6 +31,8 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 export default async function GastoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await assertPermission("/erp/gastos");
+  const canEdit = await hasWritePermission("/erp/gastos");
   const { id } = await params;
   const supabase = createAdminClient();
   const { data: rawExpense } = await supabase
@@ -158,8 +169,8 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* Anular */}
-        {expense.status !== "void" && (
+        {/* Anular (solo visible con permiso de modificación) */}
+        {canEdit && expense.status !== "void" && (
           <form action={voidExpense}>
             <input type="hidden" name="id" value={expense.id} />
             <button

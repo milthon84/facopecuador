@@ -15,7 +15,8 @@ export interface AuditEntry {
     | "invoice"
     | "user_profile"
     | "inventory_product"
-    | "system_role";
+    | "system_role"
+    | "monthly_closure";
   resource_id?: string | null;
   description: string;
   metadata?: Record<string, any> | null;

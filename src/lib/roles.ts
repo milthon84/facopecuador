@@ -42,7 +42,7 @@ export function canAccess(role: UserRole | undefined, pathname: string): boolean
   const r = role ?? "recepcionista";
   if (r === "admin") return true;
   if (r === "contador") {
-    const allowed = ["/erp", ...CONTADOR_ROUTES];
+    const allowed = CONTADOR_ROUTES;
     return allowed.some(p => pathname === p || pathname.startsWith(p + "/"));
   }
   const blocked = [...ADMIN_ONLY_ROUTES, ...CONTADOR_ROUTES];
@@ -78,6 +78,29 @@ export function hasPermission(
     });
   }
   return canAccess(role as UserRole, pathToCheck);
+}
+
+/**
+ * Retorna la primera ruta permitida para un rol según sus permisos.
+ * Si el rol tiene permiso para "/erp", retorna "/erp".
+ * En caso contrario, busca la primera ruta en NAV_ITEMS a la que tenga acceso.
+ * Si no tiene acceso a ninguna ruta, retorna "/erp".
+ */
+export function getFirstAllowedPath(
+  role: string,
+  allowedPathsFromDb: string[] | null
+): string {
+  if (role === "admin") return "/erp";
+
+  if (hasPermission(role, "/erp", allowedPathsFromDb)) {
+    return "/erp";
+  }
+
+  const firstAllowedItem = NAV_ITEMS.find((item) =>
+    hasPermission(role, item.href, allowedPathsFromDb)
+  );
+
+  return firstAllowedItem ? firstAllowedItem.href : "/erp";
 }
 
 

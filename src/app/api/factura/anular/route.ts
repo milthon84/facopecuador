@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/supabase/auth";
 import { logAudit } from "@/lib/audit";
+import { assertMonthOpen } from "@/lib/accounting";
 
 export async function POST(req: Request) {
   try {
@@ -41,6 +42,14 @@ export async function POST(req: Request) {
 
     if (invoiceError || !invoice) {
       return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
+    }
+
+    // Validar que el mes de la factura no se encuentre cerrado
+    const issueDate = invoice.created_at ? invoice.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
+    try {
+      await assertMonthOpen(issueDate);
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
     if (invoice.sri_status === "cancelled") {

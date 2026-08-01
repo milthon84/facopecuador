@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign } from "lucide-react";
+import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2 } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +38,15 @@ export default async function ContabilidadPage({
   }
 
   const supabase = createAdminClient();
+
+  // Cargar cierres mensuales y cierres anuales
+  const [{ data: monthlyRecords }, { data: annualRecords }] = await Promise.all([
+    supabase.from("monthly_closures").select("period").eq("status", "closed"),
+    supabase.from("annual_closures").select("year").eq("status", "closed"),
+  ]);
+
+  const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
+  const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
   // Cargar asientos del período con sus líneas
   const { data: entries } = await supabase
@@ -98,11 +107,11 @@ export default async function ContabilidadPage({
   ];
 
   const quickLinks = [
+    { href: "/erp/contabilidad/cierre-anual",                  label: "Cierre Anual Fiscal de Empresas",icon: <Building2 size={14} className="text-amber-600" />,          desc: "Ejercicio fiscal, 15% trabajadores, 25% impuesto a la renta y NIIF" },
+    { href: `/erp/contabilidad/cierre?period=${period}`,      label: "Cierre Mensual Contable",        icon: <Lock size={14} className="text-lilac-600" />,           desc: "Consolidación de mes, asientos de cierre y bitácora de auditoría" },
     { href: `/erp/contabilidad/ats?period=${period}`,         label: "ATS — Anexo Transaccional",      icon: <FileSpreadsheet size={14} className="text-lilac-600" />,  desc: "Compras y ventas para SRI" },
     { href: "/erp/contabilidad/dividendos",                    label: "ADI — Dividendos y Utilidades",  icon: <DollarSign size={14} className="text-green-600" />,        desc: "Registro de distribución" },
     { href: `/erp/contabilidad/balance`,                       label: "Balance General",                icon: <Scale size={14} className="text-blue-600" />,              desc: "Situación financiera (Activos / Pasivos / Patrimonio)" },
-    { href: `/erp/contabilidad/resultados?period=${period}`,   label: "Estado de Resultados",           icon: <TrendingUp size={14} className="text-green-600" />,         desc: "Ingresos vs Gastos — Utilidad neta" },
-    { href: `/erp/contabilidad/iva?period=${period}`,          label: "Resumen IVA — Form. 104",        icon: <Receipt size={14} className="text-amber-600" />,            desc: "IVA ventas, compras y neto a pagar" },
   ];
 
   return (
@@ -115,18 +124,48 @@ export default async function ContabilidadPage({
         </div>
         {/* Selector de período */}
         <div className="flex gap-1 overflow-x-auto">
-          {months.map(m => (
-            <Link
-              key={m}
-              href={`/erp/contabilidad?tab=${tab}&period=${m}`}
-              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                m === period ? "bg-lilac-600 text-white" : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
-              }`}
-            >
-              {new Date(Number(m.split("-")[0]), Number(m.split("-")[1]) - 1, 1)
-                .toLocaleDateString("es-EC", { month: "short", year: "2-digit" })}
-            </Link>
-          ))}
+          {months.map(m => {
+            const yearNum = Number(m.split("-")[0]);
+            const isAnnualClosed = annualClosedYears.has(yearNum);
+            const isMonthlyClosed = monthlyClosedSet.has(m);
+            const isSelected = m === period;
+            const label = new Date(Number(m.split("-")[0]), Number(m.split("-")[1]) - 1, 1)
+              .toLocaleDateString("es-EC", { month: "short", year: "2-digit" });
+
+            let pillStyle = "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50";
+            let badgeText = null;
+
+            if (isAnnualClosed) {
+              badgeText = "🏢 ANUAL";
+              pillStyle = isSelected
+                ? "bg-orange-600 text-white font-bold ring-2 ring-orange-400 shadow-sm"
+                : "bg-orange-100 border border-orange-300 text-orange-950 hover:bg-orange-200 font-semibold";
+            } else if (isMonthlyClosed) {
+              badgeText = "🔒 CERRADO";
+              pillStyle = isSelected
+                ? "bg-yellow-500 text-white font-bold ring-2 ring-yellow-300 shadow-sm"
+                : "bg-yellow-100 border border-yellow-300 text-yellow-950 hover:bg-yellow-200 font-semibold";
+            } else if (isSelected) {
+              pillStyle = "bg-lilac-600 text-white font-medium";
+            }
+
+            return (
+              <Link
+                key={m}
+                href={`/erp/contabilidad?tab=${tab}&period=${m}`}
+                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors flex flex-col items-center justify-center leading-tight ${pillStyle}`}
+              >
+                {badgeText && (
+                  <span className={`text-[8px] font-bold tracking-tight uppercase leading-none mb-0.5 ${
+                    isSelected ? "text-white opacity-90" : isAnnualClosed ? "text-orange-800" : "text-yellow-800"
+                  }`}>
+                    {badgeText}
+                  </span>
+                )}
+                <span>{label}</span>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
@@ -229,8 +268,14 @@ export default async function ContabilidadPage({
       {/* ── ESTADO DE RESULTADOS ──────────────────────────────────────────── */}
       {tab === "resultados" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30">
+          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-semibold text-sm text-ink-800">Estado de Resultados — {periodLabel(period)}</h2>
+            <Link
+              href={`/erp/contabilidad/resultados?period=${period}`}
+              className="text-xs font-semibold text-lilac-600 hover:text-lilac-800 hover:underline flex items-center gap-1 bg-white border border-lilac-200 px-3 py-1 rounded-lg shadow-sm"
+            >
+              Ver más (Reporte completo) →
+            </Link>
           </div>
           <div className="p-5 space-y-4">
             {/* Ingresos */}
@@ -332,7 +377,15 @@ export default async function ContabilidadPage({
       {tab === "iva" && (
         <div className="space-y-4">
           <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">
-            <h2 className="font-semibold text-sm text-ink-800 mb-4">Resumen IVA — {periodLabel(period)}</h2>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+              <h2 className="font-semibold text-sm text-ink-800">Resumen IVA — {periodLabel(period)}</h2>
+              <Link
+                href={`/erp/contabilidad/iva?period=${period}`}
+                className="text-xs font-semibold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg shadow-sm"
+              >
+                Ver más (Form. 104 completo) →
+              </Link>
+            </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center py-3 border-b border-lilac-50">
                 <div>

@@ -33,7 +33,8 @@ export default async function ResumenIvaPage({
   const supabase = createAdminClient();
 
   // Ventas del período (facturas emitidas)
-  const [{ data: invoices }, { data: expenses }] = await Promise.all([
+  const [{ data: closedRecords }, { data: invoices }, { data: expenses }] = await Promise.all([
+    supabase.from("monthly_closures").select("period").eq("status", "closed"),
     supabase.from("invoices")
       .select("invoice_number, client_name, client_document, issue_date, subtotal_0, subtotal_15, iva_amount, total, sri_status")
       .gte("issue_date", from).lte("issue_date", to)
@@ -45,6 +46,8 @@ export default async function ResumenIvaPage({
       .eq("status", "registered")
       .order("expense_date"),
   ]);
+
+  const closedSet = new Set((closedRecords ?? []).map((c: any) => c.period));
 
   // Totales ventas
   const ventasBase15  = r2((invoices || []).reduce((s, i) => s + Number(i.subtotal_15), 0));
@@ -78,7 +81,14 @@ export default async function ResumenIvaPage({
         <form method="get">
           <select name="period" defaultValue={period}
             className="border border-lilac-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
-            {months.map(mo => <option key={mo} value={mo}>{periodLabel(mo)}</option>)}
+            {months.map(mo => {
+              const isClosed = closedSet.has(mo);
+              return (
+                <option key={mo} value={mo}>
+                  {periodLabel(mo)}{isClosed ? " 🔒 (Cerrado)" : ""}
+                </option>
+              );
+            })}
           </select>
           <button type="submit" className="ml-2 bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">Ver</button>
         </form>

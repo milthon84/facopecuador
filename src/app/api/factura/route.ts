@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generarClaveAcceso, generarXMLFactura, SRIInvoiceData, getTipoIdentificacion } from "@/lib/sri";
 import { signXMLWithP12 } from "@/lib/sri-sign";
 import { enviarYAutorizar } from "@/lib/sri-wsdl";
-import { createInvoiceJournalEntry } from "@/lib/accounting";
+import { createInvoiceJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import crypto from "crypto";
 import { getSessionUser } from "@/lib/supabase/auth";
 
@@ -18,6 +18,14 @@ export async function POST(req: Request) {
     const user = await getSessionUser(req);
     if (!user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    // Validar que el mes actual no se encuentre cerrado para contabilidad
+    const todayStr = new Date().toISOString().split("T")[0];
+    try {
+      await assertMonthOpen(todayStr);
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
     const role = (user.app_metadata?.role as string) ?? "recepcionista";

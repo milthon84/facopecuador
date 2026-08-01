@@ -59,13 +59,20 @@ export default async function GastosPage({
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
-  const { data: expenses } = await supabase
-    .from("expenses")
-    .select("*")
-    .gte("expense_date", from)
-    .lte("expense_date", to)
-    .eq("status", "registered")
-    .order("expense_date", { ascending: false });
+  const [{ data: monthlyRecords }, { data: annualRecords }, { data: expenses }] = await Promise.all([
+    supabase.from("monthly_closures").select("period").eq("status", "closed"),
+    supabase.from("annual_closures").select("year").eq("status", "closed"),
+    supabase
+      .from("expenses")
+      .select("*")
+      .gte("expense_date", from)
+      .lte("expense_date", to)
+      .eq("status", "registered")
+      .order("expense_date", { ascending: false }),
+  ]);
+
+  const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
+  const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
   const items = expenses ?? [];
   const totalMes    = items.reduce((s, e) => s + Number(e.total), 0);
@@ -97,19 +104,44 @@ export default async function GastosPage({
         <Calendar size={15} className="text-ink-400 shrink-0" />
         <div className="flex gap-1 overflow-x-auto pb-1">
           {months.map((m) => {
+            const yearNum = Number(m.split("-")[0]);
+            const isAnnualClosed = annualClosedYears.has(yearNum);
+            const isMonthlyClosed = monthlyClosedSet.has(m);
+            const isSelected = m === activeMonth;
             const [y, mo] = m.split("-").map(Number);
             const label = new Date(y, mo - 1, 1).toLocaleDateString("es-EC", { month: "short", year: "2-digit" });
+
+            let pillStyle = "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50";
+            let badgeText = null;
+
+            if (isAnnualClosed) {
+              badgeText = "🏢 ANUAL";
+              pillStyle = isSelected
+                ? "bg-orange-600 text-white font-bold ring-2 ring-orange-400 shadow-sm"
+                : "bg-orange-100 border border-orange-300 text-orange-950 hover:bg-orange-200 font-semibold";
+            } else if (isMonthlyClosed) {
+              badgeText = "🔒 CERRADO";
+              pillStyle = isSelected
+                ? "bg-yellow-500 text-white font-bold ring-2 ring-yellow-300 shadow-sm"
+                : "bg-yellow-100 border border-yellow-300 text-yellow-950 hover:bg-yellow-200 font-semibold";
+            } else if (isSelected) {
+              pillStyle = "bg-lilac-600 text-white font-medium";
+            }
+
             return (
               <Link
                 key={m}
                 href={`/erp/gastos?month=${m}`}
-                className={`shrink-0 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  m === activeMonth
-                    ? "bg-lilac-600 text-white"
-                    : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
-                }`}
+                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors flex flex-col items-center justify-center leading-tight ${pillStyle}`}
               >
-                {label}
+                {badgeText && (
+                  <span className={`text-[8px] font-bold tracking-tight uppercase leading-none mb-0.5 ${
+                    isSelected ? "text-white opacity-90" : isAnnualClosed ? "text-orange-800" : "text-yellow-800"
+                  }`}>
+                    {badgeText}
+                  </span>
+                )}
+                <span>{label}</span>
               </Link>
             );
           })}

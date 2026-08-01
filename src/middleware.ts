@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { canAccess } from "@/lib/roles";
+import { canAccess, getFirstAllowedPath } from "@/lib/roles";
 import type { UserRole } from "@/lib/roles";
 
 function addSecurityHeaders(res: NextResponse): NextResponse {
@@ -131,24 +131,16 @@ function getModifyPathForPathname(pathname: string): string {
 async function checkAccess(
   supabase: any,
   role: string,
-  pathname: string
+  pathname: string,
+  dbPaths: string[] | null
 ): Promise<boolean> {
   if (role === "admin") return true;
-  // "/erp" es la página de aterrizaje (Agenda) para todo usuario autenticado.
-  // Siempre debe estar permitida para evitar loops de redirección cuando un
-  // rol todavía no tiene permisos configurados en role_permissions.
-  if (pathname === "/erp") return true;
 
   try {
-    const { data, error } = await supabase
-      .from("role_permissions")
-      .select("path")
-      .eq("role_name", role);
+    const paths: string[] = dbPaths ?? (
+      (await supabase.from("role_permissions").select("path").eq("role_name", role)).data || []
+    ).map((p: { path: string }) => p.path);
 
-    if (error) throw error;
-
-    const paths: string[] = (data || []).map((p: { path: string }) => p.path);
-    
     // Si la ruta es de escritura, requerimos explícitamente el permiso de modificación
     if (isWritePath(pathname)) {
       const requiredModifyPath = getModifyPathForPathname(pathname);
@@ -267,15 +259,36 @@ export async function middleware(req: NextRequest) {
       return redirect;
     }
 
+    // Permitir el acceso a cambiar contraseña para usuarios autenticados sin verificar role_permissions
+    if (pathname === "/erp/cambiar-contrasena") {
+      return res;
+    }
+
     const role = (user.app_metadata?.role as string) ?? "recepcionista";
 
-    if (!(await checkAccess(supabase, role, pathname))) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/erp";
-      url.searchParams.set("denied", "1");
-      const redirect = NextResponse.redirect(url);
-      addSecurityHeaders(redirect);
-      return redirect;
+    let dbPaths: string[] | null = null;
+    if (role !== "admin") {
+      try {
+        const { data } = await supabase
+          .from("role_permissions")
+          .select("path")
+          .eq("role_name", role);
+        if (data) dbPaths = data.map((p: any) => p.path);
+      } catch {}
+    }
+
+    if (!(await checkAccess(supabase, role, pathname, dbPaths))) {
+      const targetPath = getFirstAllowedPath(role, dbPaths);
+      if (targetPath !== pathname) {
+        const url = req.nextUrl.clone();
+        url.pathname = targetPath;
+        if (pathname !== "/erp") {
+          url.searchParams.set("denied", "1");
+        }
+        const redirect = NextResponse.redirect(url);
+        addSecurityHeaders(redirect);
+        return redirect;
+      }
     }
   }
 
