@@ -4,6 +4,7 @@ import { ArrowLeft, Lock, Unlock, Calendar, TrendingUp, TrendingDown, CheckCircl
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { executeAnnualCloseAction } from "./actions";
 import ReopenAnnualModal from "./ReopenAnnualModal";
+import ConfirmAnnualCloseModal from "./ConfirmAnnualCloseModal";
 
 export const dynamic = "force-dynamic";
 
@@ -202,18 +203,11 @@ export default async function CierreAnualPage({
           {isClosed ? (
             <ReopenAnnualModal year={selectedYear} canEdit={canEdit} />
           ) : (
-            canEdit && (
-              <form action={executeAnnualCloseAction}>
-                <input type="hidden" name="year" value={selectedYear} />
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-md shadow-lilac-200"
-                >
-                  <Lock size={15} />
-                  {isReopened ? `Volver a Ejecutar Cierre Anual ${selectedYear}` : `Ejecutar Cierre Anual del Ejercicio ${selectedYear}`}
-                </button>
-              </form>
-            )
+            <ConfirmAnnualCloseModal
+              year={selectedYear}
+              isReopened={isReopened}
+              canEdit={canEdit}
+            />
           )}
         </div>
       </div>

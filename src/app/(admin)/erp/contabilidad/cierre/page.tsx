@@ -4,6 +4,7 @@ import { ArrowLeft, Lock, Unlock, Calendar, TrendingUp, TrendingDown, CheckCircl
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { executeMonthlyCloseAction } from "./actions";
 import ReopenPeriodModal from "./ReopenPeriodModal";
+import ConfirmMonthlyCloseModal from "./ConfirmMonthlyCloseModal";
 
 export const dynamic = "force-dynamic";
 
@@ -213,18 +214,12 @@ export default async function CierreContablePage({
           {isClosed ? (
             <ReopenPeriodModal period={period} canEdit={canEdit} />
           ) : (
-            canEdit && (
-              <form action={executeMonthlyCloseAction}>
-                <input type="hidden" name="period" value={period} />
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md shadow-lilac-200"
-                >
-                  <Lock size={15} />
-                  {isReopened ? "Volver a Ejecutar Cierre Mensual" : "Ejecutar Cierre Contable del Mes"}
-                </button>
-              </form>
-            )
+            <ConfirmMonthlyCloseModal
+              period={period}
+              periodLabelStr={periodLabel(period)}
+              isReopened={isReopened}
+              canEdit={canEdit}
+            />
           )}
         </div>
       </div>
