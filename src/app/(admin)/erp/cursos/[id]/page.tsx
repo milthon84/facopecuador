@@ -113,6 +113,29 @@ async function addModule(formData: FormData) {
     }
   }
 
+  // Crear curso_modulo_inscripciones para todos los alumnos ya inscritos en el curso
+  // Los que pagaron curso completo → invoiced; los que pagaron solo inscripción → pending
+  if (!error && insertedMod) {
+    try {
+      const { data: enrollments } = await supabase
+        .from("curso_inscripciones")
+        .select("id, payment_type")
+        .eq("course_id", courseId)
+        .eq("status", "enrolled");
+
+      if (enrollments && enrollments.length > 0) {
+        const moduleInscriptions = enrollments.map((enr: any) => ({
+          enrollment_id: enr.id,
+          module_id: insertedMod.id,
+          billing_status: enr.payment_type === "full_course" ? "invoiced" : "pending",
+        }));
+        await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+      }
+    } catch (e: any) {
+      console.error("[addModule] Error al crear inscripciones de módulo:", e.message);
+    }
+  }
+
   revalidatePath(`/erp/cursos/${courseId}`);
 }
 

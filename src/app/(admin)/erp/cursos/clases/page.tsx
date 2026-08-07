@@ -606,19 +606,16 @@ export default async function ClasesPage({
 
             const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
 
-            // Cargar TODAS las clases programadas para este módulo
+            // Cargar alumnos inscritos con su tipo de pago
             const enrolledDocs = await supabase
               .from("curso_inscripciones")
-              .select("id, status, created_at, alumnos(*)")
+              .select("id, status, created_at, payment_type, alumnos(*)")
               .eq("course_id", courseId)
               .eq("status", "enrolled");
 
             const enrolledStudents = enrolledDocs.data || [];
-            const enrolledDocNumbers = enrolledStudents
-              .map((e: any) => e.alumnos?.document_number)
-              .filter(Boolean);
 
-            const [classesRes, moduleBillingRes, courseInvoicesRes] = await Promise.all([
+            const [classesRes, moduleBillingRes] = await Promise.all([
               supabase
                 .from("curso_clases")
                 .select("*, profesores(id, full_name)")
@@ -629,20 +626,11 @@ export default async function ClasesPage({
                 .from("curso_modulo_inscripciones")
                 .select("id, enrollment_id, billing_status, invoice_id, invoices(invoice_number, sri_status)")
                 .eq("module_id", selectedModule.id),
-              enrolledDocNumbers.length > 0
-                ? supabase
-                    .from("invoices")
-                    .select("client_document, created_at, sri_status, id, invoice_number")
-                    .in("client_document", enrolledDocNumbers)
-                    .neq("sri_status", "cancelled")
-                    .order("created_at", { ascending: false })
-                : Promise.resolve({ data: [] }),
             ]);
 
             const classes = classesRes.data || [];
             const enrollmentsList = enrolledStudents;
             const moduleBillingList = moduleBillingRes.data || [];
-            const courseInvoices = (courseInvoicesRes as any).data || [];
 
             // Determinar la clase activa a mostrar
             const activeClass = classes.find(c => c.id === classId) || classes[0] || null;
@@ -796,27 +784,20 @@ export default async function ClasesPage({
                             const hasRecord = attendanceMap.has(student.id);
                             const recorded = attendanceMap.get(student.id) || { status: "absent", notes: "" };
                             const currentStatus = hasRecord ? recorded.status : "absent";
-                            
+
                             const hasBillingRecord = billingMap.has(enrollment.id);
                             const billingInfo = billingMap.get(enrollment.id) || { billingStatus: "pending", inscriptionId: "" };
 
-                            // Solo detectar "pago completo" por factura cuando NO existe un registro
-                            // en curso_modulo_inscripciones para este módulo+alumno.
-                            // Si existe un registro con 'pending', el alumno solo pagó inscripción → debe facturar módulo.
-                            const enrollmentCreatedAt = new Date(enrollment.created_at || 0).getTime();
+                            // Determinar estado efectivo de pago del módulo:
+                            // 1. Si hay registro en billingMap → usar su billing_status
+                            // 2. Si NO hay registro → verificar payment_type del enrollment:
+                            //    - 'full_course' → ya pagó todo, marcar como pagado (se creará el registro en el próximo addModule)
+                            //    - 'inscription' o null → pendiente de pago
                             let effectiveBillingStatus = billingInfo.billingStatus;
                             let fullCourseInvoiceNumber: string | null = null;
 
-                            if (!hasBillingRecord) {
-                              // El alumno se matriculó antes de que existieran módulos y posiblemente pagó el curso completo
-                              const matchedInvoice = courseInvoices.find((inv: any) =>
-                                inv.client_document?.trim() === student.document_number?.trim() &&
-                                new Date(inv.created_at).getTime() >= enrollmentCreatedAt - 120000
-                              );
-                              if (matchedInvoice) {
-                                effectiveBillingStatus = "invoiced_full";
-                                fullCourseInvoiceNumber = matchedInvoice.invoice_number || null;
-                              }
+                            if (!hasBillingRecord && enrollment.payment_type === "full_course") {
+                              effectiveBillingStatus = "invoiced_full";
                             }
 
                             const prefName = encodeURIComponent(student.full_name);

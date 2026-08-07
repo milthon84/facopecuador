@@ -320,6 +320,7 @@ export async function POST(req: Request) {
         .from("curso_inscripciones")
         .update({
           status: "enrolled",
+          payment_type: full_course_payment ? "full_course" : "inscription",
           updated_at: new Date().toISOString()
         })
         .eq("id", course_enrollment_id);
