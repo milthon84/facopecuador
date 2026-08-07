@@ -60,8 +60,11 @@ export default function NewInvoiceForm({
   initialClientPhone = "",
   initialClientAddress = "",
   initialModuleEnrollmentIds = "",
+  initialCourseEnrollmentId = "",
+  initialFullCoursePayment = false,
   initialItemDescription = "",
   initialItemPrice = 0,
+  returnUrl = "",
 }: {
   patients: Patient[];
   initialPatient: Patient | null;
@@ -75,8 +78,11 @@ export default function NewInvoiceForm({
   initialClientPhone?: string;
   initialClientAddress?: string;
   initialModuleEnrollmentIds?: string;
+  initialCourseEnrollmentId?: string;
+  initialFullCoursePayment?: boolean;
   initialItemDescription?: string;
   initialItemPrice?: number;
+  returnUrl?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -108,7 +114,7 @@ export default function NewInvoiceForm({
 
   const [items, setItems] = useState<InvoiceItem[]>(
     initialItemDescription
-      ? [{ id: Math.random().toString(), description: initialItemDescription, quantity: 1, unit_price: initialItemPrice, discount: 0, iva_code: "0" }]
+      ? [{ id: Math.random().toString(), description: initialItemDescription, quantity: 1, unit_price: initialItemPrice, discount: 0, iva_code: "4" }]
       : []
   );
 
@@ -224,7 +230,7 @@ export default function NewInvoiceForm({
   }
 
   const addItem = () => {
-    setItems([...items, { id: Math.random().toString(), description: "", quantity: 1, unit_price: 0, discount: 0, iva_code: "0" }]);
+    setItems([...items, { id: Math.random().toString(), description: "", quantity: 1, unit_price: 0, discount: 0, iva_code: "4" }]);
   };
 
   const removeItem = (id: string) => {
@@ -344,6 +350,8 @@ export default function NewInvoiceForm({
           card_voucher:      paymentMethod === "tarjeta_credito" ? cardVoucher : undefined,
           forma_pago:        PAYMENT_METHODS.find(m => m.value === paymentMethod)?.sriCode ?? "01",
           module_enrollment_ids: moduleEnrollmentIds.length > 0 ? moduleEnrollmentIds : undefined,
+          course_enrollment_id: initialCourseEnrollmentId || undefined,
+          full_course_payment: initialFullCoursePayment || undefined,
         }),
       });
       const result = await res.json();
@@ -387,7 +395,7 @@ export default function NewInvoiceForm({
 
       <div className="flex items-center gap-3 mb-5">
         <Link
-          href="/erp/facturacion"
+          href={returnUrl || "/erp/facturacion"}
           className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0"
         >
           <ArrowLeft size={18} />
@@ -856,7 +864,7 @@ export default function NewInvoiceForm({
         )}
 
         <div className="flex justify-end gap-3">
-          <button type="button" onClick={() => router.push("/erp/facturacion")}
+          <button type="button" onClick={() => router.push(returnUrl || "/erp/facturacion")}
             className="px-5 py-2.5 rounded-xl border border-lilac-200 text-ink-700 font-medium hover:bg-lilac-50 transition-colors text-sm">
             Cancelar
           </button>
@@ -888,7 +896,7 @@ export default function NewInvoiceForm({
             } else {
               setAlertModal(null);
               router.refresh();
-              router.push("/erp/facturacion");
+              router.push(returnUrl || "/erp/facturacion");
             }
           }}
         >
@@ -925,7 +933,7 @@ export default function NewInvoiceForm({
                   setAlertModal(null);
                   if (alertModal.type === "success") {
                     router.refresh();
-                    router.push("/erp/facturacion");
+                    router.push(returnUrl || "/erp/facturacion");
                   }
                 }}
                 className={`w-full py-2.5 rounded-xl text-xs font-semibold text-white transition shadow-md ${

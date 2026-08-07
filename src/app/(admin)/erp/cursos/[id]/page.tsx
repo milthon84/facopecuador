@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { 
   GraduationCap, Calendar, Users, DollarSign, ArrowLeft, 
   Settings, Award, BookOpen, Plus, Trash2, UserPlus, UserMinus, 
-  CheckCircle2, Pencil, UserCheck 
+  CheckCircle2, Pencil, UserCheck, CreditCard 
 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
@@ -15,7 +15,10 @@ import CopyCourseButton from "@/components/CopyCourseButton";
 import AttendanceListModal from "@/components/AttendanceListModal";
 import EditCourseModal from "@/components/EditCourseModal";
 import EnrollStudentModal from "@/components/EnrollStudentModal";
+import PagoInscripcionModal from "@/components/PagoInscripcionModal";
 import TeacherMultiSelect from "@/components/TeacherMultiSelect";
+
+import CourseStatusSelector from "@/components/CourseStatusSelector";
 
 export const dynamic = "force-dynamic";
 
@@ -67,20 +70,28 @@ async function addModule(formData: FormData) {
   await assertWritePermission("/erp/cursos");
 
   const name = (formData.get("name") as string)?.trim();
-  const number = Number(formData.get("number"));
   const cost = Number(formData.get("cost"));
   const description = (formData.get("description") as string)?.trim();
   const date = (formData.get("date") as string) || null;
   const teacherIds = formData.getAll("teacherIds") as string[];
 
-  if (!courseId || !name || isNaN(number) || isNaN(cost)) return;
+  if (!courseId || !name || isNaN(cost)) return;
 
   const supabase = createAdminClient();
+  const { data: existingMods } = await supabase
+    .from("curso_modulos")
+    .select("number")
+    .eq("course_id", courseId)
+    .order("number", { ascending: false })
+    .limit(1);
+
+  const nextNumber = existingMods && existingMods.length > 0 ? (existingMods[0].number || 0) + 1 : 1;
+
   const { data: insertedMod, error } = await supabase
     .from("curso_modulos")
     .insert({
       course_id: courseId,
-      number,
+      number: nextNumber,
       name,
       cost,
       description: description || null,
@@ -164,26 +175,31 @@ export default async function CursoDetallePage({
   const { tab } = await searchParamsPromise;
   await assertPermission("/erp/cursos");
   const canEdit = await hasWritePermission("/erp/cursos");
-  const activeTab = tab ?? "modulos";
-
   const supabase = createAdminClient();
 
   // Auto-completar cursos expirados
   await updateExpiredCourses(supabase);
 
   // Cargar todos los datos requeridos en paralelo
-  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, moduleTeachersRes, allStudentsRes] = await Promise.all([
+  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, moduleTeachersRes, allStudentsRes, invoicesRes] = await Promise.all([
     supabase.from("cursos").select("*").eq("id", id).single(),
     supabase.from("curso_modulos").select("*").eq("course_id", id).order("number"),
     supabase.from("curso_profesores").select("role, profesores(*)").eq("course_id", id),
     supabase.from("profesores").select("id, full_name, specialty").order("full_name"),
-    supabase.from("curso_inscripciones").select("status, created_at, alumnos(*)").eq("course_id", id).order("created_at", { ascending: false }),
+    supabase.from("curso_inscripciones").select("id, status, created_at, alumnos(*), curso_modulo_inscripciones(id, billing_status)").eq("course_id", id).order("created_at", { ascending: false }),
     supabase.from("modulo_profesores").select("module_id, teacher_id, profesores(id, full_name, specialty)"),
-    supabase.from("alumnos").select("id, full_name, document_number, phone, email").order("full_name")
+    supabase.from("alumnos").select("id, full_name, document_number, phone, email").order("full_name"),
+    supabase.from("invoices").select("client_document, created_at, sri_status, invoice_number").neq("sri_status", "cancelled").order("created_at", { ascending: false }),
   ]);
+
+  const courseInvoices = invoicesRes.data || [];
 
   const course = courseRes.data;
   if (!course) return redirect("/erp/cursos");
+
+  // Si el curso está en borrador, la pestaña por defecto es 'modulos'; si está abierto/en ejecución, es 'alumnos'
+  const defaultTab = course.status === "draft" ? "modulos" : "alumnos";
+  const activeTab = tab ?? defaultTab;
 
   const modules = modulesRes.data || [];
   const assignedTeachers = assignedTeachersRes.data || [];
@@ -229,35 +245,26 @@ export default async function CursoDetallePage({
             />
           )}
           <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-ink-900">{course.name}</h1>
-            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-              course.status === "active" ? "bg-green-50 text-green-700 border-green-200" :
-              course.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" :
-              course.status === "draft" ? "bg-gray-50 text-gray-600 border-gray-200" :
-              course.status === "completed" ? "bg-lilac-50 text-lilac-700 border-lilac-200" :
-              "bg-red-50 text-red-700 border-red-200"
-            }`}>
-              {course.status === "active" ? "Abierto" :
-               course.status === "in_progress" ? "En Ejecución" :
-               course.status === "draft" ? "Borrador" :
-               course.status === "completed" ? "Finalizado" : "Cancelado"}
-            </span>
-          </div>
-          <p className="text-xs text-ink-500">
-            Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}
-          </p>
+            <h1 className="text-xl font-bold text-ink-900">{course.name}</h1>
+            <p className="text-xs text-ink-500">
+              Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}
+            </p>
+            <div className="flex items-center gap-1 font-bold text-lilac-800 text-base md:text-lg pt-0.5">
+              <DollarSign size={16} className="text-lilac-600 shrink-0" />
+              <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="flex items-center gap-1 font-bold text-lilac-800 text-lg md:text-xl">
-            <DollarSign size={18} className="text-lilac-600" />
-            <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
-          </div>
+
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
+          <CourseStatusSelector
+            courseId={id}
+            currentStatus={course.status}
+            canEdit={canEdit}
+          />
 
           {canEdit && (
-            <div className="flex items-center gap-2 border-l border-lilac-100 pl-3">
-              <CopyCourseButton courseId={id} courseName={course.name} />
+            <div className="border-l border-lilac-100 pl-3">
               <EditCourseModal course={course} />
             </div>
           )}
@@ -306,22 +313,21 @@ export default async function CursoDetallePage({
 
                       return (
                         <div key={m.id} className="p-5 flex justify-between items-start gap-4 hover:bg-lilac-50/10 transition-colors">
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold bg-lilac-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0">
-                                {m.number}
-                              </span>
-                              <h3 className="font-bold text-ink-950 text-sm">{m.name}</h3>
-                            </div>
+                          <div className="space-y-2 flex-1">
+                            <h3 className="font-bold text-ink-950 text-sm">{m.name}</h3>
                             {m.description && (
-                              <p className="text-xs text-ink-600 leading-relaxed pl-7">{m.description}</p>
+                              <p className="text-xs text-ink-600 leading-relaxed">{m.description}</p>
                             )}
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-500 pl-7">
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-500 pt-0.5">
                               {m.start_date && (
                                 <span className="flex items-center gap-1 font-medium text-lilac-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/50">
                                   <Calendar size={12} className="text-lilac-600" /> Fecha: {formatDateES(m.start_date)}
                                 </span>
                               )}
+
+                              <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-0.5 rounded-lg border border-lilac-100">
+                                ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
+                              </span>
 
                               <div className="flex flex-wrap items-center gap-1">
                                 <span className="font-semibold text-ink-700 flex items-center gap-1">
@@ -340,16 +346,13 @@ export default async function CursoDetallePage({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0 pt-0.5">
                             <AttendanceListModal
                               moduleId={m.id}
                               moduleName={m.name}
                               moduleNumber={m.number}
                             />
 
-                            <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-1 rounded-xl">
-                              ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
-                            </span>
                             {canEdit && (
                               <div className="flex items-center gap-1">
                                 <EditModuleModal
@@ -384,31 +387,6 @@ export default async function CursoDetallePage({
                   </h2>
                   <form action={addModule} className="space-y-4">
                     <input type="hidden" name="courseId" value={id} />
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-1">
-                        <label className="label text-ink-800">Número *</label>
-                        <input
-                          name="number"
-                          type="number"
-                          required
-                          min="1"
-                          defaultValue={modules.length + 1}
-                          className="input"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="label text-ink-800">Costo ($) *</label>
-                        <input
-                          name="cost"
-                          type="number"
-                          step="0.01"
-                          required
-                          min="0"
-                          placeholder="Ej: 200.00"
-                          className="input"
-                        />
-                      </div>
-                    </div>
                     <div>
                       <label className="label text-ink-800">Nombre del módulo *</label>
                       <input
@@ -430,6 +408,18 @@ export default async function CursoDetallePage({
                     <div>
                       <label className="label text-ink-800 text-[11px] font-semibold">Fecha del módulo (Día de clases)</label>
                       <input name="date" type="date" className="input text-xs" />
+                    </div>
+                    <div>
+                      <label className="label text-ink-800">Costo ($) *</label>
+                      <input
+                        name="cost"
+                        type="number"
+                        step="0.01"
+                        required
+                        min="0"
+                        placeholder="Ej: 200.00"
+                        className="input"
+                      />
                     </div>
 
                     {allTeachers.length > 0 && (
@@ -495,6 +485,20 @@ export default async function CursoDetallePage({
                   {students.map((e: any) => {
                     const student = e.alumnos;
                     if (!student) return null;
+
+                    const modInscriptions = e.curso_modulo_inscripciones || [];
+                    const isPaidFromModules = modInscriptions.some((m: any) => m.billing_status === "invoiced");
+                    const matchedInvoice = courseInvoices.find((inv: any) => 
+                      inv.client_document && 
+                      student.document_number && 
+                      inv.client_document.trim() === student.document_number.trim() && 
+                      new Date(inv.created_at) >= new Date(new Date(e.created_at).getTime() - 120000)
+                    );
+                    const isPaidFromInvoice = !!matchedInvoice;
+                    const paidInvoiceNumber = matchedInvoice?.invoice_number ||
+                      modInscriptions.find((m: any) => m.billing_status === "invoiced")?.invoices?.invoice_number || null;
+                    const isPaidOrMatriculado = isPaidFromModules || isPaidFromInvoice || e.status === "completed";
+
                     return (
                       <tr key={student.id} className="hover:bg-lilac-50/10">
                         <td className="px-5 py-3.5">
@@ -512,15 +516,37 @@ export default async function CursoDetallePage({
                           <div className="text-ink-800">{student.email}</div>
                           <div className="text-ink-500">{student.phone}</div>
                         </td>
-                        <td className="px-5 py-3.5 text-right">
-                          <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            e.status === "enrolled" ? "bg-green-50 text-green-700 border-green-200" :
-                            e.status === "completed" ? "bg-lilac-50 text-lilac-700 border-lilac-200" :
-                            "bg-red-50 text-red-700 border-red-100"
-                          }`}>
-                            {e.status === "enrolled" ? "Matriculado" :
-                             e.status === "completed" ? "Finalizado" : "Retirado"}
-                          </span>
+                        <td className="px-5 py-3.5 text-right flex items-center justify-end gap-2">
+                          {isPaidOrMatriculado || e.status === "completed" ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
+                              <CheckCircle2 size={13} className="text-green-600" />
+                              <span>Matriculado{paidInvoiceNumber ? ` — № ${paidInvoiceNumber}` : ""}</span>
+                            </div>
+                          ) : e.status === "dropped" ? (
+                            <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-100">
+                              Retirado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                              Inscrito
+                            </span>
+                          )}
+
+                          {!isPaidOrMatriculado && e.status !== "dropped" && canEdit && (
+                            <PagoInscripcionModal
+                              studentName={student.full_name}
+                              studentDoc={student.document_number}
+                              studentEmail={student.email}
+                              studentPhone={student.phone}
+                              courseId={course.id}
+                              courseName={course.name}
+                              courseTotalCost={Number(course.total_cost)}
+                              enrollmentId={e.id}
+                              firstModuleCost={modules[0]?.cost ? Number(modules[0].cost) : undefined}
+                              firstModuleName={modules[0]?.name}
+                              returnUrl={`/erp/cursos/${course.id}?tab=alumnos`}
+                            />
+                          )}
                         </td>
                       </tr>
                     );

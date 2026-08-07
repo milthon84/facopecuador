@@ -194,8 +194,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/cursos/profesores",   label: "Profesores",          icon: "Award",           section: "Cursos",        roles: ["admin"] },
   { href: "/erp/cursos/alumnos",      label: "Alumnos",             icon: "Users",           section: "Cursos",        roles: ["admin", "recepcionista"] },
   { href: "/erp/cursos/clases",       label: "Clases y Asistencia", icon: "Presentation",      section: "Cursos",        roles: ["admin", "recepcionista"] },
-  { href: "/erp/cursos/facturacion",  label: "Facturación Módulos", icon: "CreditCard",      section: "Cursos",        roles: ["admin", "contador"] },
-  { href: "/erp/cursos/avisos",       label: "Avisos y Comunicados", icon: "Megaphone",       section: "Cursos",        roles: ["admin", "recepcionista"] },
 
   // General
   { href: "/erp/caja-general",        label: "Caja General",        icon: "Banknote",         section: "General",       roles: ["admin", "contador"] },

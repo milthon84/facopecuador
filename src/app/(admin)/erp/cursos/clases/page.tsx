@@ -2,13 +2,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { 
-  Presentation, Calendar, Clock, Plus, Trash2, ArrowLeft, 
+  Presentation, Calendar, Clock, Plus, ArrowLeft, 
   CheckCircle2, UserCheck, BookOpen, GraduationCap, CheckSquare, 
-  MapPin, User 
+  MapPin, User, Mail, Send, DollarSign, AlertCircle, CreditCard, Search, Megaphone, Users, Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
+import { sendCourseNoticeEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -18,31 +19,32 @@ async function addClass(formData: FormData) {
   "use server";
   const courseId = formData.get("courseId") as string;
   const moduleId = formData.get("moduleId") as string;
+  const date = formData.get("date") as string;
   await assertWritePermission("/erp/cursos/clases");
 
-  const title = (formData.get("title") as string)?.trim();
-  const description = (formData.get("description") as string)?.trim();
-  const date = formData.get("date") as string;
-  const startTime = formData.get("startTime") as string;
-  const endTime = formData.get("endTime") as string;
-  const teacherId = formData.get("teacherId") as string || null;
-  const classroom = (formData.get("classroom") as string)?.trim();
-
-  if (!moduleId || !title || !date || !startTime || !endTime) return;
+  if (!courseId || !moduleId || !date) return;
 
   const supabase = createAdminClient();
-  await supabase.from("curso_clases").insert({
+
+  const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("es-EC", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+  const title = `Clase del ${dateFormatted}`;
+
+  const { data: newClass } = await supabase.from("curso_clases").insert({
     module_id: moduleId,
     title,
-    description: description || null,
     date,
-    start_time: startTime,
-    end_time: endTime,
-    teacher_id: teacherId,
-    classroom: classroom || null,
-  });
+    start_time: "08:00",
+    end_time: "17:00",
+  }).select("id").single();
 
-  revalidatePath(`/erp/cursos/clases?course_id=${courseId}&module_id=${moduleId}`);
+  revalidatePath(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${moduleId}`);
+  if (newClass?.id) {
+    redirect(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${moduleId}&class_id=${newClass.id}`);
+  }
 }
 
 async function deleteClass(formData: FormData) {
@@ -55,15 +57,58 @@ async function deleteClass(formData: FormData) {
   const supabase = createAdminClient();
   await supabase.from("curso_clases").delete().eq("id", classId);
 
-  revalidatePath(`/erp/cursos/clases?course_id=${courseId}&module_id=${moduleId}`);
+  revalidatePath(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${moduleId}`);
 }
 
-async function saveAttendance(formData: FormData) {
+async function saveDirectAttendance(formData: FormData) {
   "use server";
   const courseId = formData.get("courseId") as string;
   const moduleId = formData.get("moduleId") as string;
-  const classId = formData.get("classId") as string;
+  const date = formData.get("date") as string;
+  let classId = formData.get("classId") as string;
   await assertWritePermission("/erp/cursos/clases");
+
+  if (!courseId || !moduleId) return;
+
+  const supabase = createAdminClient();
+
+  if (!classId) {
+    const { data: existingClass } = await supabase
+      .from("curso_clases")
+      .select("id")
+      .eq("module_id", moduleId)
+      .eq("date", date)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingClass?.id) {
+      classId = existingClass.id;
+    } else {
+      const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("es-EC", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+      const title = `Clase del ${dateFormatted}`;
+
+      const { data: newClass, error: createError } = await supabase
+        .from("curso_clases")
+        .insert({
+          module_id: moduleId,
+          title,
+          date,
+          start_time: "08:00",
+          end_time: "17:00",
+        })
+        .select("id")
+        .single();
+
+      if (createError || !newClass) {
+        throw new Error(createError?.message || "No se pudo registrar la clase.");
+      }
+      classId = newClass.id;
+    }
+  }
 
   const keys = Array.from(formData.keys());
   const attendanceData = keys
@@ -80,76 +125,190 @@ async function saveAttendance(formData: FormData) {
       };
     });
 
-  if (attendanceData.length === 0) return;
+  if (attendanceData.length > 0) {
+    const { error } = await supabase
+      .from("curso_asistencia")
+      .upsert(attendanceData, { onConflict: "class_id,student_id" });
 
-  const supabase = createAdminClient();
-  // Upsert
-  const { error } = await supabase
-    .from("curso_asistencia")
-    .upsert(attendanceData, { onConflict: "class_id,student_id" });
-
-  if (error) {
-    throw new Error(error.message);
+    if (error) throw new Error(error.message);
   }
 
-  revalidatePath(`/erp/cursos/clases?course_id=${courseId}&module_id=${moduleId}&class_id=${classId}`);
-  redirect(`/erp/cursos/clases?course_id=${courseId}&module_id=${moduleId}`);
+  revalidatePath(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${moduleId}&class_id=${classId}`);
+  redirect(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${moduleId}&class_id=${classId}&msg=saved`);
+}
+
+async function sendNotice(formData: FormData) {
+  "use server";
+  await assertWritePermission("/erp/cursos/clases");
+
+  const courseId = formData.get("courseId") as string;
+  const classId = formData.get("classId") as string || null;
+  const subject = (formData.get("subject") as string)?.trim();
+  const message = (formData.get("message") as string)?.trim();
+
+  if (!courseId || !subject || !message) return;
+
+  const supabase = createAdminClient();
+
+  const { data: course } = await supabase
+    .from("cursos")
+    .select("name")
+    .eq("id", courseId)
+    .single();
+
+  if (!course) return;
+
+  const { data: notice, error: insertError } = await supabase
+    .from("curso_avisos")
+    .insert({
+      course_id: courseId,
+      class_id: classId,
+      subject,
+      message,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !notice) {
+    throw new Error(insertError?.message || "Error al registrar el comunicado");
+  }
+
+  const { data: enrollments } = await supabase
+    .from("curso_inscripciones")
+    .select("alumnos(email, full_name)")
+    .eq("course_id", courseId)
+    .eq("status", "enrolled");
+
+  const recipients = (enrollments || [])
+    .map((e: any) => e.alumnos)
+    .filter((a) => a && a.email);
+
+  if (recipients.length === 0) {
+    await supabase
+      .from("curso_avisos")
+      .update({ status: "sent", updated_at: new Date().toISOString() })
+      .eq("id", notice.id);
+    
+    revalidatePath("/erp/cursos/clases");
+    redirect(`/erp/cursos/clases?tab=avisos&course_id=${courseId}&status=sent`);
+  }
+
+  let allSuccessful = true;
+  for (const student of recipients) {
+    try {
+      const success = await sendCourseNoticeEmail(
+        student.email,
+        student.full_name,
+        subject,
+        message,
+        course.name
+      );
+      if (!success) allSuccessful = false;
+    } catch (err) {
+      console.error(`Error enviando aviso a ${student.email}:`, err);
+      allSuccessful = false;
+    }
+  }
+
+  await supabase
+    .from("curso_avisos")
+    .update({
+      status: allSuccessful ? "sent" : "failed",
+    })
+    .eq("id", notice.id);
+
+  revalidatePath("/erp/cursos/clases");
+  redirect(`/erp/cursos/clases?tab=avisos&course_id=${courseId}&status=sent`);
 }
 
 export default async function ClasesPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ course_id?: string; module_id?: string; class_id?: string }>;
+  searchParams: Promise<{ 
+    tab?: string;
+    course_id?: string; 
+    module_id?: string; 
+    class_id?: string; 
+    date?: string;
+    msg?: string;
+    status?: string;
+    q?: string;
+  }>;
 }) {
   await assertPermission("/erp/cursos/clases");
   const canEdit = await hasWritePermission("/erp/cursos/clases");
 
   const searchParams = await searchParamsPromise;
+  const activeTab = searchParams.tab || "clases";
   const courseId = searchParams.course_id;
   const moduleId = searchParams.module_id;
   const classId = searchParams.class_id;
+  const selectedDate = searchParams.date || new Date().toISOString().split("T")[0];
+  const msgParam = searchParams.msg;
+  const statusParam = searchParams.status;
 
   const supabase = createAdminClient();
 
-  // 1. Si no hay curso seleccionado, mostrar listado de cursos para elegir
+  // =========================================================
+  // PASO 1: SI NO HAY CURSO SELECCIONADO, MOSTRAR SELECCIÓN DE CURSO
+  // =========================================================
   if (!courseId) {
     const { data: cursos } = await supabase
       .from("cursos")
       .select("*, curso_modulos(id)")
+      .in("status", ["active", "in_progress"])
       .order("start_date", { ascending: false });
 
     return (
-      <div className="max-w-4xl mx-auto pb-10">
-        <div className="flex items-center gap-2 mb-6">
-          <Presentation size={24} className="text-lilac-600" />
+      <div className="max-w-6xl mx-auto pb-8 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 shrink-0">
+            <Presentation size={20} />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-ink-900">Clases y Asistencia</h1>
-            <p className="text-sm text-ink-600">Selecciona un curso activo para planificar clases y tomar asistencia.</p>
+            <h1 className="text-xl font-bold text-ink-900 leading-tight">Clases, Asistencia y Comunicados</h1>
+            <p className="text-xs text-ink-500">Selecciona un curso activo o en ejecución para administrar sus clases, asistencias y comunicados.</p>
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {!cursos || cursos.length === 0 ? (
-            <div className="sm:col-span-2 text-center text-sm text-ink-500 italic py-10 bg-white border border-lilac-100 rounded-2xl">
-              No hay cursos registrados en el sistema.
+            <div className="sm:col-span-3 text-center text-xs text-ink-500 italic py-10 bg-white border border-lilac-100 rounded-2xl shadow-2xs">
+              No hay cursos en ejecución ni abiertos en este momento.
             </div>
           ) : (
             cursos.map((c) => (
               <Link
                 key={c.id}
-                href={`/erp/cursos/clases?course_id=${c.id}`}
-                className="card p-5 bg-white border border-lilac-100 shadow-sm hover:shadow-md transition hover:border-lilac-300 flex items-start gap-4"
+                href={`/erp/cursos/clases?tab=clases&course_id=${c.id}`}
+                className="card p-4 bg-white border border-lilac-100 shadow-2xs hover:shadow-md transition hover:border-lilac-300 flex flex-col justify-between gap-3 rounded-2xl group"
               >
-                <div className="w-10 h-10 bg-lilac-50 rounded-xl flex items-center justify-center text-lilac-600 shrink-0">
-                  <GraduationCap size={20} />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                      c.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"
+                    }`}>
+                      {c.status === "in_progress" ? "En Ejecución" : "Abierto"}
+                    </span>
+                    <span className="text-[10px] text-ink-400 font-bold bg-lilac-50 px-2 py-0.5 rounded-md">
+                      {c.curso_modulos?.length || 0} módulos
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-ink-950 text-sm leading-snug group-hover:text-lilac-700 transition-colors line-clamp-1">{c.name}</h3>
+                    <p className="text-xs text-ink-500 mt-0.5 line-clamp-2">{c.description || "Curso activo de posgrado."}</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <h3 className="font-bold text-ink-950 text-sm leading-snug line-clamp-1">{c.name}</h3>
-                  <p className="text-xs text-ink-500">
-                    Del {new Date(c.start_date + "T12:00:00").toLocaleDateString("es-EC")} al {new Date(c.end_date + "T12:00:00").toLocaleDateString("es-EC")}
-                  </p>
-                  <span className="inline-block text-[10px] bg-lilac-50 text-lilac-700 px-2 py-0.5 rounded-full font-bold">
-                    {c.curso_modulos?.length || 0} módulos
+
+                <div className="pt-2.5 border-t border-lilac-50 flex items-center justify-between text-xs text-ink-600 font-medium">
+                  <span className="flex items-center gap-1 text-[11px]">
+                    <Calendar size={12} className="text-lilac-500" />
+                    <span>{new Date(c.start_date + "T12:00:00").toLocaleDateString("es-EC")}</span>
+                  </span>
+                  <span className="text-lilac-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">
+                    Gestionar Curso →
                   </span>
                 </div>
               </Link>
@@ -160,340 +319,622 @@ export default async function ClasesPage({
     );
   }
 
-  // 2. Si hay curso, cargar datos del curso y sus módulos
-  const [courseRes, modulesRes] = await Promise.all([
+  // =========================================================
+  // PASO 2: CURSO SELECCIONADO
+  // =========================================================
+  const [courseRes, enrollmentsRes] = await Promise.all([
     supabase.from("cursos").select("*").eq("id", courseId).single(),
-    supabase.from("curso_modulos").select("*").eq("course_id", courseId).order("number"),
+    supabase.from("curso_inscripciones").select("id").eq("course_id", courseId).eq("status", "enrolled"),
   ]);
 
-  const course = courseRes.data;
-  if (!course) return redirect("/erp/cursos/clases");
+  const selectedCourse = courseRes.data;
+  if (!selectedCourse) return redirect("/erp/cursos/clases");
+  const enrolledCount = (enrollmentsRes.data || []).length;
 
-  const modules = modulesRes.data || [];
-  const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
-
-  // Si no hay módulos en el curso, indicar que debe crearlos primero
-  if (modules.length === 0) {
-    return (
-      <div className="max-w-3xl mx-auto pb-10 text-center space-y-4">
-        <div className="w-16 h-16 bg-lilac-50 text-lilac-600 rounded-full flex items-center justify-center mx-auto">
-          <BookOpen size={32} />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-ink-900">Curso sin Módulos</h2>
-          <p className="text-sm text-ink-600 max-w-md mx-auto mt-1">
-            Para poder programar clases y tomar asistencia, primero debes configurar los módulos del curso.
-          </p>
-        </div>
-        <Link href={`/erp/cursos/${courseId}?tab=modulos`} className="btn-primary text-xs py-2.5 px-4 shadow-sm inline-block">
-          Configurar Módulos Ahora
-        </Link>
-      </div>
-    );
-  }
-
-  // Cargar las clases del módulo seleccionado y los profesores
-  const [classesRes, teachersRes] = await Promise.all([
-    supabase
-      .from("curso_clases")
-      .select("*, profesores(id, full_name)")
-      .eq("module_id", selectedModule.id)
-      .order("date")
-      .order("start_time"),
-    supabase.from("profesores").select("id, full_name").order("full_name"),
-  ]);
-
-  const classes = classesRes.data || [];
-  const teachers = teachersRes.data || [];
-
-  // 3. VISTA DE CONTROL DE ASISTENCIA (si class_id está seleccionado)
-  if (classId) {
-    const [classDetailRes, studentsRes, attendanceRes] = await Promise.all([
-      supabase.from("curso_clases").select("*, curso_modulos(name)").eq("id", classId).single(),
-      supabase.from("curso_inscripciones").select("status, alumnos(*)").eq("course_id", courseId).eq("status", "enrolled"),
-      supabase.from("curso_asistencia").select("*").eq("class_id", classId),
-    ]);
-
-    const classDetail = classDetailRes.data;
-    const enrolledStudents = (studentsRes.data || []).map((e: any) => e.alumnos).filter(Boolean);
-    const attendanceRecords = attendanceRes.data || [];
-
-    // Map para lookup rápido de estados ya registrados
-    const attendanceMap = new Map<string, { status: string; notes: string | null }>();
-    attendanceRecords.forEach((r) => {
-      attendanceMap.set(r.student_id, { status: r.status, notes: r.notes });
-    });
-
-    return (
-      <div className="max-w-4xl mx-auto pb-10">
-        <Link
-          href={`/erp/cursos/clases?course_id=${courseId}&module_id=${selectedModule.id}`}
-          className="inline-flex items-center gap-1 text-sm text-ink-600 hover:text-ink-900 mb-4 transition-colors"
-        >
-          <ArrowLeft size={16} /> Volver a las Clases
-        </Link>
-
-        <div className="flex items-center gap-2 mb-6">
-          <CheckSquare size={24} className="text-lilac-600" />
-          <div>
-            <h1 className="text-xl font-bold text-ink-900">Control de Asistencia</h1>
-            <p className="text-xs text-ink-500">
-              {course.name} &middot; Módulo: {classDetail?.curso_modulos?.name} &middot; Clase: <strong>{classDetail?.title}</strong>
-            </p>
-          </div>
-        </div>
-
-        <form action={saveAttendance} className="card bg-white border border-lilac-100 shadow-sm overflow-hidden">
-          <input type="hidden" name="courseId" value={courseId} />
-          <input type="hidden" name="moduleId" value={selectedModule.id} />
-          <input type="hidden" name="classId" value={classId} />
-
-          <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-            <span className="text-xs font-bold text-ink-700 uppercase tracking-wider">Listado de alumnos</span>
-            <span className="text-xs text-ink-400 font-bold">{enrolledStudents.length} alumnos matriculados</span>
-          </div>
-
-          {enrolledStudents.length === 0 ? (
-            <div className="p-8 text-center text-sm text-ink-500 italic">No hay alumnos activos matriculados en este curso.</div>
-          ) : (
-            <div className="divide-y divide-lilac-50">
-              {enrolledStudents.map((student) => {
-                const recorded = attendanceMap.get(student.id) || { status: "present", notes: "" };
-                return (
-                  <div key={student.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-ink-950 text-sm">{student.full_name}</div>
-                      <div className="text-[10px] text-ink-400 font-mono">{student.document_number}</div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4">
-                      {/* Estado */}
-                      <div className="flex items-center gap-2">
-                        {[
-                          { val: "present", label: "Presente", cls: "peer-checked:bg-green-600 peer-checked:text-white border-green-200 text-green-700" },
-                          { val: "absent", label: "Ausente", cls: "peer-checked:bg-red-500 peer-checked:text-white border-red-200 text-red-700" },
-                          { val: "justified", label: "Justificado", cls: "peer-checked:bg-amber-500 peer-checked:text-white border-amber-200 text-amber-700" },
-                        ].map((s) => (
-                          <label key={s.val} className="relative cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`status_${student.id}`}
-                              value={s.val}
-                              defaultChecked={recorded.status === s.val}
-                              className="peer sr-only"
-                              disabled={!canEdit}
-                            />
-                            <span className={`inline-block text-xs font-semibold px-2.5 py-1 border rounded-lg transition-all ${s.cls}`}>
-                              {s.label}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-
-                      {/* Nota/Observación */}
-                      <input
-                        type="text"
-                        name={`notes_${student.id}`}
-                        defaultValue={recorded.notes || ""}
-                        placeholder="Nota / justificación..."
-                        className="input text-xs py-1.5 w-full sm:w-44 focus:ring-1 focus:ring-lilac-500"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {canEdit && enrolledStudents.length > 0 && (
-            <div className="px-5 py-4 border-t border-lilac-50 bg-lilac-50/10 flex justify-end">
-              <button type="submit" className="btn-primary text-xs py-2 px-5 shadow-sm font-semibold">
-                Guardar Asistencia
-              </button>
-            </div>
-          )}
-        </form>
-      </div>
-    );
-  }
-
-  // 4. VISTA DE LISTADO DE CLASES Y PROGRAMACIÓN
   return (
-    <div className="max-w-5xl mx-auto pb-10">
-      <Link href="/erp/cursos/clases" className="inline-flex items-center gap-1 text-sm text-ink-600 hover:text-ink-900 mb-4 transition-colors">
-        <ArrowLeft size={16} /> Cambiar de Curso
-      </Link>
+    <div className="max-w-6xl mx-auto pb-8 space-y-4">
+      {/* ENCABEZADO COMPACTO DE CURSO + PESTAÑAS */}
+      <div className="bg-white border border-lilac-200 shadow-2xs rounded-2xl p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 font-bold shrink-0">
+              <GraduationCap size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold text-ink-950 leading-tight">{selectedCourse.name}</h1>
+                <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                  selectedCourse.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"
+                }`}>
+                  {selectedCourse.status === "in_progress" ? "En Ejecución" : "Abierto"}
+                </span>
+                <span className="text-[10px] font-bold text-ink-500 bg-lilac-50 px-2 py-0.5 rounded-md border border-lilac-100 inline-flex items-center gap-1">
+                  <Users size={11} /> {enrolledCount} Alumnos
+                </span>
+              </div>
+              <p className="text-xs text-ink-500 mt-0.5">
+                Del {new Date(selectedCourse.start_date + "T12:00:00").toLocaleDateString("es-EC")} al {new Date(selectedCourse.end_date + "T12:00:00").toLocaleDateString("es-EC")}
+              </p>
+            </div>
+          </div>
 
-      {/* Banner de Info del Curso */}
-      <div className="card p-5 bg-white border border-lilac-100 shadow-sm mb-6">
-        <span className="text-[10px] font-bold text-lilac-700 bg-lilac-50 px-2 py-0.5 border border-lilac-100 rounded-full uppercase">
-          Curso seleccionado
-        </span>
-        <h2 className="text-lg font-bold text-ink-950 mt-1">{course.name}</h2>
-      </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href={`/erp/cursos/${selectedCourse.id}`}
+              className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-50 transition shadow-2xs"
+            >
+              <span>Detalle</span>
+              <BookOpen size={13} />
+            </Link>
+            <Link
+              href="/erp/cursos/clases"
+              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-100 transition shadow-2xs"
+            >
+              <ArrowLeft size={13} />
+              <span>Cambiar Curso</span>
+            </Link>
+          </div>
+        </div>
 
-      {/* Selector de Módulos (Tabs) */}
-      <div className="flex border-b border-lilac-100 mb-6 overflow-x-auto gap-1">
-        {modules.map((m) => (
+        {/* PESTAÑAS DE NAVEGACIÓN COMPACTAS */}
+        <div className="flex border-t border-lilac-100 pt-3 gap-2 overflow-x-auto">
           <Link
-            key={m.id}
-            href={`/erp/cursos/clases?course_id=${courseId}&module_id=${m.id}`}
-            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 -mb-px whitespace-nowrap transition-colors ${
-              selectedModule.id === m.id
-                ? "border-lilac-600 text-lilac-700 bg-lilac-50/30"
-                : "border-transparent text-ink-600 hover:text-ink-900"
+            href={`/erp/cursos/clases?tab=clases&course_id=${courseId}`}
+            className={`flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl transition whitespace-nowrap ${
+              activeTab === "clases"
+                ? "bg-lilac-600 text-white shadow-2xs"
+                : "text-ink-600 hover:text-ink-900 hover:bg-lilac-50/60"
             }`}
           >
-            Módulo {m.number}: {m.name}
+            <Calendar size={14} />
+            <span>Cronograma y Asistencia</span>
           </Link>
-        ))}
+
+          <Link
+            href={`/erp/cursos/clases?tab=avisos&course_id=${courseId}`}
+            className={`flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl transition whitespace-nowrap ${
+              activeTab === "avisos"
+                ? "bg-lilac-600 text-white shadow-2xs"
+                : "text-ink-600 hover:text-ink-900 hover:bg-lilac-50/60"
+            }`}
+          >
+            <Megaphone size={14} />
+            <span>Avisos y Comunicados</span>
+          </Link>
+        </div>
       </div>
 
-      {/* Contenido Clases */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Listado de Clases */}
-        <div className="md:col-span-2 space-y-3">
-          <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-              <span className="text-sm font-semibold text-ink-800">Cronograma de Clases</span>
-              <span className="text-xs text-ink-400 bg-lilac-50 px-2.5 py-0.5 rounded-full font-bold">
-                {classes.length} clases
-              </span>
-            </div>
+      {/* ========================================== */}
+      {/* PESTAÑA 2: AVISOS Y COMUNICADOS            */}
+      {/* ========================================== */}
+      {activeTab === "avisos" && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          {await (async () => {
+            let classesForSelector: any[] = [];
+            const { data: modules } = await supabase
+              .from("curso_modulos")
+              .select("id")
+              .eq("course_id", courseId);
+            
+            if (modules && modules.length > 0) {
+              const moduleIds = modules.map(m => m.id);
+              const { data: loadedClasses } = await supabase
+                .from("curso_clases")
+                .select("id, title, date, start_time")
+                .in("module_id", moduleIds)
+                .order("date");
+              classesForSelector = loadedClasses || [];
+            }
 
-            {classes.length === 0 ? (
-              <div className="p-8 text-center text-sm text-ink-500 italic">No hay clases programadas para este módulo.</div>
-            ) : (
-              <div className="divide-y divide-lilac-50">
-                {classes.map((cls) => (
-                  <div key={cls.id} className="p-5 flex justify-between items-start gap-4 hover:bg-lilac-50/10 transition-colors">
-                    <div className="space-y-2">
-                      <div className="space-y-0.5">
-                        <h3 className="font-bold text-ink-950 text-sm flex items-center gap-1.5">
-                          <Presentation size={15} className="text-lilac-600" /> {cls.title}
-                        </h3>
-                        {cls.description && (
-                          <p className="text-xs text-ink-600 leading-relaxed max-w-md">{cls.description}</p>
-                        )}
+            const { data: avisos } = await supabase
+              .from("curso_avisos")
+              .select(`
+                id,
+                subject,
+                message,
+                sent_at,
+                status,
+                cursos (name),
+                curso_clases (title, date)
+              `)
+              .eq("course_id", courseId)
+              .order("sent_at", { ascending: false })
+              .limit(30);
+
+            const successNotice = statusParam === "sent";
+
+            return (
+              <div className="space-y-4">
+                {successNotice && (
+                  <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-3 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+                    <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+                    ¡Comunicado enviado con éxito a los alumnos matriculados en {selectedCourse.name}!
+                  </div>
+                )}
+
+                <div className="grid md:grid-cols-3 gap-4 items-start">
+                  <div className="md:col-span-1">
+                    {canEdit ? (
+                      <div className="card p-4 bg-white border border-lilac-100 shadow-2xs rounded-2xl">
+                        <h2 className="text-xs font-bold text-ink-950 mb-3 pb-2 border-b border-lilac-50 flex items-center gap-1.5">
+                          <Send size={14} className="text-lilac-600" /> Redactar Comunicado
+                        </h2>
+                        <form action={sendNotice} className="space-y-3">
+                          <input type="hidden" name="courseId" value={courseId} />
+                          <div>
+                            <label className="label text-ink-800 font-semibold text-[11px]">Curso Destinatario</label>
+                            <input
+                              type="text"
+                              disabled
+                              value={selectedCourse.name}
+                              className="input text-xs py-1.5 bg-gray-50 border-gray-200 font-bold text-ink-900"
+                            />
+                          </div>
+
+                          {classesForSelector.length > 0 && (
+                            <div>
+                              <label className="label text-ink-800 text-[11px]">Asociar a una clase (opcional)</label>
+                              <select name="classId" className="input text-xs py-1.5">
+                                <option value="">— Ninguna clase en particular —</option>
+                                {classesForSelector.map((cls) => (
+                                  <option key={cls.id} value={cls.id}>
+                                    {cls.title} ({new Date(cls.date + "T12:00:00").toLocaleDateString("es-EC")})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="label text-ink-800 text-[11px]">Asunto del correo *</label>
+                            <input
+                              name="subject"
+                              required
+                              placeholder="Ej: Requisitos para el Módulo Clínico"
+                              className="input text-xs py-1.5"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="label text-ink-800 text-[11px]">Mensaje *</label>
+                            <textarea
+                              name="message"
+                              required
+                              rows={5}
+                              placeholder="Escribe el mensaje oficial..."
+                              className="input text-xs py-1.5 resize-none"
+                            />
+                          </div>
+
+                          <button type="submit" className="w-full btn-primary text-xs py-2 mt-1 flex items-center justify-center gap-1.5 shadow-2xs font-semibold cursor-pointer">
+                            <Send size={13} /> Enviar email ({enrolledCount} alumnos)
+                          </button>
+                        </form>
+                      </div>
+                    ) : (
+                      <div className="card p-4 bg-lilac-50/50 border border-lilac-100 text-center text-xs text-ink-500 italic rounded-2xl">
+                        No tienes permisos para redactar o enviar avisos.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="md:col-span-2 space-y-3">
+                    <div className="bg-white border border-lilac-100 rounded-2xl shadow-2xs overflow-hidden">
+                      <div className="px-4 py-3 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
+                        <span className="text-xs font-bold text-ink-900">
+                          Comunicados Enviados
+                        </span>
+                        <span className="text-[11px] text-ink-500 bg-lilac-50 border border-lilac-100 px-2.5 py-0.5 rounded-full font-bold">
+                          {avisos?.length ?? 0} comunicados
+                        </span>
                       </div>
 
-                      <div className="flex flex-wrap gap-4 text-[11px] text-ink-600 font-medium">
-                        <span className="flex items-center gap-1">
-                          <Calendar size={13} className="text-ink-400" /> {new Date(cls.date + "T12:00:00").toLocaleDateString("es-EC", { weekday: "short", day: "2-digit", month: "short" })}
-                        </span>
-                        <span className="flex items-center gap-1 font-mono">
-                          <Clock size={13} className="text-ink-400" /> {cls.start_time.slice(0, 5)} - {cls.end_time.slice(0, 5)}
-                        </span>
-                        {cls.classroom && (
-                          <span className="flex items-center gap-1">
-                            <MapPin size={13} className="text-ink-400" /> Aula: {cls.classroom}
-                          </span>
-                        )}
-                        {cls.profesores && (
-                          <span className="flex items-center gap-1">
-                            <User size={13} className="text-ink-400" /> Docente: {cls.profesores.full_name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      {!avisos || avisos.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-ink-500 italic">Aún no se han enviado comunicados en este curso.</div>
+                      ) : (
+                        <div className="divide-y divide-lilac-50">
+                          {avisos.map((av: any) => (
+                            <div key={av.id} className="p-4 space-y-1.5 hover:bg-lilac-50/20 transition-colors">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-0.5">
+                                  <h3 className="font-bold text-ink-950 text-xs flex items-center gap-1.5">
+                                    <Mail size={13} className="text-lilac-600" /> {av.subject}
+                                  </h3>
+                                  <p className="text-[10px] text-ink-400 font-semibold">
+                                    {av.curso_clases ? `Clase: ${av.curso_clases.title}` : "Aviso General"}
+                                  </p>
+                                </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Link
-                        href={`/erp/cursos/clases?course_id=${courseId}&module_id=${selectedModule.id}&class_id=${cls.id}`}
-                        className="btn-secondary text-[11px] font-bold py-1 px-3 flex items-center gap-1 border border-lilac-200 hover:bg-lilac-50 rounded-xl transition"
-                      >
-                        <UserCheck size={12} /> Asistencia
-                      </Link>
+                                <div className="flex flex-col items-end shrink-0 text-right space-y-0.5">
+                                  <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                                    av.status === "sent" ? "bg-green-50 text-green-700 border-green-200" :
+                                    av.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-150 animate-pulse" :
+                                    "bg-red-50 text-red-700 border-red-100"
+                                  }`}>
+                                    {av.status === "sent" ? "Enviado" :
+                                     av.status === "pending" ? "Procesando" : "Fallido"}
+                                  </span>
+                                  <span className="text-[9px] text-ink-500 font-medium">
+                                    {new Date(av.sent_at).toLocaleString("es-EC")}
+                                  </span>
+                                </div>
+                              </div>
 
-                      {canEdit && (
-                        <ConfirmDeleteButton
-                          action={deleteClass}
-                          idName="classId"
-                          idValue={cls.id}
-                          extraFields={{ courseId, moduleId: selectedModule.id }}
-                          confirmMessage="¿Estás seguro de que deseas eliminar esta clase del cronograma?"
-                        />
+                              <p className="text-xs text-ink-600 bg-gray-50 border border-gray-100 p-2.5 rounded-xl whitespace-pre-wrap leading-relaxed">
+                                {av.message}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
+      )}
 
-        {/* Programar Clase */}
-        <div className="md:col-span-1">
-          {canEdit ? (
-            <div className="card p-5 bg-white border border-lilac-100 shadow-sm">
-              <h2 className="text-sm font-bold text-ink-950 mb-4 pb-2 border-b border-lilac-50 flex items-center gap-1.5">
-                <Plus size={15} className="text-lilac-600" /> Programar Clase
-              </h2>
-              <form action={addClass} className="space-y-4">
-                <input type="hidden" name="courseId" value={courseId} />
-                <input type="hidden" name="moduleId" value={selectedModule.id} />
-                <div>
-                  <label className="label text-ink-800">Título de la clase *</label>
-                  <input
-                    name="title"
-                    required
-                    placeholder="Ej: Cirugía guiada práctica"
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="label text-ink-800">Descripción / Temario</label>
-                  <textarea
-                    name="description"
-                    rows={2}
-                    placeholder="Indica temas o requisitos..."
-                    className="input resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="label text-ink-800">Fecha *</label>
-                  <input name="date" type="date" required className="input" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="label text-ink-800">Hora Inicio *</label>
-                    <input name="startTime" type="time" required className="input" />
+      {/* ========================================== */}
+      {/* PESTAÑA 1: CRONOGRAMA Y ASISTENCIA         */}
+      {/* ========================================== */}
+      {activeTab === "clases" && (
+        <div className="space-y-3 animate-in fade-in duration-150">
+          {await (async () => {
+            const modulesRes = await supabase.from("curso_modulos").select("*").eq("course_id", courseId).order("number");
+            const modules = modulesRes.data || [];
+
+            if (modules.length === 0) {
+              return (
+                <div className="max-w-xl mx-auto py-8 text-center space-y-3 bg-white border border-lilac-100 rounded-2xl shadow-2xs">
+                  <div className="w-12 h-12 bg-lilac-50 text-lilac-600 rounded-full flex items-center justify-center mx-auto">
+                    <BookOpen size={24} />
                   </div>
                   <div>
-                    <label className="label text-ink-800">Hora Fin *</label>
-                    <input name="endTime" type="time" required className="input" />
+                    <h2 className="text-base font-bold text-ink-900">Curso sin Módulos</h2>
+                    <p className="text-xs text-ink-600 max-w-sm mx-auto mt-0.5">
+                      Para tomar asistencia y programar clases, primero configura los módulos del curso.
+                    </p>
                   </div>
+                  <Link href={`/erp/cursos/${courseId}?tab=modulos`} className="btn-primary text-xs py-2 px-4 shadow-2xs inline-block font-semibold">
+                    Configurar Módulos Ahora
+                  </Link>
                 </div>
-                <div>
-                  <label className="label text-ink-800">Docente a cargo</label>
-                  <select name="teacherId" className="input text-xs">
-                    <option value="">— Ninguno / Por definir —</option>
-                    {teachers.map((t) => (
-                      <option key={t.id} value={t.id}>{t.full_name}</option>
-                    ))}
-                  </select>
+              );
+            }
+
+            const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
+
+            // Cargar TODAS las clases programadas para este módulo
+            const enrolledDocs = await supabase
+              .from("curso_inscripciones")
+              .select("id, status, created_at, alumnos(*)")
+              .eq("course_id", courseId)
+              .eq("status", "enrolled");
+
+            const enrolledStudents = enrolledDocs.data || [];
+            const enrolledDocNumbers = enrolledStudents
+              .map((e: any) => e.alumnos?.document_number)
+              .filter(Boolean);
+
+            const [classesRes, moduleBillingRes, courseInvoicesRes] = await Promise.all([
+              supabase
+                .from("curso_clases")
+                .select("*, profesores(id, full_name)")
+                .eq("module_id", selectedModule.id)
+                .order("date")
+                .order("start_time"),
+              supabase
+                .from("curso_modulo_inscripciones")
+                .select("id, enrollment_id, billing_status, invoice_id, invoices(invoice_number, sri_status)")
+                .eq("module_id", selectedModule.id),
+              enrolledDocNumbers.length > 0
+                ? supabase
+                    .from("invoices")
+                    .select("client_document, created_at, sri_status, id, invoice_number")
+                    .in("client_document", enrolledDocNumbers)
+                    .neq("sri_status", "cancelled")
+                    .order("created_at", { ascending: false })
+                : Promise.resolve({ data: [] }),
+            ]);
+
+            const classes = classesRes.data || [];
+            const enrollmentsList = enrolledStudents;
+            const moduleBillingList = moduleBillingRes.data || [];
+            const courseInvoices = (courseInvoicesRes as any).data || [];
+
+            // Determinar la clase activa a mostrar
+            const activeClass = classes.find(c => c.id === classId) || classes[0] || null;
+
+            // Cargar asistencia de la clase activa
+            let attendanceRecords: any[] = [];
+            if (activeClass) {
+              const { data: attData } = await supabase.from("curso_asistencia").select("*").eq("class_id", activeClass.id);
+              attendanceRecords = attData || [];
+            }
+
+            const attendanceMap = new Map<string, { status: string; notes: string | null }>();
+            attendanceRecords.forEach((r) => {
+              attendanceMap.set(r.student_id, { status: r.status, notes: r.notes });
+            });
+
+            const billingMap = new Map<string, { billingStatus: string; invoiceNumber?: string; inscriptionId: string }>();
+            moduleBillingList.forEach((mb: any) => {
+              billingMap.set(mb.enrollment_id, {
+                billingStatus: mb.billing_status,
+                invoiceNumber: mb.invoices?.invoice_number,
+                inscriptionId: mb.id,
+              });
+            });
+
+            return (
+              <div className="space-y-3">
+                {/* PESTAÑAS DE MÓDULOS ENCABEZADO UNIFICADO */}
+                <div className="flex border-b border-lilac-200 bg-white px-3 pt-2 rounded-t-2xl gap-2 overflow-x-auto">
+                  {modules.map((m) => (
+                    <Link
+                      key={m.id}
+                      href={`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${m.id}`}
+                      className={`px-4 py-2 text-xs font-bold rounded-t-xl border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                        selectedModule.id === m.id
+                          ? "border-lilac-600 text-lilac-800 bg-lilac-50/50"
+                          : "border-transparent text-ink-600 hover:text-ink-900 hover:bg-lilac-50/30"
+                      }`}
+                    >
+                      Módulo {m.number}: {m.name} (${Number(m.cost).toFixed(2)})
+                    </Link>
+                  ))}
                 </div>
-                <div>
-                  <label className="label text-ink-800">Aula / Laboratorio</label>
-                  <input
-                    name="classroom"
-                    placeholder="Ej: Aula A, Preclínico 3..."
-                    className="input"
-                  />
+
+                {/* TARJETA UNIFICADA COMPACTA: FECHA + NUEVA CLASE + ASISTENCIA */}
+                <div className="bg-white border border-lilac-200 rounded-b-2xl rounded-tr-2xl shadow-2xs p-4 space-y-4">
+                  {/* BARRA UNIFICADA DE CONTROL DE CLASE */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-lilac-100">
+                    {/* Izquierda: Selector de Clases existentes */}
+                    <div className="flex items-center gap-2 overflow-x-auto">
+                      <span className="text-xs font-bold text-ink-800 shrink-0">Clases del Módulo:</span>
+                      {classes.length === 0 ? (
+                        <span className="text-xs text-ink-400 italic">Sin clases guardadas aún</span>
+                      ) : (
+                        classes.map((cls, idx) => {
+                          const isSelected = activeClass?.id === cls.id;
+                          const dateFormatted = new Date(cls.date + "T12:00:00").toLocaleDateString("es-EC", {
+                            day: "2-digit",
+                            month: "short",
+                          });
+
+                          return (
+                            <div key={cls.id} className="flex items-center shrink-0">
+                              <Link
+                                href={`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${selectedModule.id}&class_id=${cls.id}`}
+                                className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  isSelected
+                                    ? "bg-lilac-600 text-white border-lilac-700 shadow-2xs"
+                                    : "bg-lilac-50/60 text-ink-800 border-lilac-200 hover:bg-lilac-100"
+                                }`}
+                              >
+                                <Calendar size={12} />
+                                <span>Clase #{idx + 1} ({dateFormatted})</span>
+                              </Link>
+
+                              {canEdit && (
+                                <ConfirmDeleteButton
+                                  action={deleteClass}
+                                  idName="classId"
+                                  idValue={cls.id}
+                                  extraFields={{ courseId, moduleId: selectedModule.id }}
+                                  confirmMessage="¿Eliminar esta clase?"
+                                />
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Derecha: Formulario ultra rápido (Fecha + Botón Nueva Clase) */}
+                    {canEdit && (
+                      <form action={addClass} className="flex items-center gap-2 shrink-0">
+                        <input type="hidden" name="courseId" value={courseId} />
+                        <input type="hidden" name="moduleId" value={selectedModule.id} />
+                        
+                        <input
+                          type="date"
+                          name="date"
+                          required
+                          defaultValue={selectedDate}
+                          className="bg-lilac-50/70 border border-lilac-200 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-500"
+                        />
+                        <button
+                          type="submit"
+                          className="btn-primary text-xs py-1 px-3 shadow-2xs font-bold shrink-0 cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus size={13} />
+                          <span>Nueva Clase</span>
+                        </button>
+                      </form>
+                    )}
+                  </div>
+
+                  {msgParam === "saved" && (
+                    <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-2.5 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+                      <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+                      <span>¡Asistencia guardada exitosamente!</span>
+                    </div>
+                  )}
+
+                  {/* FORMULARIO DE ASISTENCIA Y CONTROL DE PAGOS */}
+                  {activeClass ? (
+                    <form action={saveDirectAttendance} className="space-y-3">
+                      <input type="hidden" name="courseId" value={courseId} />
+                      <input type="hidden" name="moduleId" value={selectedModule.id} />
+                      <input type="hidden" name="date" value={activeClass.date} />
+                      <input type="hidden" name="classId" value={activeClass.id} />
+
+                      <div className="flex items-center justify-between bg-lilac-50/40 px-3.5 py-2 rounded-xl border border-lilac-100">
+                        <span className="text-xs font-bold text-ink-950 flex items-center gap-1.5">
+                          <UserCheck size={15} className="text-lilac-600" />
+                          Toma de Asistencia &mdash; Sesión del {new Date(activeClass.date + "T12:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "long", year: "numeric" })}
+                        </span>
+                        <span className="text-[11px] font-bold text-lilac-800 bg-white border border-lilac-200 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                          {enrollmentsList.length} Alumnos
+                        </span>
+                      </div>
+
+                      {enrollmentsList.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-xl">
+                          No hay alumnos matriculados en este curso todavía.
+                        </div>
+                      ) : (
+                        <div className="border border-lilac-200 rounded-xl overflow-hidden shadow-2xs divide-y divide-lilac-100 bg-white">
+                          {enrollmentsList.map((enrollment: any) => {
+                            const student = enrollment.alumnos;
+                            if (!student) return null;
+
+                            // POR DEFECTO AUSENTE ANTES DE TOMAR ASISTENCIA
+                            const hasRecord = attendanceMap.has(student.id);
+                            const recorded = attendanceMap.get(student.id) || { status: "absent", notes: "" };
+                            const currentStatus = hasRecord ? recorded.status : "absent";
+                            
+                            const hasBillingRecord = billingMap.has(enrollment.id);
+                            const billingInfo = billingMap.get(enrollment.id) || { billingStatus: "pending", inscriptionId: "" };
+
+                            // Solo detectar "pago completo" por factura cuando NO existe un registro
+                            // en curso_modulo_inscripciones para este módulo+alumno.
+                            // Si existe un registro con 'pending', el alumno solo pagó inscripción → debe facturar módulo.
+                            const enrollmentCreatedAt = new Date(enrollment.created_at || 0).getTime();
+                            let effectiveBillingStatus = billingInfo.billingStatus;
+                            let fullCourseInvoiceNumber: string | null = null;
+
+                            if (!hasBillingRecord) {
+                              // El alumno se matriculó antes de que existieran módulos y posiblemente pagó el curso completo
+                              const matchedInvoice = courseInvoices.find((inv: any) =>
+                                inv.client_document?.trim() === student.document_number?.trim() &&
+                                new Date(inv.created_at).getTime() >= enrollmentCreatedAt - 120000
+                              );
+                              if (matchedInvoice) {
+                                effectiveBillingStatus = "invoiced_full";
+                                fullCourseInvoiceNumber = matchedInvoice.invoice_number || null;
+                              }
+                            }
+
+                            const prefName = encodeURIComponent(student.full_name);
+                            const prefDoc = encodeURIComponent(student.document_number);
+                            const prefEmail = encodeURIComponent(student.email);
+                            const prefPhone = encodeURIComponent(student.phone);
+                            const prefDesc = encodeURIComponent(`Pago Curso: ${selectedCourse.name} - Módulo ${selectedModule.number}: ${selectedModule.name}`);
+                            const prefPrice = encodeURIComponent(selectedModule.cost.toString());
+
+                            // RETORNO AUTOMÁTICO A LA PANTALLA DE ASISTENCIA Y CURSO DESPUÉS DE FACTURAR
+                            const returnUrlParam = encodeURIComponent(`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${selectedModule.id}&class_id=${activeClass.id}`);
+                            const invoiceLink = `/erp/facturacion/nueva?client_name=${prefName}&client_document=${prefDoc}&client_email=${prefEmail}&client_phone=${prefPhone}&module_enrollment_ids=${billingInfo.inscriptionId}&item_description=${prefDesc}&item_price=${prefPrice}&return_url=${returnUrlParam}`;
+
+                            return (
+                              <div key={student.id} className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-lilac-50/20 transition-colors">
+                                <div className="space-y-1">
+                                  <div className="font-bold text-ink-950 text-xs flex items-center gap-1.5">
+                                    <span>{student.full_name}</span>
+                                    {student.professional_title && (
+                                      <span className="text-[9px] font-semibold text-lilac-700 bg-lilac-50 border border-lilac-100 px-1.5 py-0.2 rounded-md">
+                                        {student.professional_title}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-ink-500 font-mono">
+                                    Cédula: {student.document_number} &middot; Tel: {student.phone}
+                                  </div>
+
+                                  {/* ESTADO DE PAGO DEL MÓDULO INLINE COMPACTO */}
+                                  <div className="pt-0.5 flex items-center gap-1.5">
+                                    <span className="text-[10px] font-semibold text-ink-600">Pago Módulo:</span>
+                                    {(effectiveBillingStatus === "invoiced" || effectiveBillingStatus === "invoiced_full") ? (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.2 rounded-md">
+                                        <CheckCircle2 size={10} />
+                                        {effectiveBillingStatus === "invoiced_full"
+                                          ? `Pagado - Curso Completo${fullCourseInvoiceNumber ? ` (#${fullCourseInvoiceNumber})` : ""}`
+                                          : `Facturado${billingInfo.invoiceNumber ? ` (#${billingInfo.invoiceNumber})` : ""}`}
+                                      </span>
+                                    ) : effectiveBillingStatus === "free" ? (
+                                      <span className="text-[9px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2 py-0.2 rounded-md">
+                                        Beca / Sin Costo
+                                      </span>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.2 rounded-md">
+                                          Pendiente de Pago
+                                        </span>
+                                        {canEdit && (
+                                          <Link
+                                            href={invoiceLink}
+                                            className="btn-primary text-[9px] font-bold py-0.5 px-2 shadow-2xs hover:scale-[1.02] active:scale-[0.98] transition-transform rounded-md"
+                                          >
+                                            Facturar Módulo
+                                          </Link>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* TOMA DE ASISTENCIA: PRESENTE / AUSENTE (POR DEFECTO AUSENTE) */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-1">
+                                    {[
+                                      { val: "present", label: "Presente", cls: "peer-checked:bg-green-600 peer-checked:text-white border-green-200 text-green-700" },
+                                      { val: "absent", label: "Ausente", cls: "peer-checked:bg-red-500 peer-checked:text-white border-red-200 text-red-700" },
+                                    ].map((s) => (
+                                      <label key={s.val} className="relative cursor-pointer">
+                                        <input
+                                          type="radio"
+                                          name={`status_${student.id}`}
+                                          value={s.val}
+                                          defaultChecked={currentStatus === s.val}
+                                          className="peer sr-only"
+                                          disabled={!canEdit}
+                                        />
+                                        <span className={`inline-block text-[11px] font-bold px-3 py-1 border rounded-lg transition-all cursor-pointer ${s.cls}`}>
+                                          {s.label}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    name={`notes_${student.id}`}
+                                    defaultValue={recorded.notes || ""}
+                                    placeholder="Nota / Observación..."
+                                    className="input text-xs py-1 px-2.5 w-40 focus:ring-1 focus:ring-lilac-500 rounded-lg"
+                                    disabled={!canEdit}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {canEdit && enrollmentsList.length > 0 && (
+                        <div className="pt-1 flex justify-end">
+                          <button type="submit" className="btn-primary text-xs py-2 px-5 shadow-sm font-bold cursor-pointer flex items-center gap-1.5">
+                            <CheckCircle2 size={15} />
+                            <span>Guardar Asistencia</span>
+                          </button>
+                        </div>
+                      )}
+                    </form>
+                  ) : (
+                    <div className="p-8 text-center text-xs text-ink-500 italic bg-lilac-50/20 border border-lilac-100 rounded-xl">
+                      Para empezar a tomar asistencia, ingresa la fecha arriba y presiona <strong>"+ Nueva Clase"</strong>.
+                    </div>
+                  )}
                 </div>
-                <button type="submit" className="w-full btn-primary text-xs py-2.5 mt-2 shadow-sm">
-                  Programar Clase
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="card p-5 bg-lilac-50/50 border border-lilac-100 text-center text-xs text-ink-500 italic">
-              No tienes permisos para programar clases.
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </div>
-      </div>
+      )}
     </div>
   );
 }

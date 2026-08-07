@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { FileText, Plus, CheckCircle2, XCircle, AlertCircle, Clock } from "lucide-react";
+import { FileText, Plus, CheckCircle2, XCircle, AlertCircle, Clock, Printer } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
@@ -64,12 +64,13 @@ export default async function BillingDashboard() {
                 <th className="px-5 py-4">Fecha Emisión</th>
                 <th className="px-5 py-4 text-right">Total</th>
                 <th className="px-5 py-4 text-center">Estado SRI</th>
+                <th className="px-5 py-4 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-lilac-50">
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-ink-500">
+                  <td colSpan={6} className="px-5 py-12 text-center text-ink-500">
                     <div className="flex flex-col items-center gap-3">
                       <FileText size={40} className="text-lilac-200" />
                       <p>No se han emitido facturas aún.</p>
@@ -87,7 +88,7 @@ export default async function BillingDashboard() {
                   const dateStr = new Date(inv.created_at).toLocaleDateString('es-EC');
                   
                   return (
-                    <tr key={inv.id} className="hover:bg-lilac-50/30 transition-colors cursor-pointer">
+                    <tr key={inv.id} className="hover:bg-lilac-50/30 transition-colors">
                       <td className="px-5 py-4">
                         <Link href={`/erp/facturacion/${inv.id}`} className="block">
                           <div className="font-bold text-ink-900">{inv.invoice_number || 'Borrador'}</div>
@@ -117,6 +118,18 @@ export default async function BillingDashboard() {
                             {style.text}
                           </span>
                         </Link>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <a
+                          href={`/api/factura/${inv.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-200 hover:bg-lilac-100 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                          title="Reimprimir RIDE de la Factura"
+                        >
+                          <Printer size={13} />
+                          <span>Reimprimir</span>
+                        </a>
                       </td>
                     </tr>
                   );

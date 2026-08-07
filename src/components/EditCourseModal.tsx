@@ -76,6 +76,10 @@ export default function EditCourseModal({ course }: Props) {
       setErrorMsg("Las fechas de inicio y finalización son obligatorias.");
       return;
     }
+    if (endDate < startDate) {
+      setErrorMsg("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+      return;
+    }
 
     setLoading(true);
     setErrorMsg(null);
@@ -113,7 +117,7 @@ export default function EditCourseModal({ course }: Props) {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
           onClick={handleClose}
         >
           <div
@@ -171,40 +175,21 @@ export default function EditCourseModal({ course }: Props) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">
-                    Costo Total ($) *
-                  </label>
-                  <div className="relative">
-                    <DollarSign size={14} className="absolute left-3 top-3 text-ink-400" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      required
-                      value={totalCost}
-                      onChange={(e) => setTotalCost(Number(e.target.value))}
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-ink-700 mb-1">
-                    Límite de Alumnos
-                  </label>
-                  <div className="relative">
-                    <Users size={14} className="absolute left-3 top-3 text-ink-400" />
-                    <input
-                      type="number"
-                      min="1"
-                      value={maxStudents}
-                      onChange={(e) => setMaxStudents(e.target.value ? Number(e.target.value) : "")}
-                      placeholder="Ej: 20"
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition"
-                    />
-                  </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink-700 mb-1">
+                  Costo ($) *
+                </label>
+                <div className="relative">
+                  <DollarSign size={14} className="absolute left-3 top-3 text-ink-400" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={totalCost}
+                    onChange={(e) => setTotalCost(Number(e.target.value))}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition"
+                  />
                 </div>
               </div>
 

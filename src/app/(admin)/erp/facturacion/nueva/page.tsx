@@ -16,8 +16,11 @@ export default async function NewInvoicePage({
     client_phone?: string;
     client_address?: string;
     module_enrollment_ids?: string;
+    course_enrollment_id?: string;
+    full_course_payment?: string;
     item_description?: string;
     item_price?: string;
+    return_url?: string;
   }>;
 }) {
   await assertWritePermission("/erp/facturacion");
@@ -53,8 +56,11 @@ export default async function NewInvoicePage({
       initialClientPhone={searchParams.client_phone}
       initialClientAddress={searchParams.client_address}
       initialModuleEnrollmentIds={searchParams.module_enrollment_ids}
+      initialCourseEnrollmentId={searchParams.course_enrollment_id}
+      initialFullCoursePayment={searchParams.full_course_payment === "true"}
       initialItemDescription={searchParams.item_description}
       initialItemPrice={searchParams.item_price ? Number(searchParams.item_price) : undefined}
+      returnUrl={searchParams.return_url}
     />
   );
 }

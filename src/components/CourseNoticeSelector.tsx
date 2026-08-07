@@ -19,9 +19,11 @@ export default function CourseNoticeSelector({ courses, defaultValue }: Props) {
     <select
       name="courseId"
       required
-      value={defaultValue}
+      defaultValue={defaultValue}
       onChange={(e) => {
-        router.push(`/erp/cursos/avisos?course_id=${e.target.value}`);
+        if (e.target.value) {
+          router.push(`/erp/cursos/clases?tab=avisos&course_id=${e.target.value}`);
+        }
       }}
       className="input text-xs"
     >

@@ -54,6 +54,8 @@ export async function POST(req: Request) {
       payment_method = "efectivo", bank_account_id, payment_reference,
       card_type, card_lote, card_voucher,
       module_enrollment_ids,
+      course_enrollment_id,
+      full_course_payment,
     } = body;
 
     if (!client_name || !client_document || !items || items.length === 0) {
@@ -311,6 +313,47 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString()
         })
         .in("id", module_enrollment_ids);
+    }
+
+    if (course_enrollment_id) {
+      await supabase
+        .from("curso_inscripciones")
+        .update({
+          status: "enrolled",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", course_enrollment_id);
+
+      if (full_course_payment) {
+        await supabase
+          .from("curso_modulo_inscripciones")
+          .update({
+            invoice_id: invoice.id,
+            billing_status: "invoiced",
+            updated_at: new Date().toISOString()
+          })
+          .eq("enrollment_id", course_enrollment_id);
+      } else {
+        const { data: firstPendingMod } = await supabase
+          .from("curso_modulo_inscripciones")
+          .select("id")
+          .eq("enrollment_id", course_enrollment_id)
+          .eq("billing_status", "pending")
+          .order("id")
+          .limit(1)
+          .maybeSingle();
+
+        if (firstPendingMod) {
+          await supabase
+            .from("curso_modulo_inscripciones")
+            .update({
+              invoice_id: invoice.id,
+              billing_status: "invoiced",
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", firstPendingMod.id);
+        }
+      }
     }
 
     // 12. Generar RIDE y enviar por correo si fue autorizado

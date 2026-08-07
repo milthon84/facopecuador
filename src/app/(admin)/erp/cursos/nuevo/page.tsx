@@ -17,7 +17,7 @@ export default async function NuevoCursoPage() {
       <div className="flex items-center gap-2 mb-6">
         <GraduationCap size={24} className="text-lilac-600" />
         <div>
-          <h1 className="text-2xl font-bold text-ink-900">Aperturar Nuevo Curso</h1>
+          <h1 className="text-2xl font-bold text-ink-900">Nuevo Curso</h1>
           <p className="text-sm text-ink-600">Completa los datos generales para crear un nuevo programa de formación.</p>
         </div>
       </div>

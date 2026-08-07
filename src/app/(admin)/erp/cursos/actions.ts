@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { revalidatePath } from "next/cache";
+import { parseDbError } from "@/lib/db-error-parser";
 
 export async function copyCourseAction(courseId: string) {
   await assertWritePermission("/erp/cursos");
@@ -159,6 +160,8 @@ export async function updateModuleAction(payload: {
   return { success: true };
 }
 
+
+
 export async function createCourseAction(formData: FormData) {
   await assertWritePermission("/erp/cursos");
 
@@ -166,13 +169,17 @@ export async function createCourseAction(formData: FormData) {
   const description = (formData.get("description") as string)?.trim();
   const totalCost = Number(formData.get("totalCost"));
   const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
+  const endDate = (formData.get("endDate") as string) || startDate;
   const maxStudents = formData.get("maxStudents") ? Number(formData.get("maxStudents")) : null;
   const status = formData.get("status") as string;
   const imageFile = formData.get("imageFile") as File;
 
   if (!name || !startDate || !endDate || isNaN(totalCost)) {
     throw new Error("Por favor completa los campos requeridos.");
+  }
+
+  if (endDate < startDate) {
+    throw new Error("La fecha de finalización no puede ser anterior a la fecha de inicio.");
   }
 
   const supabase = createAdminClient();
@@ -218,7 +225,7 @@ export async function createCourseAction(formData: FormData) {
     .single();
 
   if (error || !newCourse) {
-    throw new Error(error?.message || "Error al crear el curso");
+    throw new Error(parseDbError(error?.message) || "Error al crear el curso");
   }
 
   revalidatePath("/erp/cursos");
@@ -242,6 +249,10 @@ export async function updateCourseAction(payload: {
     throw new Error("Datos de curso inválidos.");
   }
 
+  if (endDate < startDate) {
+    throw new Error("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+  }
+
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("cursos")
@@ -258,10 +269,30 @@ export async function updateCourseAction(payload: {
     .eq("id", id);
 
   if (error) {
-    throw new Error(error.message || "Error al actualizar el curso.");
+    throw new Error(parseDbError(error.message) || "Error al actualizar el curso.");
   }
 
   revalidatePath(`/erp/cursos/${id}`);
+  revalidatePath("/erp/cursos");
+  return { success: true };
+}
+
+export async function updateCourseStatusAction(courseId: string, status: string) {
+  await assertWritePermission("/erp/cursos");
+  if (!courseId || !status) throw new Error("Parámetros requeridos faltantes.");
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("cursos")
+    .update({
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", courseId);
+
+  if (error) throw new Error(parseDbError(error.message));
+
+  revalidatePath(`/erp/cursos/${courseId}`);
   revalidatePath("/erp/cursos");
   return { success: true };
 }
@@ -282,10 +313,7 @@ export async function enrollStudentInCourseAction(studentId: string, courseId: s
     .single();
 
   if (enrollError) {
-    if (enrollError.code === "23505") {
-      throw new Error("El alumno ya se encuentra matriculado en este curso.");
-    }
-    throw new Error(enrollError.message);
+    throw new Error(parseDbError(enrollError.message));
   }
 
   const { data: modules } = await supabase
@@ -323,26 +351,59 @@ export async function registerAndEnrollStudentAction(data: {
 
   const supabase = createAdminClient();
 
-  const { data: newStudent, error: studentError } = await supabase
-    .from("alumnos")
-    .insert({
-      full_name: data.fullName,
-      document_number: data.documentNumber,
-      phone: data.phone,
-      email: data.email,
-      professional_title: data.professionalTitle || null,
-      notes: data.notes || null,
-    })
-    .select("id")
-    .single();
+  const docTrimmed = data.documentNumber.trim();
+  const emailTrimmed = data.email.trim();
 
-  if (studentError) {
-    throw new Error(`Error al registrar el alumno: ${studentError.message}`);
+  let studentId: string;
+
+  // 1. Buscar si el alumno ya existe registrado en el sistema (por cédula o email)
+  const { data: existingStudent } = await supabase
+    .from("alumnos")
+    .select("id")
+    .or(`document_number.eq.${docTrimmed},email.eq.${emailTrimmed}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingStudent) {
+    studentId = existingStudent.id;
+    // Actualizar sus datos personales
+    await supabase
+      .from("alumnos")
+      .update({
+        full_name: data.fullName.trim(),
+        phone: data.phone.trim(),
+        email: emailTrimmed,
+        document_number: docTrimmed,
+        professional_title: data.professionalTitle?.trim() || null,
+        notes: data.notes?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", studentId);
+  } else {
+    // 2. Si es un alumno completamente nuevo en la base general, insertarlo
+    const { data: newStudent, error: studentError } = await supabase
+      .from("alumnos")
+      .insert({
+        full_name: data.fullName.trim(),
+        document_number: docTrimmed,
+        phone: data.phone.trim(),
+        email: emailTrimmed,
+        professional_title: data.professionalTitle?.trim() || null,
+        notes: data.notes?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (studentError || !newStudent) {
+      throw new Error(parseDbError(studentError?.message));
+    }
+    studentId = newStudent.id;
   }
 
-  await enrollStudentInCourseAction(newStudent.id, data.courseId);
+  // 3. Inscribir en el curso solicitado
+  await enrollStudentInCourseAction(studentId, data.courseId);
 
-  return { success: true, studentId: newStudent.id };
+  return { success: true, studentId };
 }
 
 export async function getModuleAttendanceDataAction(moduleId: string) {

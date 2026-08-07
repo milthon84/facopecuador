@@ -16,6 +16,14 @@ export default function NuevoCursoForm() {
     setErrorMsg(null);
 
     const formData = new FormData(e.currentTarget);
+    const startDate = formData.get("startDate") as string;
+    const endDate = formData.get("endDate") as string;
+
+    if (startDate && endDate && endDate < startDate) {
+      setErrorMsg("La fecha de finalización no puede ser anterior a la fecha de inicio.");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await createCourseAction(formData);
@@ -53,34 +61,21 @@ export default function NuevoCursoForm() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label text-ink-800">Costo total ($) *</label>
-          <input
-            name="totalCost"
-            type="number"
-            step="0.01"
-            min="0"
-            required
-            placeholder="Ej: 1200.00"
-            className="input"
-            disabled={loading}
-          />
-        </div>
-        <div>
-          <label className="label text-ink-800">Límite de alumnos</label>
-          <input
-            name="maxStudents"
-            type="number"
-            min="1"
-            placeholder="Ej: 20 (opcional)"
-            className="input"
-            disabled={loading}
-          />
-        </div>
+      <div>
+        <label className="label text-ink-800">Costo ($) *</label>
+        <input
+          name="totalCost"
+          type="number"
+          step="0.01"
+          min="0"
+          required
+          placeholder="Ej: 1200.00"
+          className="input"
+          disabled={loading}
+        />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label text-ink-800">Fecha de Inicio *</label>
           <input
@@ -104,7 +99,7 @@ export default function NuevoCursoForm() {
       </div>
 
       <div>
-        <label className="label text-ink-800 font-semibold">Boceto o Portada del Curso (Imagen)</label>
+        <label className="label text-ink-800 font-semibold">Portada del Curso (Imagen)</label>
         <input
           name="imageFile"
           type="file"
@@ -115,7 +110,7 @@ export default function NuevoCursoForm() {
       </div>
 
       <div>
-        <label className="label text-ink-800">Estado inicial</label>
+        <label className="label text-ink-800">Estado</label>
         <select name="status" className="input" disabled={loading}>
           <option value="draft">Borrador (No visible en la web)</option>
           <option value="active">Abierto (Abierto para inscripciones)</option>
@@ -137,10 +132,10 @@ export default function NuevoCursoForm() {
       >
         {loading ? (
           <>
-            <Loader2 size={16} className="animate-spin text-white" /> Creando curso...
+            <Loader2 size={16} className="animate-spin text-white" /> Creando y abriendo curso...
           </>
         ) : (
-          "Crear Curso y Configurar Detalles"
+          "Crear y Abrir Curso"
         )}
       </button>
     </form>

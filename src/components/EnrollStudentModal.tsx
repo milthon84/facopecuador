@@ -23,7 +23,7 @@ interface Props {
 export default function EnrollStudentModal({ courseId, courseName, allStudents, enrolledStudentIds }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"existing" | "new">("existing");
+  const [activeTab, setActiveTab] = useState<"existing" | "new">("new");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -114,11 +114,11 @@ export default function EnrollStudentModal({ courseId, courseName, allStudents, 
         }}
         className="btn-primary text-xs py-2 px-3.5 shadow-sm flex items-center gap-1.5"
       >
-        <UserPlus size={14} /> Matricular Alumno al Curso
+        <UserPlus size={14} /> Registro de Alumno al Curso
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white border border-lilac-100 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             
             {/* Header */}
@@ -128,7 +128,7 @@ export default function EnrollStudentModal({ courseId, courseName, allStudents, 
                   <UserPlus size={16} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-ink-950 text-sm">Matricular Alumno</h3>
+                  <h3 className="font-bold text-ink-950 text-sm">Registrar Alumno en Curso</h3>
                   <p className="text-[11px] text-ink-500 line-clamp-1">{courseName}</p>
                 </div>
               </div>

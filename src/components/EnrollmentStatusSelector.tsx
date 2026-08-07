@@ -23,6 +23,7 @@ export default function EnrollmentStatusSelector({
         onChange={(e) => e.target.form?.requestSubmit()}
         className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-lilac-500"
       >
+        <option value="pre_enrolled">Pre-Inscrito (Pago Pendiente)</option>
         <option value="enrolled">Matriculado</option>
         <option value="completed">Finalizado</option>
         <option value="dropped">Retirado</option>

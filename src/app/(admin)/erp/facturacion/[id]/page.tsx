@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, CheckCircle2, XCircle, AlertCircle, Clock,
-  User, FileText, Hash, CreditCard, RefreshCw,
+  User, FileText, Hash, CreditCard, RefreshCw, Printer,
 } from "lucide-react";
 import CopyButton from "@/components/CopyButton";
 import ReintentoSriButton from "@/components/ReintentoSriButton";
@@ -108,6 +108,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         </div>
         {/* Acciones de Factura */}
         <div className="flex items-center gap-2">
+          <a
+            href={`/api/factura/${invoice.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary text-xs py-2 px-3.5 shadow-2xs flex items-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-transform"
+          >
+            <Printer size={15} /> Reimprimir Factura
+          </a>
           {invoice.sri_status !== "cancelled" && canEdit && (
             <AnularFacturaButton
               invoiceId={invoice.id}
