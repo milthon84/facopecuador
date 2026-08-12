@@ -20,7 +20,7 @@ export default async function CursosPage() {
   const [cursosRes, enrolRes] = await Promise.all([
     supabase
       .from("cursos")
-      .select("*, curso_modulos(id, cost)")
+      .select("id, name, description, status, start_date, end_date, image_url, max_students, total_cost, curso_modulos(id, cost)")
       .order("start_date", { ascending: false }),
     supabase
       .from("curso_inscripciones")
