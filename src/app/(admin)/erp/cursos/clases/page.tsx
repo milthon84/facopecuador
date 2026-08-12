@@ -11,6 +11,7 @@ import { assertPermission, assertWritePermission, hasWritePermission } from "@/l
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { sendCourseNoticeEmail } from "@/lib/email";
 import NoticeComposerClient from "@/components/NoticeComposerClient";
+import CourseClasesTabsClient from "./CourseClasesTabsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -366,246 +367,132 @@ export default async function ClasesPage({
   }
 
   // =========================================================
+  // =========================================================
   // PASO 2: CURSO SELECCIONADO
   // =========================================================
-  const [courseRes, enrollmentsRes] = await Promise.all([
+  const [courseRes, enrollmentsRes, modulesRes, avisosRes] = await Promise.all([
     supabase.from("cursos").select("*").eq("id", courseId).single(),
-    supabase.from("curso_inscripciones").select("id").eq("course_id", courseId).eq("status", "enrolled"),
+    supabase.from("curso_inscripciones").select("id, status, created_at, payment_type, alumnos(id, full_name, document_number, phone, email, professional_title)").eq("course_id", courseId).eq("status", "enrolled"),
+    supabase.from("curso_modulos").select("*").eq("course_id", courseId).order("number"),
+    supabase.from("curso_avisos").select(`id, subject, message, sent_at, status, cursos (name), curso_clases (title, date)`).eq("course_id", courseId).order("sent_at", { ascending: false }).limit(30),
   ]);
 
   const selectedCourse = courseRes.data;
   if (!selectedCourse) return redirect("/erp/cursos/clases");
-  const enrolledCount = (enrollmentsRes.data || []).length;
 
-  return (
-    <div className="max-w-6xl mx-auto pb-8 space-y-4">
-      {/* ENCABEZADO COMPACTO DE CURSO + PESTAÑAS */}
-      <div className="bg-white border border-lilac-200 shadow-2xs rounded-2xl p-4 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {selectedCourse.image_url ? (
-              <img
-                src={selectedCourse.image_url}
-                alt={selectedCourse.name}
-                className="w-12 h-12 rounded-xl object-cover border border-lilac-200 shadow-2xs shrink-0"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 font-bold shrink-0">
-                <GraduationCap size={22} />
-              </div>
-            )}
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-ink-950 leading-tight">{selectedCourse.name}</h1>
-                <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                  selectedCourse.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"
-                }`}>
-                  {selectedCourse.status === "in_progress" ? "En Ejecución" : "Abierto"}
-                </span>
-                <span className="text-[10px] font-bold text-ink-500 bg-lilac-50 px-2 py-0.5 rounded-md border border-lilac-100 inline-flex items-center gap-1">
-                  <Users size={11} /> {enrolledCount} Alumnos
-                </span>
-              </div>
-              <p className="text-xs text-ink-500 mt-0.5">
-                Del {new Date(selectedCourse.start_date + "T12:00:00").toLocaleDateString("es-EC")} al {new Date(selectedCourse.end_date + "T12:00:00").toLocaleDateString("es-EC")}
-              </p>
-            </div>
-          </div>
+  const enrolledDocs = enrollmentsRes.data || [];
+  const enrolledCount = enrolledDocs.length;
+  const modules = modulesRes.data || [];
+  const avisos = avisosRes.data || [];
+  const enrolledStudentsList = enrolledDocs.map((e: any) => e.alumnos).filter(Boolean);
 
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href={`/erp/cursos/${selectedCourse.id}`}
-              className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-50 transition shadow-2xs"
-            >
-              <span>Detalle</span>
-              <BookOpen size={13} />
-            </Link>
-            <Link
-              href="/erp/cursos/clases"
-              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-100 transition shadow-2xs"
-            >
-              <ArrowLeft size={13} />
-              <span>Cambiar Curso</span>
-            </Link>
-          </div>
-        </div>
+  // Cargar clases de todos los módulos para el selector de avisos
+  let classesForSelector: any[] = [];
+  if (modules.length > 0) {
+    const moduleIds = modules.map(m => m.id);
+    const { data: loadedClasses } = await supabase
+      .from("curso_clases")
+      .select("id, title, date, start_time")
+      .in("module_id", moduleIds)
+      .order("date");
+    classesForSelector = loadedClasses || [];
+  }
 
-        {/* PESTAÑAS DE NAVEGACIÓN COMPACTAS */}
-        <div className="flex border-t border-lilac-100 pt-3 gap-2 overflow-x-auto">
-          <Link
-            href={`/erp/cursos/clases?tab=clases&course_id=${courseId}`}
-            className={`flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl transition whitespace-nowrap ${
-              activeTab === "clases"
-                ? "bg-lilac-600 text-white shadow-2xs"
-                : "text-ink-600 hover:text-ink-900 hover:bg-lilac-50/60"
-            }`}
-          >
-            <Calendar size={14} />
-            <span>Cronograma y Asistencia</span>
-          </Link>
+  const successNotice = statusParam === "sent";
 
-          <Link
-            href={`/erp/cursos/clases?tab=avisos&course_id=${courseId}`}
-            className={`flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl transition whitespace-nowrap ${
-              activeTab === "avisos"
-                ? "bg-lilac-600 text-white shadow-2xs"
-                : "text-ink-600 hover:text-ink-900 hover:bg-lilac-50/60"
-            }`}
-          >
-            <Megaphone size={14} />
-            <span>Avisos y Comunicados</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* ========================================== */}
-      {/* PESTAÑA 2: AVISOS Y COMUNICADOS            */}
-      {/* ========================================== */}
-      {activeTab === "avisos" && (
-        <div className="space-y-4 animate-in fade-in duration-150">
-          {await (async () => {
-            let classesForSelector: any[] = [];
-            const { data: modules } = await supabase
-              .from("curso_modulos")
-              .select("id")
-              .eq("course_id", courseId);
-            
-            if (modules && modules.length > 0) {
-              const moduleIds = modules.map(m => m.id);
-              const { data: loadedClasses } = await supabase
-                .from("curso_clases")
-                .select("id, title, date, start_time")
-                .in("module_id", moduleIds)
-                .order("date");
-              classesForSelector = loadedClasses || [];
-            }
-
-            const [avisosRes, studentEnrollmentsRes] = await Promise.all([
-              supabase
-                .from("curso_avisos")
-                .select(`
-                  id,
-                  subject,
-                  message,
-                  sent_at,
-                  status,
-                  cursos (name),
-                  curso_clases (title, date)
-                `)
-                .eq("course_id", courseId)
-                .order("sent_at", { ascending: false })
-                .limit(30),
-              supabase
-                .from("curso_inscripciones")
-                .select("alumnos(id, full_name, email, phone, professional_title)")
-                .eq("course_id", courseId)
-                .eq("status", "enrolled")
-            ]);
-
-            const avisos = avisosRes.data || [];
-            const enrolledStudentsList = (studentEnrollmentsRes.data || [])
-              .map((e: any) => e.alumnos)
-              .filter(Boolean);
-
-            const successNotice = statusParam === "sent";
-
-            return (
-              <div className="space-y-4">
-                {successNotice && (
-                  <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-3 text-xs font-semibold flex items-center gap-2 shadow-2xs">
-                    <CheckCircle2 size={15} className="text-green-600 shrink-0" />
-                    ¡Comunicado difundido con éxito a los alumnos matriculados en {selectedCourse.name}!
-                  </div>
-                )}
-
-                <div className="grid lg:grid-cols-12 gap-6 items-start">
-                  {/* Formulario Multicanal de Envíos (Sección Izquierda Más Grande) */}
-                  <div className="lg:col-span-7">
-                    {canEdit ? (
-                      <NoticeComposerClient
-                        courseId={courseId}
-                        courseName={selectedCourse.name}
-                        classes={classesForSelector}
-                        students={enrolledStudentsList}
-                        canEdit={canEdit}
-                        sendNoticeAction={sendNotice}
-                      />
-                    ) : (
-                      <div className="card p-5 bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic rounded-3xl">
-                        No tienes permisos para redactar o enviar avisos.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Historial de Comunicados Enviados (Sección Derecha Más Pequeña) */}
-                  <div className="lg:col-span-5 space-y-3">
-                    <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm overflow-hidden">
-                      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                          <Send size={15} className="text-lilac-600" />
-                          Historial de Comunicados Difundidos
-                        </span>
-                        <span className="text-[11px] text-lilac-800 bg-white border border-lilac-200 px-3 py-0.5 rounded-full font-bold shadow-2xs">
-                          {avisos.length} comunicados
-                        </span>
-                      </div>
-
-                      {avisos.length === 0 ? (
-                        <div className="p-10 text-center text-xs text-ink-500 italic">
-                          Aún no se han registrado o difundido comunicados en este curso.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-lilac-50">
-                          {avisos.map((av: any) => (
-                            <div key={av.id} className="p-5 space-y-2 hover:bg-lilac-50/10 transition-colors">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="space-y-0.5">
-                                  <h3 className="font-bold text-ink-950 text-sm flex items-center gap-1.5">
-                                    <Mail size={14} className="text-lilac-600" />
-                                    <span>{av.subject}</span>
-                                  </h3>
-                                  <p className="text-[11px] text-ink-500 font-semibold">
-                                    {av.curso_clases ? `Clase asociada: ${av.curso_clases.title}` : "Comunicado General de Curso"}
-                                  </p>
-                                </div>
-
-                                <div className="flex flex-col items-end shrink-0 text-right space-y-1">
-                                  <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                                    av.status === "sent" ? "bg-green-50 text-green-700 border-green-200" :
-                                    av.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" :
-                                    "bg-red-50 text-red-700 border-red-200"
-                                  }`}>
-                                    {av.status === "sent" ? "Enviado con Éxito" :
-                                     av.status === "pending" ? "Procesando" : "Error en Envío"}
-                                  </span>
-                                  <span className="text-[10px] text-ink-400 font-mono">
-                                    {new Date(av.sent_at).toLocaleString("es-EC")}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <p className="text-xs text-ink-700 bg-lilac-50/30 border border-lilac-100 p-3 rounded-2xl whitespace-pre-wrap leading-relaxed">
-                                {av.message}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+  // CONTENIDO PESTAÑA AVISOS Y COMUNICADOS
+  const avisosTabContent = (
+    <div className="space-y-4">
+      {successNotice && (
+        <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-3 text-xs font-semibold flex items-center gap-2 shadow-2xs">
+          <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+          ¡Comunicado difundido con éxito a los alumnos matriculados en {selectedCourse.name}!
         </div>
       )}
 
-      {/* ========================================== */}
-      {/* PESTAÑA 1: CRONOGRAMA Y ASISTENCIA         */}
-      {/* ========================================== */}
-      {activeTab === "clases" && (
-        <div className="space-y-3 animate-in fade-in duration-150">
-          {await (async () => {
+      <div className="grid lg:grid-cols-12 gap-6 items-start">
+        {/* Formulario Multicanal de Envíos */}
+        <div className="lg:col-span-7">
+          {canEdit ? (
+            <NoticeComposerClient
+              courseId={courseId}
+              courseName={selectedCourse.name}
+              classes={classesForSelector}
+              students={enrolledStudentsList}
+              canEdit={canEdit}
+              sendNoticeAction={sendNotice}
+            />
+          ) : (
+            <div className="card p-5 bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic rounded-3xl">
+              No tienes permisos para redactar o enviar avisos.
+            </div>
+          )}
+        </div>
+
+        {/* Historial de Comunicados Enviados */}
+        <div className="lg:col-span-5 space-y-3">
+          <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <Send size={15} className="text-lilac-600" />
+                Historial de Comunicados Difundidos
+              </span>
+              <span className="text-[11px] text-lilac-800 bg-white border border-lilac-200 px-3 py-0.5 rounded-full font-bold shadow-2xs">
+                {avisos.length} comunicados
+              </span>
+            </div>
+
+            {avisos.length === 0 ? (
+              <div className="p-10 text-center text-xs text-ink-500 italic">
+                Aún no se han registrado o difundido comunicados en este curso.
+              </div>
+            ) : (
+              <div className="divide-y divide-lilac-50">
+                {avisos.map((av: any) => (
+                  <div key={av.id} className="p-5 space-y-2 hover:bg-lilac-50/10 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <h3 className="font-bold text-ink-950 text-sm flex items-center gap-1.5">
+                          <Mail size={14} className="text-lilac-600" />
+                          <span>{av.subject}</span>
+                        </h3>
+                        <p className="text-[11px] text-ink-500 font-semibold">
+                          {av.curso_clases ? `Clase asociada: ${av.curso_clases.title}` : "Comunicado General de Curso"}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end shrink-0 text-right space-y-1">
+                        <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          av.status === "sent" ? "bg-green-50 text-green-700 border-green-200" :
+                          av.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" :
+                          "bg-red-50 text-red-700 border-red-200"
+                        }`}>
+                          {av.status === "sent" ? "Enviado con Éxito" :
+                           av.status === "pending" ? "Procesando" : "Error en Envío"}
+                        </span>
+                        <span className="text-[10px] text-ink-400 font-mono">
+                          {new Date(av.sent_at).toLocaleString("es-EC")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-ink-700 bg-lilac-50/30 border border-lilac-100 p-3 rounded-2xl whitespace-pre-wrap leading-relaxed">
+                      {av.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // CONTENIDO PESTAÑA CRONOGRAMA Y ASISTENCIA
+  const clasesTabContent = (
+    <div className="space-y-3">
+      {await (async () => {
             const modulesRes = await supabase.from("curso_modulos").select("*").eq("course_id", courseId).order("number");
             const modules = modulesRes.data || [];
 
@@ -941,7 +828,16 @@ export default async function ClasesPage({
             );
           })()}
         </div>
-      )}
-    </div>
+      );
+
+  return (
+    <CourseClasesTabsClient
+      courseId={courseId}
+      selectedCourse={selectedCourse}
+      enrolledCount={enrolledCount}
+      activeTabDefault={activeTab}
+      clasesTabContent={clasesTabContent}
+      avisosTabContent={avisosTabContent}
+    />
   );
 }
