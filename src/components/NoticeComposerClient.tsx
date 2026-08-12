@@ -119,7 +119,18 @@ export default function NoticeComposerClient({
     setTimeout(() => setCopied(false), 3000);
   };
 
-  // Disparar WhatsApp Web de forma SÍNCRONA para evitar bloqueos del navegador
+  // Disparar App de WhatsApp (Escritorio / Móvil)
+  const triggerWhatsAppApp = () => {
+    const text = buildWhatsAppText();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+
+    const waAppUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    window.location.href = waAppUrl;
+  };
+
+  // Disparar WhatsApp Web de forma SÍNCRONA
   const triggerWhatsAppWeb = () => {
     const text = buildWhatsAppText();
     navigator.clipboard.writeText(text);
@@ -140,12 +151,12 @@ export default function NoticeComposerClient({
 
     setLoading(true);
     try {
-      // 1. SI WHATSAPP ESTÁ ACTIVO, DISPARAR WHATSAPP WEB Y COPIAR MENSAJE INMEDIATAMENTE SÍNCRONO
+      // 1. SI WHATSAPP ESTÁ ACTIVO, DISPARAR APP NATIVA DE WHATSAPP Y COPIAR MENSAJE
       if (sendWhatsapp) {
-        triggerWhatsAppWeb();
+        triggerWhatsAppApp();
       }
 
-      // 2. SI EMAIL ESTÁ ACTIVO, EJECUTAR ENVIO DE CORREOS
+      // 2. SI EMAIL ESTÁ ACTIVO, EJECUTAR ENVÍO DE CORREOS
       if (sendEmail) {
         const formData = new FormData(e.currentTarget);
         formData.set("channel", sendEmail && sendWhatsapp ? "both" : sendEmail ? "email" : "whatsapp");
@@ -253,7 +264,7 @@ export default function NoticeComposerClient({
                 className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
               />
               <MessageSquare size={14} className="text-emerald-600" />
-              <span>WhatsApp Web (Difusión Masiva)</span>
+              <span>WhatsApp App / Web (Difusión)</span>
             </label>
           </div>
         </div>
@@ -279,15 +290,27 @@ export default function NoticeComposerClient({
               {buildWhatsAppText()}
             </div>
 
-            <button
-              type="button"
-              onClick={triggerWhatsAppWeb}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold text-xs py-2 px-3 rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Share2 size={14} />
-              <span>Abrir WhatsApp Web con este Mensaje Precargado</span>
-              <ExternalLink size={12} />
-            </button>
+            {/* OPCIONES DE APERTURA: APP WHATSAPP DE ESCRITORIO O WHATSAPP WEB */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={triggerWhatsAppApp}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-extrabold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <MessageSquare size={14} />
+                <span>Abrir en App de WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={triggerWhatsAppWeb}
+                className="w-full bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 font-bold text-xs py-2.5 px-3 rounded-xl border border-emerald-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Share2 size={14} />
+                <span>Abrir en WhatsApp Web</span>
+                <ExternalLink size={12} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -334,20 +357,31 @@ export default function NoticeComposerClient({
                       <span className="font-semibold text-slate-900 truncate">{st.full_name}</span>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {st.phone ? (
-                        <a
-                          href={`https://wa.me/${cleanPhoneForWhatsApp(st.phone)}?text=${encodeURIComponent(buildWhatsAppText())}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-2 py-0.5 rounded-md shadow-2xs transition hover:scale-[1.02]"
-                          title="Enviar mensaje directo por WhatsApp a este alumno"
-                        >
-                          <MessageSquare size={10} />
-                          <span>WhatsApp</span>
-                          <ExternalLink size={9} />
-                        </a>
+                        <>
+                          <a
+                            href={`whatsapp://send?phone=${cleanPhoneForWhatsApp(st.phone)}&text=${encodeURIComponent(buildWhatsAppText())}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 px-2 py-0.5 rounded-md shadow-2xs transition hover:scale-[1.02]"
+                            title="Abrir chat directamente en la App de WhatsApp de la computadora o celular"
+                          >
+                            <MessageSquare size={10} />
+                            <span>App WA</span>
+                          </a>
+
+                          <a
+                            href={`https://web.whatsapp.com/send?phone=${cleanPhoneForWhatsApp(st.phone)}&text=${encodeURIComponent(buildWhatsAppText())}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded-md transition hover:scale-[1.02]"
+                            title="Abrir en WhatsApp Web (Navegador)"
+                          >
+                            <span>Web</span>
+                            <ExternalLink size={9} />
+                          </a>
+                        </>
                       ) : (
                         <span className="text-[10px] text-slate-400 italic">Sin celular</span>
                       )}
@@ -379,7 +413,7 @@ export default function NoticeComposerClient({
 
         {copied && (
           <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold text-center animate-in fade-in">
-            ¡Texto formateado copiado al portapapeles y WhatsApp Web abierto con el comunicado!
+            ¡Texto formateado copiado al portapapeles y App de WhatsApp iniciada!
           </div>
         )}
       </form>
