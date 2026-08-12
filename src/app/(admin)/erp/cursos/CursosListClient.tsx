@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { 
   GraduationCap, Calendar, Users, DollarSign, ArrowRight, 
-  ChevronDown, ChevronUp, CheckCircle2
+  ChevronDown, ChevronUp, CheckCircle2 
 } from "lucide-react";
 import Link from "next/link";
 import CopyCourseButton from "@/components/CopyCourseButton";
@@ -47,7 +47,7 @@ const formatDateES = (d: string) => {
 export default function CursosListClient({ cursos, studentCountMap, canEdit }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
 
-  // Cursos Abiertos (Borrador, Abierto, En Ejecución) ordenados por fecha de inicio descendente
+  // Cursos Operativos (Borrador, Abierto, En Ejecución) ordenados por fecha de inicio descendente
   const mainCourses = cursos
     .filter((c) => c.status === "draft" || c.status === "active" || c.status === "in_progress")
     .sort((a, b) => b.start_date.localeCompare(a.start_date));
@@ -84,7 +84,9 @@ export default function CursosListClient({ cursos, studentCountMap, canEdit }: P
           </div>
 
           <div>
-            <h3 className="font-bold text-ink-900 leading-snug text-base line-clamp-1">{c.name}</h3>
+            <Link href={`/erp/cursos/${c.id}`} className="hover:underline">
+              <h3 className="font-bold text-ink-900 leading-snug text-base line-clamp-1 hover:text-lilac-700 transition-colors">{c.name}</h3>
+            </Link>
             {c.description && (
               <p className="text-xs text-ink-500 mt-1 line-clamp-2 leading-relaxed">{c.description}</p>
             )}
@@ -141,7 +143,7 @@ export default function CursosListClient({ cursos, studentCountMap, canEdit }: P
 
   return (
     <div className="space-y-8">
-      {/* Sección 1: Cursos Activos */}
+      {/* Sección 1: Cursos Activos / Operativos */}
       {mainCourses.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center gap-2 pb-2 border-b border-lilac-100">
@@ -157,7 +159,7 @@ export default function CursosListClient({ cursos, studentCountMap, canEdit }: P
         </section>
       )}
 
-      {/* Sección 2: Cursos Concluidos (Ocultos por defecto) */}
+      {/* Sección 2: Cursos Concluidos (En la sección inferior) */}
       {completedCourses.length > 0 && (
         <section className="space-y-3 pt-2">
           <div className="flex items-center justify-between bg-lilac-50/60 border border-lilac-100 p-4 rounded-2xl">

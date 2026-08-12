@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { GraduationCap, Plus, BookOpen, FileText, Clock, CheckCircle2 } from "lucide-react";
+import { GraduationCap, Plus, BookOpen, FileText, Clock } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { updateExpiredCourses } from "@/lib/courses";
@@ -13,8 +13,8 @@ export default async function CursosPage() {
 
   const supabase = createAdminClient();
 
-  // 1. Auto-completar cursos expirados
-  await updateExpiredCourses(supabase);
+  // 1. Auto-completar cursos expirados en segundo plano
+  updateExpiredCourses(supabase).catch(() => {});
 
   // 2. Cargar cursos, alumnos matriculados por curso, y estadísticas
   const [cursosRes, enrolRes] = await Promise.all([
@@ -66,13 +66,12 @@ export default async function CursosPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-8">
         {[
-          { label: "Total de Cursos", value: cursos.length, bg: "bg-lilac-50/70 border-lilac-150", text: "text-lilac-700", icon: <BookOpen size={18} /> },
+          { label: "Total Operativos", value: totalDraft + totalActiveOnly + totalInProgress, bg: "bg-lilac-50/70 border-lilac-150", text: "text-lilac-700", icon: <BookOpen size={18} /> },
           { label: "En Borrador", value: totalDraft, bg: "bg-gray-50 border-gray-100", text: "text-gray-600", icon: <FileText size={18} /> },
           { label: "Activos", value: totalActiveOnly, bg: "bg-green-50/50 border-green-100", text: "text-green-700", icon: <GraduationCap size={18} /> },
           { label: "En Ejecución", value: totalInProgress, bg: "bg-blue-50/50 border-blue-100", text: "text-blue-700", icon: <Clock size={18} /> },
-          { label: "Cerrados", value: totalClosed, bg: "bg-lilac-100/50 border-lilac-200", text: "text-lilac-800", icon: <CheckCircle2 size={18} /> },
         ].map((stat, idx) => (
           <div key={idx} className={`card p-3.5 bg-white border shadow-sm flex items-center gap-3 ${stat.bg}`}>
             <div className={`w-9 h-9 rounded-xl bg-white border border-inherit flex items-center justify-center shrink-0 ${stat.text}`}>

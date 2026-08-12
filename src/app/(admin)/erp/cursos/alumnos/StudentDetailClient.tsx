@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { 
   GraduationCap, Calendar, FileText, CheckCircle2, XCircle, AlertCircle, 
-  Pencil, ArrowLeft, Users, DollarSign, ExternalLink, Camera, User, X, CreditCard
+  Pencil, ArrowLeft, Users, DollarSign, ExternalLink, Camera, User, X, CreditCard, Receipt
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -47,7 +47,16 @@ export default function StudentDetailClient({
   const [activeTab, setActiveTab] = useState<"cursos" | "asistencia" | "facturas">("cursos");
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(editMode);
   const [loading, setLoading] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPreviewPhotoUrl(URL.createObjectURL(file));
+    }
+  }
 
   // Asistencia calculada
   const presentCount = attendance.filter((a) => a.status === "present").length;
@@ -101,25 +110,35 @@ export default function StudentDetailClient({
             </div>
 
             <div className="flex items-start gap-3">
-              {student.photo_url ? (
-                <img
-                  src={student.photo_url}
-                  alt={student.full_name}
-                  className="w-14 h-14 rounded-2xl object-cover border border-lilac-200 shadow-2xs shrink-0"
-                />
-              ) : (
-                <div className="w-14 h-14 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0">
-                  <User size={24} />
-                </div>
-              )}
+              {/* Foto con lápiz overlay interactivo */}
+              <div
+                onClick={() => canEdit && setIsEditingModalOpen(true)}
+                className={`relative group shrink-0 ${canEdit ? "cursor-pointer" : ""}`}
+                title={canEdit ? "Haz clic para cambiar foto de perfil" : ""}
+              >
+                {student.photo_url ? (
+                  <img
+                    src={student.photo_url}
+                    alt={student.full_name}
+                    className="w-16 h-16 rounded-2xl object-cover border border-lilac-200 shadow-2xs transition group-hover:brightness-95"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0 transition group-hover:bg-lilac-100">
+                    <User size={28} />
+                  </div>
+                )}
+
+                {canEdit && (
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-white border border-lilac-200 text-ink-700 shadow-xs flex items-center justify-center group-hover:bg-lilac-600 group-hover:text-white group-hover:border-lilac-600 transition-all">
+                    <Pencil size={11} />
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-1">
-                <h1 className="text-base font-bold text-ink-950 leading-snug">{student.full_name}</h1>
-                {student.professional_title && (
-                  <span className="inline-block text-[11px] font-semibold text-lilac-700 bg-lilac-50 border border-lilac-100 px-2 py-0.5 rounded-lg">
-                    {student.professional_title}
-                  </span>
-                )}
+                <h1 className="text-base font-bold text-ink-950 leading-snug">
+                  {student.full_name}
+                </h1>
               </div>
             </div>
 
@@ -354,28 +373,45 @@ export default function StudentDetailClient({
                                   </div>
 
                                   <div className="flex items-center gap-2 shrink-0">
-                                    {mi.billing_status === "invoiced" && mi.invoices && mi.invoices.sri_status !== "cancelled" ? (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
-                                        <CheckCircle2 size={11} /> Facturado (#{mi.invoices.invoice_number})
-                                      </span>
-                                    ) : mi.billing_status === "free" ? (
-                                      <span className="text-[10px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">
-                                        Beca / Sin Costo
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
-                                        Pendiente
-                                      </span>
-                                    )}
+                                    {(() => {
+                                      const items = mi.invoices?.invoice_items || [];
+                                      const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
+                                        item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
+                                      );
+                                      const isFullCourse = enroll.payment_type === "full_course";
+                                      const isModuleInvoiced = (isFullCourse || mi.billing_status === "invoiced") && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled";
 
-                                    {mi.billing_status === "pending" && canEdit && (
-                                      <Link
-                                        href={invoiceLink}
-                                        className="btn-primary text-[10px] font-bold py-1 px-3 shadow-2xs hover:scale-[1.02] active:scale-[0.98] transition-transform"
-                                      >
-                                        Facturar
-                                      </Link>
-                                    )}
+                                      if (isModuleInvoiced) {
+                                        return (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
+                                            <CheckCircle2 size={11} /> {isFullCourse ? "Pagado (Curso Completo)" : `Facturado (${mi.invoices?.invoice_number ? `#${mi.invoices.invoice_number}` : "OK"})`}
+                                          </span>
+                                        );
+                                      } else if (mi.billing_status === "free") {
+                                        return (
+                                          <span className="text-[10px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">
+                                            Beca / Sin Costo
+                                          </span>
+                                        );
+                                      } else {
+                                        return (
+                                          <>
+                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                                              Pendiente
+                                            </span>
+                                            {canEdit && (
+                                              <Link
+                                                href={invoiceLink}
+                                                className="inline-flex items-center gap-1.5 bg-ink-900 hover:bg-ink-850 text-gold-400 hover:text-gold-300 border border-gold-500/40 hover:border-gold-400/70 text-[10px] font-bold py-1 px-3 rounded-xl shadow-2xs transition-all cursor-pointer"
+                                              >
+                                                <Receipt size={12} className="text-gold-400" />
+                                                <span>Facturar Módulo</span>
+                                              </Link>
+                                            )}
+                                          </>
+                                        );
+                                      }
+                                    })()}
                                   </div>
                                 </div>
                               );
@@ -567,7 +603,10 @@ export default function StudentDetailClient({
               </div>
               <button
                 type="button"
-                onClick={() => setIsEditingModalOpen(false)}
+                onClick={() => {
+                  setIsEditingModalOpen(false);
+                  setPreviewPhotoUrl(null);
+                }}
                 className="text-ink-400 hover:text-ink-700 p-1.5 rounded-lg transition cursor-pointer"
               >
                 <X size={18} />
@@ -579,21 +618,40 @@ export default function StudentDetailClient({
               <input type="hidden" name="id" value={student.id} />
               <input type="hidden" name="existingPhotoUrl" value={student.photo_url || ""} />
 
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1 flex items-center gap-1">
-                  <Camera size={13} className="text-lilac-600" /> Foto de Perfil (Opcional)
-                </label>
-                {student.photo_url && (
-                  <div className="flex items-center gap-2 mb-2 p-2 bg-lilac-50/50 rounded-xl border border-lilac-100">
-                    <img src={student.photo_url} alt="Foto actual" className="w-10 h-10 rounded-full object-cover border border-lilac-200" />
-                    <span className="text-[11px] text-ink-600 font-medium">Foto registrada (Subir otra para actualizar)</span>
+              {/* Avatar Interactivo de Edición de Foto */}
+              <div className="flex flex-col items-center justify-center py-2 space-y-1.5">
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-lilac-200 shadow-md bg-lilac-50 flex items-center justify-center">
+                    {previewPhotoUrl || student.photo_url ? (
+                      <img
+                        src={previewPhotoUrl || student.photo_url}
+                        alt={student.full_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-lilac-100 flex items-center justify-center text-lilac-600 font-bold text-2xl">
+                        {student.full_name?.charAt(0).toUpperCase() || <User size={36} />}
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white flex items-center justify-center shadow-md border-2 border-white transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                    title="Cambiar foto de perfil"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-ink-500 font-medium">Haz clic en el lápiz para seleccionar una nueva foto</p>
                 <input
+                  ref={fileInputRef}
                   name="photoFile"
                   type="file"
                   accept="image/*"
-                  className="w-full text-xs text-ink-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none"
+                  onChange={handlePhotoChange}
+                  className="hidden"
                 />
               </div>
 
@@ -618,10 +676,7 @@ export default function StudentDetailClient({
                 <input name="email" type="email" defaultValue={student.email} required className="input text-xs" />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">Título profesional</label>
-                <input name="professionalTitle" defaultValue={student.professional_title || ""} placeholder="Ej: Odontólogo General" className="input text-xs" />
-              </div>
+
 
               <div>
                 <label className="block text-xs font-semibold text-ink-700 mb-1">Notas internas</label>

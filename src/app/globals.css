@@ -7,35 +7,44 @@
 }
 
 html, body {
-  background: #ffffff;
-  color: #0f0f0f;
+  background: #F8FAFC;
+  color: #0F172A;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  overflow-x: hidden;
 }
 
-/* Botón primario reutilizable */
+/* Fondos degradados ejecutivos sutiles y luminosos */
+.bg-executive-light {
+  background: linear-gradient(135deg, #F8FAFC 0%, #F1F3F9 50%, #FAF8FC 100%);
+}
+
+/* Botón primario ejecutivo (Dorado/Morado FACOP) */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ink-900 px-5 py-3 text-sm font-semibold text-gold hover:bg-ink-800 transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#3B154C] to-[#4A1C5F] px-6 py-3 text-xs sm:text-sm font-semibold text-white hover:from-[#2E103C] hover:to-[#3E1650] transition-all duration-200 shadow-md shadow-purple-950/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-gold {
+  @apply inline-flex items-center justify-center gap-2.5 rounded-xl bg-gold-500 px-6 py-3 text-xs sm:text-sm font-semibold text-slate-950 hover:bg-gold-400 transition-all duration-200 shadow-md shadow-gold-500/20 active:scale-[0.98];
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-lilac-100 px-5 py-3 text-sm font-semibold text-lilac-800 hover:bg-lilac-200 transition active:scale-[0.98];
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 px-5 py-3 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition active:scale-[0.98] shadow-sm;
 }
 
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-lilac-200 px-5 py-3 text-sm font-medium text-ink-900 hover:bg-lilac-50 transition;
-}
-
-.btn-danger {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-100 transition;
 }
 
 .input {
-  @apply w-full rounded-xl border border-lilac-200 bg-white px-4 py-3 text-sm text-ink-900 placeholder-ink-600/40 focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-200 transition;
+  @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-100 transition;
 }
 
 .label {
-  @apply block text-sm font-medium text-ink-900 mb-1.5;
+  @apply block text-sm font-medium text-slate-800 mb-1.5;
 }
 
 .card {
-  @apply rounded-2xl border border-lilac-100 bg-white shadow-sm;
+  @apply rounded-2xl border border-slate-200/80 bg-white shadow-xl shadow-slate-200/50;
 }
+
+

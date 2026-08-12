@@ -334,26 +334,6 @@ export async function POST(req: Request) {
             updated_at: new Date().toISOString()
           })
           .eq("enrollment_id", course_enrollment_id);
-      } else {
-        const { data: firstPendingMod } = await supabase
-          .from("curso_modulo_inscripciones")
-          .select("id")
-          .eq("enrollment_id", course_enrollment_id)
-          .eq("billing_status", "pending")
-          .order("id")
-          .limit(1)
-          .maybeSingle();
-
-        if (firstPendingMod) {
-          await supabase
-            .from("curso_modulo_inscripciones")
-            .update({
-              invoice_id: invoice.id,
-              billing_status: "invoiced",
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", firstPendingMod.id);
-        }
       }
     }
 

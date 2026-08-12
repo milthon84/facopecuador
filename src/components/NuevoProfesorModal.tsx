@@ -74,7 +74,7 @@ export default function NuevoProfesorModal({ action }: Props) {
                 <input
                   name="fullName"
                   required
-                  placeholder="Ej: Dr. Alejandro Peralta"
+                  placeholder="Ej: Alejandro Peralta"
                   className="input text-xs"
                 />
               </div>
@@ -108,17 +108,7 @@ export default function NuevoProfesorModal({ action }: Props) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1 flex items-center gap-1">
-                  <Camera size={13} className="text-lilac-600" /> Foto del Profesor (Imagen opcional)
-                </label>
-                <input
-                  name="photoFile"
-                  type="file"
-                  accept="image/*"
-                  className="w-full text-xs text-ink-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none"
-                />
-              </div>
+
 
               <div>
                 <label className="block text-xs font-semibold text-ink-700 mb-1 flex items-center gap-1">

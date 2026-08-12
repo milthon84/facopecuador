@@ -40,7 +40,6 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
 
-  // Cursos reales primero, artículos con destino "Cursos" a continuación
   const items: CarouselItem[] = useMemo(
     () => [
       ...courses.map((c) => ({ kind: "course" as const, data: c })),
@@ -49,7 +48,8 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
     [courses, posts]
   );
 
-  // Notificar al componente padre de forma segura cuando el ítem activo es un curso real
+  const totalItems = items.length;
+
   useEffect(() => {
     const active = items[currentIndex];
     if (active?.kind === "course" && onCourseChange) {
@@ -58,187 +58,192 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
   }, [currentIndex, items, onCourseChange]);
 
   const next = useCallback(() => {
-    if (items.length <= 1 || animating) return;
+    if (totalItems <= 1 || animating) return;
     setAnimating(true);
     setTimeout(() => {
-      setCurrentIndex((prev) => (prev + 1) % items.length);
+      setCurrentIndex((prev) => (prev + 1) % totalItems);
       setAnimating(false);
     }, 420);
-  }, [items.length, animating]);
+  }, [totalItems, animating]);
 
   useEffect(() => {
-    if (items.length <= 1) return;
+    if (totalItems <= 1) return;
     const interval = setInterval(next, 6000);
     return () => clearInterval(interval);
-  }, [next, items.length]);
+  }, [next, totalItems]);
 
-  if (items.length === 0) return null;
+  if (totalItems === 0) return null;
 
+  // Elemento actual (principal) y siguiente elemento (secundario superpuesto)
   const activeItem = items[currentIndex];
-  const nextItem = items[(currentIndex + 1) % items.length];
+  const nextItem = items[(currentIndex + 1) % totalItems];
 
-  const nextDate = nextItem.kind === "course" ? nextItem.data.start_date : nextItem.data.created_at;
-  const nextTitle = nextItem.kind === "course" ? nextItem.data.name : nextItem.data.title;
-  const nextImage = nextItem.data.image_url;
-  const nextVideo = nextItem.kind === "post" ? nextItem.data.video_url : null;
-
-  const activeDate = activeItem.kind === "course" ? activeItem.data.start_date : activeItem.data.created_at;
-  const activeTitle = activeItem.kind === "course" ? activeItem.data.name : activeItem.data.title;
-  const activeDescription = activeItem.kind === "course" ? activeItem.data.description : activeItem.data.content;
+  const activeIsCourse = activeItem.kind === "course";
+  const activeTitle = activeIsCourse ? activeItem.data.name : activeItem.data.title;
+  const activeDate = activeIsCourse ? activeItem.data.start_date : activeItem.data.created_at;
+  const activeDesc = activeIsCourse ? activeItem.data.description : activeItem.data.content;
   const activeImage = activeItem.data.image_url;
   const activeVideo = activeItem.kind === "post" ? activeItem.data.video_url : null;
 
+  const nextIsCourse = nextItem.kind === "course";
+  const nextTitle = nextIsCourse ? nextItem.data.name : nextItem.data.title;
+  const nextDate = nextIsCourse ? nextItem.data.start_date : nextItem.data.created_at;
+  const nextImage = nextItem.data.image_url;
+  const nextVideo = nextItem.kind === "post" ? nextItem.data.video_url : null;
+
   const waMessage = encodeURIComponent(
-    `Hola FACOP Ecuador, estoy interesado en el curso: "${activeTitle}". ¿Podría darme más información?`
+    `Hola FACOP Ecuador, estoy interesado en: "${activeTitle}". ¿Podría darme información?`
   );
   const waLink = `https://wa.me/${whatsappPhone}?text=${waMessage}`;
 
   return (
     <div
-      className="relative w-full h-[580px] cursor-pointer select-none"
+      className="relative w-full h-[520px] sm:h-[580px] cursor-pointer select-none"
       onClick={next}
-      title="Clic para ver el siguiente elemento"
+      title="Clic para ver el siguiente afiche"
     >
-      {/* ── TARJETA PEQUEÑA — siguiente elemento — esquina inferior izquierda ── */}
-      <div
-        className={`absolute bottom-0 left-0 w-60 h-80 rounded-2xl overflow-hidden shadow-xl border border-slate-100 bg-white
-          transition-all duration-500 ease-out
-          ${animating
-            ? "scale-105 -translate-x-3 translate-y-3 -rotate-3 opacity-0"
-            : "scale-100 translate-x-0 translate-y-0 rotate-0 opacity-100"
-          }
-        `}
-        style={{ zIndex: 10 }}
-      >
-        {nextImage ? (
-          <img src={nextImage} alt={nextTitle} className="w-full h-44 object-fill" />
-        ) : nextVideo ? (
-          <div className="w-full h-44 bg-black relative">
-            <video
-              src={nextVideo}
-              autoPlay
-              muted
-              loop
-              playsInline
+      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior izquierda ── */}
+      {totalItems > 1 && (
+        <div
+          className={`absolute bottom-0 left-0 w-56 sm:w-64 h-72 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 bg-white
+            transition-all duration-500 ease-out group hover:scale-105
+            ${animating
+              ? "scale-105 -translate-x-4 translate-y-4 -rotate-3 opacity-0"
+              : "scale-100 translate-x-0 translate-y-0 rotate-0 opacity-100"
+            }
+          `}
+          style={{ zIndex: 10 }}
+        >
+          {nextVideo ? (
+            <div className="w-full h-full bg-slate-950 relative">
+              <video
+                src={nextVideo}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : nextImage ? (
+            <img
+              src={nextImage}
+              alt={nextTitle}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-slate-950/20 flex items-center justify-center pointer-events-none">
-              <div className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md">
-                <svg className="w-3.5 h-3.5 text-slate-800 fill-current translate-x-0.5" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </div>
+          ) : (
+            <div className="w-full h-full bg-purple-100 flex items-center justify-center">
+              <BookOpen size={36} className="text-purple-400" />
             </div>
-          </div>
-        ) : (
-          <div className="w-full h-44 bg-gradient-to-br from-gold-50 to-slate-100 flex items-center justify-center">
-            <BookOpen size={28} className="text-slate-300" />
-          </div>
-        )}
-        <div className="p-4 space-y-1.5">
-          <p className="text-[9px] text-gold-500 font-semibold uppercase tracking-wider">
-            {new Date(nextDate).toLocaleDateString("es-EC", { month: "short", year: "numeric" })}
-          </p>
-          <h4 className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">
-            {nextTitle}
-          </h4>
-        </div>
-      </div>
+          )}
 
-      {/* ── TARJETA PRINCIPAL — elemento actual — ocupa ~73% del ancho, desde la derecha ── */}
+          <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent text-white space-y-0.5">
+            <span className="text-[9px] text-gold-400 font-bold uppercase tracking-wider block">
+              Siguiente afiche • {new Date(nextDate).toLocaleDateString("es-EC", { month: "short", day: "numeric" })}
+            </span>
+            <h5 className="text-xs font-bold leading-tight line-clamp-2 text-white">
+              {nextTitle}
+            </h5>
+          </div>
+        </div>
+      )}
+
+      {/* ── TARJETA PRINCIPAL DESTACADA — Ocupa ~76% del ancho desde la derecha ── */}
       <div
-        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-slate-400/30 bg-slate-900 border border-slate-800
+        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-purple-950/15 bg-slate-950 border border-slate-200/80
           transition-all duration-500 ease-out
           ${animating
             ? "translate-x-8 translate-y-4 opacity-0 scale-95"
             : "translate-x-0 translate-y-0 opacity-100 scale-100"
           }
         `}
-        style={{ zIndex: 20, width: "73%", height: "100%" }}
+        style={{ zIndex: 20, width: totalItems > 1 ? "76%" : "100%", height: "100%" }}
       >
-        {/* Video o Imagen de fondo que ocupa todo el alto */}
         {activeVideo ? (
-          <div className="absolute inset-0 w-full h-full bg-black">
+          <div className="absolute inset-0 w-full h-full bg-slate-950">
             <video
               src={activeVideo}
               autoPlay
               muted
               loop
               playsInline
-              className="absolute inset-0 w-full h-full object-cover"
+              className="w-full h-full object-cover"
             />
           </div>
         ) : activeImage ? (
-          <div className="absolute inset-0 w-full h-full">
+          <div className="absolute inset-0 w-full h-full bg-slate-950">
             <img
               src={activeImage}
               alt={activeTitle}
-              className="absolute inset-0 w-full h-full object-fill"
+              className="w-full h-full object-cover"
             />
           </div>
         ) : (
-          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
-            <BookOpen size={52} className="text-slate-700 opacity-40" />
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex items-center justify-center">
+            <BookOpen size={56} className="text-purple-400 opacity-40" />
           </div>
         )}
 
-        {/* Contenido overlay en la parte inferior */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 pt-16 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 p-6 pt-24 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent">
           <div className="space-y-1.5">
-            {activeItem.kind === "course" && (
+            {activeIsCourse && (
               <div className="flex items-center gap-2 text-gold-400">
-                <CalendarDays size={12} />
-                <span className="text-[10px] font-semibold uppercase tracking-widest">
-                  Inicio: {new Date(activeDate).toLocaleDateString("es-EC", { dateStyle: "medium" })}
+                <CalendarDays size={13} />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-gold-400">
+                  Inicio: {new Date(activeDate).toLocaleDateString("es-EC", { month: "short", day: "numeric", year: "numeric" })}
                 </span>
               </div>
             )}
-            <h3 className="font-bold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-sm">
+            <h3 className="font-extrabold text-white text-base sm:text-xl leading-snug line-clamp-2 drop-shadow-md">
               {activeTitle}
             </h3>
-            <p className="text-slate-300 text-[11px] leading-relaxed line-clamp-2 font-light">
-              {activeDescription || "Programa académico de alto nivel con docentes especializados."}
+            <p className="text-slate-300 text-xs leading-relaxed line-clamp-2 font-light">
+              {activeDesc || "Capacitación de posgrado con especialistas de alto nivel."}
             </p>
           </div>
 
-          {/* Pie / Acciones */}
-          {activeItem.kind === "course" ? (
-            <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
-              <a
-                href={waLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
-              >
-                Más información
-                <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-              </a>
+          <div className="flex justify-between items-center pt-3 border-t border-white/15">
+            {activeIsCourse ? (
+              <>
+                <a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                >
+                  Más información
+                  <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
+                </a>
 
-              {/* Botón inscribirse */}
-              <Link
-                href={`/inscripcion-curso/${activeItem.data.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold-600 text-white text-[11px] font-semibold hover:bg-gold-500 transition-all group shadow-md"
-              >
-                <GraduationCap size={11} className="group-hover:scale-110 transition-transform" />
-                Inscribirse
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center pt-1.5 border-t border-white/10">
+                <Link
+                  href={`/inscripcion-curso/${activeItem.data.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#C9A961] to-[#B3934B] hover:from-[#B3934B] hover:to-[#9E7E36] text-slate-950 text-xs font-bold transition shadow-lg active:scale-[0.98]"
+                >
+                  <GraduationCap size={15} />
+                  Inscribirse
+                </Link>
+              </>
+            ) : (
               <Link
                 href={`/noticias/${activeItem.data.slug}`}
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
               >
-                Leer artículo
-                <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                <span>Leer artículo completo</span>
+                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+
+
+
+
+

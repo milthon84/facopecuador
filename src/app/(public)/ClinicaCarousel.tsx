@@ -23,152 +23,134 @@ export default function ClinicaCarousel({ posts }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
 
+  const totalItems = posts.length;
+
   const next = useCallback(() => {
-    if (posts.length <= 1 || animating) return;
+    if (totalItems <= 1 || animating) return;
     setAnimating(true);
     setTimeout(() => {
-      setCurrentIndex((prev) => (prev + 1) % posts.length);
+      setCurrentIndex((prev) => (prev + 1) % totalItems);
       setAnimating(false);
     }, 420);
-  }, [posts.length, animating]);
+  }, [totalItems, animating]);
 
   useEffect(() => {
-    if (posts.length <= 1) return;
-    const interval = setInterval(next, 5000);
+    if (totalItems <= 1) return;
+    const interval = setInterval(next, 5500);
     return () => clearInterval(interval);
-  }, [next, posts.length]);
+  }, [next, totalItems]);
 
-  if (posts.length === 0) {
-    return (
-      <div className="relative w-full h-[580px]">
-        {/* Ghost cards */}
-        <div className="absolute bottom-0 right-0 w-60 h-80 bg-slate-100/80 rounded-2xl shadow-sm rotate-3" />
-        <div className="absolute top-0 left-0 w-[73%] h-full bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col items-center justify-center gap-3 p-8 text-center">
-          <Stethoscope size={32} className="text-slate-700 opacity-40" />
-          <p className="text-[11px] text-slate-400 font-light leading-relaxed max-w-[180px]">
-            Próximamente publicaremos artículos sobre la Clínica.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (totalItems === 0) return null;
 
   const activePost = posts[currentIndex];
-  const nextPost = posts[(currentIndex + 1) % posts.length];
+  const nextPost = posts[(currentIndex + 1) % totalItems];
 
   return (
     <div
-      className="relative w-full h-[580px] cursor-pointer select-none"
+      className="relative w-full h-[520px] sm:h-[580px] cursor-pointer select-none"
       onClick={next}
       title="Clic para ver el siguiente artículo"
     >
-      {/* ── TARJETA PEQUEÑA — artículo siguiente — esquina inferior derecha ── */}
-      <div
-        className={`absolute bottom-0 right-0 w-60 h-80 rounded-2xl overflow-hidden shadow-xl border border-slate-100 bg-white
-          transition-all duration-500 ease-out
-          ${animating
-            ? "scale-105 translate-x-3 translate-y-3 rotate-3 opacity-0"
-            : "scale-100 translate-x-0 translate-y-0 rotate-0 opacity-100"
-          }
-        `}
-        style={{ zIndex: 10 }}
-      >
-        {nextPost.image_url ? (
-          <img
-            src={nextPost.image_url}
-            alt={nextPost.title}
-            className="w-full h-44 object-fill"
-          />
-        ) : nextPost.video_url ? (
-          <div className="w-full h-44 bg-black relative">
-            <video
-              src={nextPost.video_url}
-              autoPlay
-              muted
-              loop
-              playsInline
+      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior derecha ── */}
+      {totalItems > 1 && (
+        <div
+          className={`absolute bottom-0 right-0 w-56 sm:w-64 h-72 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 bg-white
+            transition-all duration-500 ease-out group hover:scale-105
+            ${animating
+              ? "scale-105 translate-x-4 translate-y-4 rotate-3 opacity-0"
+              : "scale-100 translate-x-0 translate-y-0 rotate-0 opacity-100"
+            }
+          `}
+          style={{ zIndex: 10 }}
+        >
+          {nextPost.video_url ? (
+            <div className="w-full h-full bg-slate-950 relative">
+              <video
+                src={nextPost.video_url}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : nextPost.image_url ? (
+            <img
+              src={nextPost.image_url}
+              alt={nextPost.title}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-slate-950/20 flex items-center justify-center pointer-events-none">
-              <div className="w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md">
-                <svg className="w-3.5 h-3.5 text-slate-800 fill-current translate-x-0.5" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </div>
+          ) : (
+            <div className="w-full h-full bg-purple-100 flex items-center justify-center">
+              <Stethoscope size={36} className="text-purple-400" />
             </div>
-          </div>
-        ) : (
-          <div className="w-full h-44 bg-gradient-to-br from-gold-50 to-slate-100 flex items-center justify-center">
-            <Stethoscope size={28} className="text-slate-300" />
-          </div>
-        )}
-        <div className="p-4 space-y-1.5">
-          <p className="text-[9px] text-gold-500 font-semibold uppercase tracking-wider">
-            {new Date(nextPost.created_at).toLocaleDateString("es-EC", { month: "short", year: "numeric" })}
-          </p>
-          <h4 className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">
-            {nextPost.title}
-          </h4>
-        </div>
-      </div>
+          )}
 
-      {/* ── TARJETA PRINCIPAL — artículo actual — ocupa ~73% del ancho, desde la izquierda ── */}
+          <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent text-white space-y-0.5">
+            <span className="text-[9px] text-gold-400 font-bold uppercase tracking-wider block">
+              Siguiente afiche • {new Date(nextPost.created_at).toLocaleDateString("es-EC", { month: "short", day: "numeric" })}
+            </span>
+            <h5 className="text-xs font-bold leading-tight line-clamp-2 text-white">
+              {nextPost.title}
+            </h5>
+          </div>
+        </div>
+      )}
+
+      {/* ── TARJETA PRINCIPAL DESTACADA — Ocupa ~76% del ancho desde la izquierda ── */}
       <div
-        className={`absolute top-0 left-0 rounded-3xl overflow-hidden shadow-2xl shadow-slate-400/30 bg-slate-900 border border-slate-800
+        className={`absolute top-0 left-0 rounded-3xl overflow-hidden shadow-2xl shadow-purple-950/15 bg-slate-950 border border-slate-200/80
           transition-all duration-500 ease-out
           ${animating
             ? "-translate-x-8 translate-y-4 opacity-0 scale-95"
             : "translate-x-0 translate-y-0 opacity-100 scale-100"
           }
         `}
-        style={{ zIndex: 20, width: "73%", height: "100%" }}
+        style={{ zIndex: 20, width: totalItems > 1 ? "76%" : "100%", height: "100%" }}
       >
-        {/* Video o Imagen de fondo que ocupa todo el alto */}
         {activePost.video_url ? (
-          <div className="absolute inset-0 w-full h-full bg-black">
+          <div className="absolute inset-0 w-full h-full bg-slate-950">
             <video
               src={activePost.video_url}
               autoPlay
               muted
               loop
               playsInline
-              className="absolute inset-0 w-full h-full object-cover"
+              className="w-full h-full object-cover"
             />
           </div>
         ) : activePost.image_url ? (
-          <div className="absolute inset-0 w-full h-full">
+          <div className="absolute inset-0 w-full h-full bg-slate-950">
             <img
               src={activePost.image_url}
               alt={activePost.title}
-              className="absolute inset-0 w-full h-full object-fill"
+              className="w-full h-full object-cover"
             />
           </div>
         ) : (
-          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
-            <Stethoscope size={52} className="text-slate-700 opacity-40" />
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex items-center justify-center">
+            <Stethoscope size={56} className="text-purple-400 opacity-40" />
           </div>
         )}
 
-        {/* Contenido overlay en la parte inferior */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 pt-16 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 p-6 pt-24 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent">
           <div className="space-y-1.5">
-            <h3 className="font-bold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-sm">
+            <h3 className="font-extrabold text-white text-base sm:text-xl leading-snug line-clamp-2 drop-shadow-md">
               {activePost.title}
             </h3>
-            <p className="text-slate-300 text-[11px] leading-relaxed line-clamp-2 font-light">
+            <p className="text-slate-300 text-xs leading-relaxed line-clamp-2 font-light">
               {activePost.content}
             </p>
           </div>
 
-          {/* Pie / Acciones */}
-          <div className="flex items-center pt-1.5 border-t border-white/10">
+          <div className="flex items-center pt-3 border-t border-white/15">
             <Link
               href={`/noticias/${activePost.slug}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+              className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
             >
-              Leer artículo
-              <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+              <span>Leer artículo clínico completo</span>
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
         </div>
@@ -176,3 +158,9 @@ export default function ClinicaCarousel({ posts }: Props) {
     </div>
   );
 }
+
+
+
+
+
+

@@ -258,8 +258,8 @@ export default async function AlumnosPage({
 
   const supabase = createAdminClient();
 
-  // Auto-completar cursos expirados
-  await updateExpiredCourses(supabase);
+  // Auto-completar cursos expirados en segundo plano
+  updateExpiredCourses(supabase).catch(() => {});
 
   if (studentId) {
     // === VISTA DE DETALLE DEL ALUMNO ===
@@ -436,14 +436,9 @@ export default async function AlumnosPage({
                             <User size={18} />
                           </div>
                         )}
-                        <div>
                           <Link href={`/erp/cursos/alumnos?id=${student.id}`} className="font-bold text-ink-950 hover:text-lilac-700">
                             {student.full_name}
                           </Link>
-                          {student.professional_title && (
-                            <div className="text-[11px] text-lilac-800 font-medium">{student.professional_title}</div>
-                          )}
-                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 font-mono text-xs text-ink-800 font-bold">

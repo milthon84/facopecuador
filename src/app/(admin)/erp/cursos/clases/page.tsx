@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { 
   Presentation, Calendar, Clock, Plus, ArrowLeft, 
   CheckCircle2, UserCheck, BookOpen, GraduationCap, CheckSquare, 
-  MapPin, User, Mail, Send, DollarSign, AlertCircle, CreditCard, Search, Megaphone, Users, Trash2
+  MapPin, User, Mail, Send, DollarSign, AlertCircle, CreditCard, Receipt, Search, Megaphone, Users, Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { sendCourseNoticeEmail } from "@/lib/email";
+import NoticeComposerClient from "@/components/NoticeComposerClient";
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +146,7 @@ async function sendNotice(formData: FormData) {
   const classId = formData.get("classId") as string || null;
   const subject = (formData.get("subject") as string)?.trim();
   const message = (formData.get("message") as string)?.trim();
+  const channel = (formData.get("channel") as string) || "both";
 
   if (!courseId || !subject || !message) return;
 
@@ -172,6 +174,16 @@ async function sendNotice(formData: FormData) {
 
   if (insertError || !notice) {
     throw new Error(insertError?.message || "Error al registrar el comunicado");
+  }
+
+  if (channel === "whatsapp") {
+    await supabase
+      .from("curso_avisos")
+      .update({ status: "sent", updated_at: new Date().toISOString() })
+      .eq("id", notice.id);
+
+    revalidatePath("/erp/cursos/clases");
+    redirect(`/erp/cursos/clases?tab=avisos&course_id=${courseId}&status=sent`);
   }
 
   const { data: enrollments } = await supabase
@@ -215,11 +227,12 @@ async function sendNotice(formData: FormData) {
     .from("curso_avisos")
     .update({
       status: allSuccessful ? "sent" : "failed",
+      updated_at: new Date().toISOString(),
     })
     .eq("id", notice.id);
 
   revalidatePath("/erp/cursos/clases");
-  redirect(`/erp/cursos/clases?tab=avisos&course_id=${courseId}&status=sent`);
+  redirect(`/erp/cursos/clases?tab=avisos&course_id=${courseId}&status=${allSuccessful ? "sent" : "error"}`);
 }
 
 export default async function ClasesPage({
@@ -254,11 +267,25 @@ export default async function ClasesPage({
   // PASO 1: SI NO HAY CURSO SELECCIONADO, MOSTRAR SELECCIÓN DE CURSO
   // =========================================================
   if (!courseId) {
-    const { data: cursos } = await supabase
-      .from("cursos")
-      .select("*, curso_modulos(id)")
-      .in("status", ["active", "in_progress"])
-      .order("start_date", { ascending: false });
+    const [cursosRes, enrolRes] = await Promise.all([
+      supabase
+        .from("cursos")
+        .select("*, curso_modulos(id)")
+        .in("status", ["active", "in_progress"])
+        .order("start_date", { ascending: false }),
+      supabase
+        .from("curso_inscripciones")
+        .select("course_id")
+        .eq("status", "enrolled")
+    ]);
+
+    const cursos = cursosRes.data || [];
+    const enrolData = enrolRes.data || [];
+
+    const studentCountMap: Record<string, number> = {};
+    enrolData.forEach((e) => {
+      studentCountMap[e.course_id] = (studentCountMap[e.course_id] || 0) + 1;
+    });
 
     return (
       <div className="max-w-6xl mx-auto pb-8 space-y-4">
@@ -284,31 +311,50 @@ export default async function ClasesPage({
                 href={`/erp/cursos/clases?tab=clases&course_id=${c.id}`}
                 className="card p-4 bg-white border border-lilac-100 shadow-2xs hover:shadow-md transition hover:border-lilac-300 flex flex-col justify-between gap-3 rounded-2xl group"
               >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                      c.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"
-                    }`}>
-                      {c.status === "in_progress" ? "En Ejecución" : "Abierto"}
-                    </span>
-                    <span className="text-[10px] text-ink-400 font-bold bg-lilac-50 px-2 py-0.5 rounded-md">
-                      {c.curso_modulos?.length || 0} módulos
-                    </span>
-                  </div>
+                <div className="flex items-start gap-3.5">
+                  {/* Foto del curso mucho más grande */}
+                  {c.image_url ? (
+                    <img
+                      src={c.image_url}
+                      alt={c.name}
+                      className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-lilac-200 shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-200"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0">
+                      <GraduationCap size={40} />
+                    </div>
+                  )}
 
-                  <div>
-                    <h3 className="font-bold text-ink-950 text-sm leading-snug group-hover:text-lilac-700 transition-colors line-clamp-1">{c.name}</h3>
-                    <p className="text-xs text-ink-500 mt-0.5 line-clamp-2">{c.description || "Curso activo de posgrado."}</p>
+                  {/* Información del curso + Estados a la derecha */}
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                        c.status === "in_progress" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"
+                      }`}>
+                        {c.status === "in_progress" ? "En Ejecución" : "Abierto"}
+                      </span>
+                      <span className="text-[10px] text-ink-400 font-bold bg-lilac-50 px-2 py-0.5 rounded-md">
+                        {c.curso_modulos?.length || 0} {c.curso_modulos?.length === 1 ? "módulo" : "módulos"}
+                      </span>
+                    </div>
+
+                    <h3 className="font-bold text-ink-950 text-base leading-snug group-hover:text-lilac-700 transition-colors line-clamp-1 mt-1">
+                      {c.name}
+                    </h3>
+                    <p className="text-xs text-ink-500 line-clamp-2 leading-relaxed">
+                      {c.description || "Curso activo de posgrado."}
+                    </p>
                   </div>
                 </div>
 
                 <div className="pt-2.5 border-t border-lilac-50 flex items-center justify-between text-xs text-ink-600 font-medium">
-                  <span className="flex items-center gap-1 text-[11px]">
-                    <Calendar size={12} className="text-lilac-500" />
-                    <span>{new Date(c.start_date + "T12:00:00").toLocaleDateString("es-EC")}</span>
+                  <span className="flex items-center gap-1 text-[11px] text-ink-500 font-semibold">
+                    <Calendar size={13} className="text-lilac-500" />
+                    <span>Inicio: {new Date(c.start_date + "T12:00:00").toLocaleDateString("es-EC")}</span>
                   </span>
-                  <span className="text-lilac-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">
-                    Gestionar Curso →
+                  <span className="flex items-center gap-1 text-[11px] text-ink-600 font-bold bg-lilac-50/80 border border-lilac-150 px-2 py-0.5 rounded-md">
+                    <Users size={12} className="text-lilac-600" />
+                    <span>{studentCountMap[c.id] || 0} {studentCountMap[c.id] === 1 ? "alumno" : "alumnos"}</span>
                   </span>
                 </div>
               </Link>
@@ -337,9 +383,17 @@ export default async function ClasesPage({
       <div className="bg-white border border-lilac-200 shadow-2xs rounded-2xl p-4 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 font-bold shrink-0">
-              <GraduationCap size={20} />
-            </div>
+            {selectedCourse.image_url ? (
+              <img
+                src={selectedCourse.image_url}
+                alt={selectedCourse.name}
+                className="w-12 h-12 rounded-xl object-cover border border-lilac-200 shadow-2xs shrink-0"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 font-bold shrink-0">
+                <GraduationCap size={22} />
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold text-ink-950 leading-tight">{selectedCourse.name}</h1>
@@ -426,20 +480,32 @@ export default async function ClasesPage({
               classesForSelector = loadedClasses || [];
             }
 
-            const { data: avisos } = await supabase
-              .from("curso_avisos")
-              .select(`
-                id,
-                subject,
-                message,
-                sent_at,
-                status,
-                cursos (name),
-                curso_clases (title, date)
-              `)
-              .eq("course_id", courseId)
-              .order("sent_at", { ascending: false })
-              .limit(30);
+            const [avisosRes, studentEnrollmentsRes] = await Promise.all([
+              supabase
+                .from("curso_avisos")
+                .select(`
+                  id,
+                  subject,
+                  message,
+                  sent_at,
+                  status,
+                  cursos (name),
+                  curso_clases (title, date)
+                `)
+                .eq("course_id", courseId)
+                .order("sent_at", { ascending: false })
+                .limit(30),
+              supabase
+                .from("curso_inscripciones")
+                .select("alumnos(id, full_name, email, phone, professional_title)")
+                .eq("course_id", courseId)
+                .eq("status", "enrolled")
+            ]);
+
+            const avisos = avisosRes.data || [];
+            const enrolledStudentsList = (studentEnrollmentsRes.data || [])
+              .map((e: any) => e.alumnos)
+              .filter(Boolean);
 
             const successNotice = statusParam === "sent";
 
@@ -448,119 +514,77 @@ export default async function ClasesPage({
                 {successNotice && (
                   <div className="bg-green-50 border border-green-200 text-green-800 rounded-xl p-3 text-xs font-semibold flex items-center gap-2 shadow-2xs">
                     <CheckCircle2 size={15} className="text-green-600 shrink-0" />
-                    ¡Comunicado enviado con éxito a los alumnos matriculados en {selectedCourse.name}!
+                    ¡Comunicado difundido con éxito a los alumnos matriculados en {selectedCourse.name}!
                   </div>
                 )}
 
-                <div className="grid md:grid-cols-3 gap-4 items-start">
-                  <div className="md:col-span-1">
+                <div className="grid lg:grid-cols-12 gap-6 items-start">
+                  {/* Formulario Multicanal de Envíos (Sección Izquierda Más Grande) */}
+                  <div className="lg:col-span-7">
                     {canEdit ? (
-                      <div className="card p-4 bg-white border border-lilac-100 shadow-2xs rounded-2xl">
-                        <h2 className="text-xs font-bold text-ink-950 mb-3 pb-2 border-b border-lilac-50 flex items-center gap-1.5">
-                          <Send size={14} className="text-lilac-600" /> Redactar Comunicado
-                        </h2>
-                        <form action={sendNotice} className="space-y-3">
-                          <input type="hidden" name="courseId" value={courseId} />
-                          <div>
-                            <label className="label text-ink-800 font-semibold text-[11px]">Curso Destinatario</label>
-                            <input
-                              type="text"
-                              disabled
-                              value={selectedCourse.name}
-                              className="input text-xs py-1.5 bg-gray-50 border-gray-200 font-bold text-ink-900"
-                            />
-                          </div>
-
-                          {classesForSelector.length > 0 && (
-                            <div>
-                              <label className="label text-ink-800 text-[11px]">Asociar a una clase (opcional)</label>
-                              <select name="classId" className="input text-xs py-1.5">
-                                <option value="">— Ninguna clase en particular —</option>
-                                {classesForSelector.map((cls) => (
-                                  <option key={cls.id} value={cls.id}>
-                                    {cls.title} ({new Date(cls.date + "T12:00:00").toLocaleDateString("es-EC")})
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          <div>
-                            <label className="label text-ink-800 text-[11px]">Asunto del correo *</label>
-                            <input
-                              name="subject"
-                              required
-                              placeholder="Ej: Requisitos para el Módulo Clínico"
-                              className="input text-xs py-1.5"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="label text-ink-800 text-[11px]">Mensaje *</label>
-                            <textarea
-                              name="message"
-                              required
-                              rows={5}
-                              placeholder="Escribe el mensaje oficial..."
-                              className="input text-xs py-1.5 resize-none"
-                            />
-                          </div>
-
-                          <button type="submit" className="w-full btn-primary text-xs py-2 mt-1 flex items-center justify-center gap-1.5 shadow-2xs font-semibold cursor-pointer">
-                            <Send size={13} /> Enviar email ({enrolledCount} alumnos)
-                          </button>
-                        </form>
-                      </div>
+                      <NoticeComposerClient
+                        courseId={courseId}
+                        courseName={selectedCourse.name}
+                        classes={classesForSelector}
+                        students={enrolledStudentsList}
+                        canEdit={canEdit}
+                        sendNoticeAction={sendNotice}
+                      />
                     ) : (
-                      <div className="card p-4 bg-lilac-50/50 border border-lilac-100 text-center text-xs text-ink-500 italic rounded-2xl">
+                      <div className="card p-5 bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic rounded-3xl">
                         No tienes permisos para redactar o enviar avisos.
                       </div>
                     )}
                   </div>
 
-                  <div className="md:col-span-2 space-y-3">
-                    <div className="bg-white border border-lilac-100 rounded-2xl shadow-2xs overflow-hidden">
-                      <div className="px-4 py-3 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-                        <span className="text-xs font-bold text-ink-900">
-                          Comunicados Enviados
+                  {/* Historial de Comunicados Enviados (Sección Derecha Más Pequeña) */}
+                  <div className="lg:col-span-5 space-y-3">
+                    <div className="bg-white border border-slate-200/90 rounded-3xl shadow-sm overflow-hidden">
+                      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                          <Send size={15} className="text-lilac-600" />
+                          Historial de Comunicados Difundidos
                         </span>
-                        <span className="text-[11px] text-ink-500 bg-lilac-50 border border-lilac-100 px-2.5 py-0.5 rounded-full font-bold">
-                          {avisos?.length ?? 0} comunicados
+                        <span className="text-[11px] text-lilac-800 bg-white border border-lilac-200 px-3 py-0.5 rounded-full font-bold shadow-2xs">
+                          {avisos.length} comunicados
                         </span>
                       </div>
 
-                      {!avisos || avisos.length === 0 ? (
-                        <div className="p-8 text-center text-xs text-ink-500 italic">Aún no se han enviado comunicados en este curso.</div>
+                      {avisos.length === 0 ? (
+                        <div className="p-10 text-center text-xs text-ink-500 italic">
+                          Aún no se han registrado o difundido comunicados en este curso.
+                        </div>
                       ) : (
                         <div className="divide-y divide-lilac-50">
                           {avisos.map((av: any) => (
-                            <div key={av.id} className="p-4 space-y-1.5 hover:bg-lilac-50/20 transition-colors">
+                            <div key={av.id} className="p-5 space-y-2 hover:bg-lilac-50/10 transition-colors">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-0.5">
-                                  <h3 className="font-bold text-ink-950 text-xs flex items-center gap-1.5">
-                                    <Mail size={13} className="text-lilac-600" /> {av.subject}
+                                  <h3 className="font-bold text-ink-950 text-sm flex items-center gap-1.5">
+                                    <Mail size={14} className="text-lilac-600" />
+                                    <span>{av.subject}</span>
                                   </h3>
-                                  <p className="text-[10px] text-ink-400 font-semibold">
-                                    {av.curso_clases ? `Clase: ${av.curso_clases.title}` : "Aviso General"}
+                                  <p className="text-[11px] text-ink-500 font-semibold">
+                                    {av.curso_clases ? `Clase asociada: ${av.curso_clases.title}` : "Comunicado General de Curso"}
                                   </p>
                                 </div>
 
-                                <div className="flex flex-col items-end shrink-0 text-right space-y-0.5">
-                                  <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                                <div className="flex flex-col items-end shrink-0 text-right space-y-1">
+                                  <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
                                     av.status === "sent" ? "bg-green-50 text-green-700 border-green-200" :
-                                    av.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-150 animate-pulse" :
-                                    "bg-red-50 text-red-700 border-red-100"
+                                    av.status === "pending" ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" :
+                                    "bg-red-50 text-red-700 border-red-200"
                                   }`}>
-                                    {av.status === "sent" ? "Enviado" :
-                                     av.status === "pending" ? "Procesando" : "Fallido"}
+                                    {av.status === "sent" ? "Enviado con Éxito" :
+                                     av.status === "pending" ? "Procesando" : "Error en Envío"}
                                   </span>
-                                  <span className="text-[9px] text-ink-500 font-medium">
+                                  <span className="text-[10px] text-ink-400 font-mono">
                                     {new Date(av.sent_at).toLocaleString("es-EC")}
                                   </span>
                                 </div>
                               </div>
 
-                              <p className="text-xs text-ink-600 bg-gray-50 border border-gray-100 p-2.5 rounded-xl whitespace-pre-wrap leading-relaxed">
+                              <p className="text-xs text-ink-700 bg-lilac-50/30 border border-lilac-100 p-3 rounded-2xl whitespace-pre-wrap leading-relaxed">
                                 {av.message}
                               </p>
                             </div>
@@ -624,7 +648,7 @@ export default async function ClasesPage({
                 .order("start_time"),
               supabase
                 .from("curso_modulo_inscripciones")
-                .select("id, enrollment_id, billing_status, invoice_id, invoices(invoice_number, sri_status)")
+                .select("id, enrollment_id, billing_status, invoice_id, invoices(invoice_number, sri_status, invoice_items(description))")
                 .eq("module_id", selectedModule.id),
             ]);
 
@@ -649,8 +673,14 @@ export default async function ClasesPage({
 
             const billingMap = new Map<string, { billingStatus: string; invoiceNumber?: string; inscriptionId: string }>();
             moduleBillingList.forEach((mb: any) => {
+              const items = mb.invoices?.invoice_items || [];
+              const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
+                item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
+              );
+              const realBillingStatus = (mb.billing_status === "invoiced" && isInscriptionInvoice) ? "pending" : mb.billing_status;
+
               billingMap.set(mb.enrollment_id, {
-                billingStatus: mb.billing_status,
+                billingStatus: realBillingStatus,
                 invoiceNumber: mb.invoices?.invoice_number,
                 inscriptionId: mb.id,
               });
@@ -780,10 +810,10 @@ export default async function ClasesPage({
                             const student = enrollment.alumnos;
                             if (!student) return null;
 
-                            // POR DEFECTO AUSENTE ANTES DE TOMAR ASISTENCIA
+                            // POR DEFECTO SIN SELECCIONAR ANTES DE TOMAR ASISTENCIA
                             const hasRecord = attendanceMap.has(student.id);
-                            const recorded = attendanceMap.get(student.id) || { status: "absent", notes: "" };
-                            const currentStatus = hasRecord ? recorded.status : "absent";
+                            const recorded = attendanceMap.get(student.id);
+                            const currentStatus = hasRecord ? recorded?.status : null;
 
                             const hasBillingRecord = billingMap.has(enrollment.id);
                             const billingInfo = billingMap.get(enrollment.id) || { billingStatus: "pending", inscriptionId: "" };
@@ -796,7 +826,7 @@ export default async function ClasesPage({
                             let effectiveBillingStatus = billingInfo.billingStatus;
                             let fullCourseInvoiceNumber: string | null = null;
 
-                            if (!hasBillingRecord && enrollment.payment_type === "full_course") {
+                            if (enrollment.payment_type === "full_course") {
                               effectiveBillingStatus = "invoiced_full";
                             }
 
@@ -814,13 +844,8 @@ export default async function ClasesPage({
                             return (
                               <div key={student.id} className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-lilac-50/20 transition-colors">
                                 <div className="space-y-1">
-                                  <div className="font-bold text-ink-950 text-xs flex items-center gap-1.5">
-                                    <span>{student.full_name}</span>
-                                    {student.professional_title && (
-                                      <span className="text-[9px] font-semibold text-lilac-700 bg-lilac-50 border border-lilac-100 px-1.5 py-0.2 rounded-md">
-                                        {student.professional_title}
-                                      </span>
-                                    )}
+                                  <div className="font-bold text-ink-950 text-xs">
+                                    {student.full_name}
                                   </div>
                                   <div className="text-[11px] text-ink-500 font-mono">
                                     Cédula: {student.document_number} &middot; Tel: {student.phone}
@@ -848,9 +873,10 @@ export default async function ClasesPage({
                                         {canEdit && (
                                           <Link
                                             href={invoiceLink}
-                                            className="btn-primary text-[9px] font-bold py-0.5 px-2 shadow-2xs hover:scale-[1.02] active:scale-[0.98] transition-transform rounded-md"
+                                            className="inline-flex items-center gap-1.5 bg-ink-900 hover:bg-ink-850 text-gold-400 hover:text-gold-300 border border-gold-500/40 hover:border-gold-400/70 text-[10px] font-bold py-1 px-3 rounded-xl shadow-2xs transition-all cursor-pointer"
                                           >
-                                            Facturar Módulo
+                                            <Receipt size={12} className="text-gold-400" />
+                                            <span>Facturar Módulo</span>
                                           </Link>
                                         )}
                                       </div>
@@ -858,14 +884,14 @@ export default async function ClasesPage({
                                   </div>
                                 </div>
 
-                                {/* TOMA DE ASISTENCIA: PRESENTE / AUSENTE (POR DEFECTO AUSENTE) */}
+                                {/* TOMA DE ASISTENCIA: PRESENTE / AUSENTE (SIN SELECCIÓN POR DEFECTO) */}
                                 <div className="flex items-center gap-2 shrink-0">
                                   <div className="flex items-center gap-1">
                                     {[
-                                      { val: "present", label: "Presente", cls: "peer-checked:bg-green-600 peer-checked:text-white border-green-200 text-green-700" },
-                                      { val: "absent", label: "Ausente", cls: "peer-checked:bg-red-500 peer-checked:text-white border-red-200 text-red-700" },
+                                      { val: "present", label: "Presente", cls: "peer-checked:bg-green-600 peer-checked:text-white peer-checked:border-green-700 bg-white border-lilac-200 text-ink-600 hover:bg-green-50 hover:text-green-700 hover:border-green-200" },
+                                      { val: "absent", label: "Ausente", cls: "peer-checked:bg-red-500 peer-checked:text-white peer-checked:border-red-600 bg-white border-lilac-200 text-ink-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200" },
                                     ].map((s) => (
-                                      <label key={s.val} className="relative cursor-pointer">
+                                      <label key={s.val} className="relative cursor-pointer select-none">
                                         <input
                                           type="radio"
                                           name={`status_${student.id}`}
@@ -884,7 +910,7 @@ export default async function ClasesPage({
                                   <input
                                     type="text"
                                     name={`notes_${student.id}`}
-                                    defaultValue={recorded.notes || ""}
+                                    defaultValue={recorded?.notes || ""}
                                     placeholder="Nota / Observación..."
                                     className="input text-xs py-1 px-2.5 w-40 focus:ring-1 focus:ring-lilac-500 rounded-lg"
                                     disabled={!canEdit}

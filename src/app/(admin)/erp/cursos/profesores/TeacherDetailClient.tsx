@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { 
   Award, GraduationCap, Calendar, FileText, Pencil, ArrowLeft, Mail, Phone, 
   UserCheck, ExternalLink, Download, CheckCircle2, X, Camera
@@ -37,9 +37,18 @@ export default function TeacherDetailClient({
   const [activeTab, setActiveTab] = useState<"cursos" | "clases" | "cv">("cursos");
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(editMode);
   const [loading, setLoading] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const totalClassesCount = assignedClasses.length;
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPreviewPhotoUrl(URL.createObjectURL(file));
+    }
+  }
 
   async function handleUpdateSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -83,19 +92,32 @@ export default function TeacherDetailClient({
             </div>
 
             <div className="flex items-start gap-3">
-              {teacher.photo_url ? (
-                <img
-                  src={teacher.photo_url}
-                  alt={teacher.full_name}
-                  className="w-14 h-14 rounded-2xl object-cover border border-lilac-200 shadow-2xs shrink-0"
-                />
-              ) : (
-                <div className="w-14 h-14 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0">
-                  <UserCheck size={24} />
-                </div>
-              )}
+              {/* Foto con lápiz overlay interactivo */}
+              <div
+                onClick={() => canEdit && setIsEditingModalOpen(true)}
+                className={`relative group shrink-0 ${canEdit ? "cursor-pointer" : ""}`}
+                title={canEdit ? "Haz clic para cambiar foto de perfil" : ""}
+              >
+                {teacher.photo_url ? (
+                  <img
+                    src={teacher.photo_url}
+                    alt={teacher.full_name}
+                    className="w-16 h-16 rounded-2xl object-cover border border-lilac-200 shadow-2xs transition group-hover:brightness-95"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0 transition group-hover:bg-lilac-100">
+                    <UserCheck size={28} />
+                  </div>
+                )}
 
-              <div className="space-y-1">
+                {canEdit && (
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-white border border-lilac-200 text-ink-700 shadow-xs flex items-center justify-center group-hover:bg-lilac-600 group-hover:text-white group-hover:border-lilac-600 transition-all">
+                    <Pencil size={11} />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 min-w-0 flex-1">
                 <h1 className="text-base font-bold text-ink-950 leading-snug">{teacher.full_name}</h1>
                 {teacher.specialty && (
                   <span className="inline-block text-[11px] font-semibold text-lilac-700 bg-lilac-50 border border-lilac-100 px-2 py-0.5 rounded-lg">
@@ -202,12 +224,12 @@ export default function TeacherDetailClient({
             onClick={() => setActiveTab("clases")}
             className={`flex items-center gap-2 px-5 py-3 font-bold text-xs rounded-t-2xl transition cursor-pointer ${
               activeTab === "clases"
-                ? "bg-white text-lilac-800 border-t-2 border-l border-r border-lilac-200 shadow-2xs -mb-px"
+                ? "bg-white text-blue-800 border-t-2 border-l border-r border-blue-200 shadow-2xs -mb-px"
                 : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
             }`}
           >
             <Calendar size={16} />
-            <span>Clases Impartidas ({assignedClasses.length})</span>
+            <span>Clases Dictadas ({totalClassesCount})</span>
           </button>
 
           <button
@@ -215,136 +237,112 @@ export default function TeacherDetailClient({
             onClick={() => setActiveTab("cv")}
             className={`flex items-center gap-2 px-5 py-3 font-bold text-xs rounded-t-2xl transition cursor-pointer ${
               activeTab === "cv"
-                ? "bg-white text-lilac-800 border-t-2 border-l border-r border-lilac-200 shadow-2xs -mb-px"
+                ? "bg-white text-green-800 border-t-2 border-l border-r border-green-200 shadow-2xs -mb-px"
                 : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
             }`}
           >
             <FileText size={16} />
-            <span>Hoja de Vida y Archivos</span>
+            <span>Hoja de Vida (CV)</span>
           </button>
         </div>
 
-        {/* Cuerpo de la Pestaña Activa */}
+        {/* Contenido de la Pestaña Activa */}
         <div className="p-6">
-          {/* TAB 1: CURSOS ASIGNADOS */}
           {activeTab === "cursos" && (
-            <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="space-y-4">
               {assignedCourses.length === 0 ? (
-                <div className="p-10 text-center text-sm text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-2xl">
-                  El profesor no está asignado a ningún curso actualmente.
+                <div className="p-8 text-center text-sm text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-2xl">
+                  Este profesor no está asignado a ningún curso actualmente.
                 </div>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {assignedCourses.map((assoc: any) => {
-                    const curso = assoc.cursos;
-                    if (!curso) return null;
-
-                    return (
-                      <div key={assoc.id} className="p-4 bg-white border border-lilac-100 rounded-2xl shadow-2xs space-y-3 hover:shadow-md transition">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[10px] font-bold text-lilac-800 bg-lilac-50 border border-lilac-100 px-2.5 py-0.5 rounded-full capitalize">
-                            {assoc.role === "principal" ? "Docente Principal" : assoc.role === "auxiliar" ? "Docente Auxiliar" : "Invitado"}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {assignedCourses.map((c: any) => (
+                    <div key={c.id} className="p-4 bg-white border border-lilac-100 rounded-2xl shadow-2xs flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-100 px-2 py-0.5 rounded-md">
+                            {c.role === "principal" ? "Docente Principal" : c.role || "Docente"}
                           </span>
-                          <span className="text-[10px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200 capitalize">
-                            {curso.status === "draft" ? "Borrador" : curso.status === "active" ? "Abierto" : curso.status === "in_progress" ? "En Ejecución" : "Finalizado"}
+                          <span className="text-[11px] text-ink-400 font-medium">
+                            {c.cursos?.status === "active" ? "🟢 Abierto" : c.cursos?.status === "in_progress" ? "🔵 En Ejecución" : "⚪ Finalizado"}
                           </span>
                         </div>
+                        <h3 className="font-bold text-ink-950 text-sm mt-2">{c.cursos?.name}</h3>
+                        <p className="text-xs text-ink-500 mt-1 line-clamp-2">{c.cursos?.description || "Sin descripción"}</p>
+                      </div>
 
-                        <div>
-                          <h4 className="font-bold text-ink-950 text-sm leading-snug line-clamp-1">{curso.name}</h4>
-                          <p className="text-xs text-ink-500 mt-1 line-clamp-2">{curso.description || "Sin descripción disponible."}</p>
+                      <div className="pt-2 border-t border-lilac-50 flex items-center justify-between">
+                        <span className="text-[11px] text-ink-400 font-mono">
+                          {c.cursos?.start_date && formatDateES(c.cursos.start_date)}
+                        </span>
+                        <Link href={`/erp/cursos/${c.course_id}`} className="text-xs font-bold text-lilac-600 hover:text-lilac-800 flex items-center gap-1">
+                          <span>Ver Curso</span>
+                          <ExternalLink size={12} />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "clases" && (
+            <div className="space-y-4">
+              {assignedClasses.length === 0 ? (
+                <div className="p-8 text-center text-sm text-ink-500 italic bg-blue-50/20 border border-blue-100/60 rounded-2xl">
+                  No hay clases programadas registradas para este profesor.
+                </div>
+              ) : (
+                <div className="border border-lilac-100 rounded-2xl overflow-hidden divide-y divide-lilac-50">
+                  {assignedClasses.map((cls: any) => (
+                    <div key={cls.id} className="p-4 flex items-center justify-between hover:bg-lilac-50/10 transition-colors">
+                      <div className="space-y-1">
+                        <div className="text-xs font-bold text-ink-950 flex items-center gap-2">
+                          <span>{cls.title || "Clase Programada"}</span>
+                          <span className="text-[10px] font-semibold text-ink-500 bg-lilac-50 px-2 py-0.2 rounded-md">
+                            Módulo: {cls.curso_modulos?.name || "General"}
+                          </span>
                         </div>
-
-                        <div className="pt-2 border-t border-lilac-50 flex items-center justify-between text-xs">
-                          <span className="text-ink-500 font-medium">Inicio: {formatDateES(curso.start_date)}</span>
-                          <Link
-                            href={`/erp/cursos/${curso.id}`}
-                            className="inline-flex items-center gap-1 text-lilac-700 hover:text-lilac-900 font-bold"
-                          >
-                            <span>Gestionar</span>
-                            <ExternalLink size={12} />
-                          </Link>
+                        <div className="text-[11px] text-ink-500 flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <Calendar size={12} className="text-lilac-600" />
+                            {formatDateES(cls.date)} ({cls.start_time} - {cls.end_time})
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <Link
+                        href={`/erp/cursos/clases?tab=clases&course_id=${cls.curso_modulos?.course_id}&module_id=${cls.module_id}&class_id=${cls.id}`}
+                        className="btn-secondary text-xs py-1 px-3 flex items-center gap-1 font-semibold"
+                      >
+                        <span>Ir a la Clase</span>
+                        <ExternalLink size={12} />
+                      </Link>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 2: CLASES IMPARTIDAS */}
-          {activeTab === "clases" && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              {assignedClasses.length === 0 ? (
-                <div className="p-10 text-center text-sm text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-2xl">
-                  No hay clases ni sesiones registradas a cargo de este profesor.
-                </div>
-              ) : (
-                <div className="border border-lilac-100 rounded-2xl overflow-hidden shadow-2xs">
-                  <table className="w-full text-xs">
-                    <thead className="bg-lilac-50/50 text-[10px] font-bold text-ink-500 uppercase tracking-wider border-b border-lilac-100">
-                      <tr>
-                        <th className="text-left px-5 py-3">Curso & Módulo</th>
-                        <th className="text-left px-5 py-3">Clase / Tema</th>
-                        <th className="text-left px-5 py-3">Fecha y Horario</th>
-                        <th className="text-left px-5 py-3">Aula</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-lilac-50">
-                      {assignedClasses.map((clase: any) => {
-                        const mod = clase.curso_modulos;
-                        const curso = mod?.cursos;
-
-                        return (
-                          <tr key={clase.id} className="hover:bg-lilac-50/10">
-                            <td className="px-5 py-3">
-                              <div className="font-bold text-ink-950">{curso?.name || "Curso"}</div>
-                              <div className="text-[10px] text-lilac-700 font-semibold">
-                                Módulo {mod?.number}: {mod?.name}
-                              </div>
-                            </td>
-                            <td className="px-5 py-3 font-semibold text-ink-900">
-                              {clase.title}
-                            </td>
-                            <td className="px-5 py-3 text-ink-700">
-                              <div className="font-medium">{clase.date ? formatDateES(clase.date) : "-"}</div>
-                              {clase.start_time && (
-                                <div className="text-[10px] text-ink-400 font-semibold">
-                                  {clase.start_time} - {clase.end_time}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-5 py-3 text-ink-600 font-medium">
-                              {clase.classroom || "Laboratorio Principal"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: HOJA DE VIDA (CV) */}
           {activeTab === "cv" && (
-            <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="space-y-4">
               <div className="p-6 bg-lilac-50/20 border border-lilac-100 rounded-2xl space-y-4">
-                <h3 className="text-sm font-bold text-ink-950 flex items-center gap-2">
-                  <FileText size={18} className="text-lilac-600" /> Documentación Académica y Hoja de Vida
+                <h3 className="font-bold text-ink-950 text-sm flex items-center gap-2">
+                  <FileText size={16} className="text-lilac-600" />
+                  Documento de Hoja de Vida (CV)
                 </h3>
 
                 {teacher.cv_url ? (
-                  <div className="p-5 bg-white border border-lilac-100 rounded-2xl flex items-center justify-between gap-4 shadow-2xs">
+                  <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-lilac-200 shadow-2xs">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-lilac-50 text-lilac-700 flex items-center justify-center shrink-0">
-                        <FileText size={24} />
+                      <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center font-bold shrink-0">
+                        <FileText size={20} />
                       </div>
                       <div>
-                        <div className="font-bold text-ink-950 text-sm">Hoja de Vida de {teacher.full_name}</div>
-                        <div className="text-xs text-ink-500 font-medium">Documento adjunto en PDF / Word</div>
+                        <p className="text-xs font-bold text-ink-900">Hoja de Vida Registrada</p>
+                        <p className="text-[11px] text-ink-500">Documento PDF / Word adjunto</p>
                       </div>
                     </div>
 
@@ -383,7 +381,10 @@ export default function TeacherDetailClient({
               </div>
               <button
                 type="button"
-                onClick={() => setIsEditingModalOpen(false)}
+                onClick={() => {
+                  setIsEditingModalOpen(false);
+                  setPreviewPhotoUrl(null);
+                }}
                 className="text-ink-400 hover:text-ink-700 p-1.5 rounded-lg transition cursor-pointer"
               >
                 <X size={18} />
@@ -395,6 +396,43 @@ export default function TeacherDetailClient({
               <input type="hidden" name="id" value={teacher.id} />
               <input type="hidden" name="existingPhotoUrl" value={teacher.photo_url || ""} />
               <input type="hidden" name="existingCvUrl" value={teacher.cv_url || ""} />
+
+              {/* Avatar Interactivo de Edición de Foto */}
+              <div className="flex flex-col items-center justify-center py-2 space-y-1.5">
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-lilac-200 shadow-md bg-lilac-50 flex items-center justify-center">
+                    {previewPhotoUrl || teacher.photo_url ? (
+                      <img
+                        src={previewPhotoUrl || teacher.photo_url}
+                        alt={teacher.full_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-lilac-100 flex items-center justify-center text-lilac-600 font-bold text-2xl">
+                        {teacher.full_name?.charAt(0).toUpperCase() || <UserCheck size={36} />}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white flex items-center justify-center shadow-md border-2 border-white transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                    title="Cambiar foto de perfil"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-ink-500 font-medium">Haz clic en el lápiz para seleccionar una nueva foto</p>
+                <input
+                  ref={fileInputRef}
+                  name="photoFile"
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-ink-700 mb-1">Nombre completo *</label>
@@ -415,24 +453,6 @@ export default function TeacherDetailClient({
                   <label className="block text-xs font-semibold text-ink-700 mb-1">Correo electrónico</label>
                   <input name="email" type="email" defaultValue={teacher.email || ""} placeholder="Ej: profesor@facop.com" className="input text-xs" />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1 flex items-center gap-1">
-                  <Camera size={13} className="text-lilac-600" /> Foto del Profesor (Imagen opcional)
-                </label>
-                {teacher.photo_url && (
-                  <div className="flex items-center gap-2 mb-2 p-2 bg-lilac-50/50 rounded-xl border border-lilac-100">
-                    <img src={teacher.photo_url} alt="Foto actual" className="w-10 h-10 rounded-full object-cover border border-lilac-200" />
-                    <span className="text-[11px] text-ink-600 font-medium">Foto registrada (Subir otra para actualizar)</span>
-                  </div>
-                )}
-                <input
-                  name="photoFile"
-                  type="file"
-                  accept="image/*"
-                  className="w-full text-xs text-ink-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none"
-                />
               </div>
 
               <div>
@@ -458,7 +478,10 @@ export default function TeacherDetailClient({
               <div className="pt-3 border-t border-lilac-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsEditingModalOpen(false)}
+                  onClick={() => {
+                    setIsEditingModalOpen(false);
+                    setPreviewPhotoUrl(null);
+                  }}
                   className="btn-secondary text-xs px-4 py-2 cursor-pointer"
                   disabled={loading}
                 >

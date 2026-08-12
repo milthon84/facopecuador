@@ -200,25 +200,36 @@ export default async function CursoDetallePage({
   const canEdit = await hasWritePermission("/erp/cursos");
   const supabase = createAdminClient();
 
-  // Auto-completar cursos expirados
-  await updateExpiredCourses(supabase);
+  // Auto-completar cursos expirados en segundo plano sin bloquear la carga inicial
+  updateExpiredCourses(supabase).catch(() => {});
 
-  // Cargar todos los datos requeridos en paralelo
-  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, moduleTeachersRes, allStudentsRes, invoicesRes] = await Promise.all([
+  // Cargar todos los datos requeridos en paralelo optimizados por id de curso
+  const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, allStudentsRes] = await Promise.all([
     supabase.from("cursos").select("*").eq("id", id).single(),
-    supabase.from("curso_modulos").select("*").eq("course_id", id).order("number"),
+    supabase.from("curso_modulos").select("*, modulo_profesores(module_id, teacher_id, profesores(id, full_name, specialty))").eq("course_id", id).order("number"),
     supabase.from("curso_profesores").select("role, profesores(*)").eq("course_id", id),
     supabase.from("profesores").select("id, full_name, specialty").order("full_name"),
     supabase.from("curso_inscripciones").select("id, status, created_at, alumnos(*), curso_modulo_inscripciones(id, billing_status)").eq("course_id", id).order("created_at", { ascending: false }),
-    supabase.from("modulo_profesores").select("module_id, teacher_id, profesores(id, full_name, specialty)"),
     supabase.from("alumnos").select("id, full_name, document_number, phone, email").order("full_name"),
-    supabase.from("invoices").select("client_document, created_at, sri_status, invoice_number").neq("sri_status", "cancelled").order("created_at", { ascending: false }),
   ]);
-
-  const courseInvoices = invoicesRes.data || [];
 
   const course = courseRes.data;
   if (!course) return redirect("/erp/cursos");
+
+  const students = studentsRes.data || [];
+  const studentDocs = students.map((e: any) => e.alumnos?.document_number?.trim()).filter(Boolean);
+
+  // Cargar facturas de forma filtrada únicamente para las cédulas de los alumnos inscritos
+  let courseInvoices: any[] = [];
+  if (studentDocs.length > 0) {
+    const { data: invData } = await supabase
+      .from("invoices")
+      .select("client_document, created_at, sri_status, invoice_number")
+      .neq("sri_status", "cancelled")
+      .in("client_document", studentDocs)
+      .order("created_at", { ascending: false });
+    courseInvoices = invData || [];
+  }
 
   // Si el curso está en borrador, la pestaña por defecto es 'modulos'; si está abierto/en ejecución, es 'alumnos'
   const defaultTab = course.status === "draft" ? "modulos" : "alumnos";
@@ -227,8 +238,6 @@ export default async function CursoDetallePage({
   const modules = modulesRes.data || [];
   const assignedTeachers = assignedTeachersRes.data || [];
   const allTeachers = allTeachersRes.data || [];
-  const students = studentsRes.data || [];
-  const moduleTeachers = moduleTeachersRes.data || [];
   const allStudents = allStudentsRes.data || [];
 
   const enrolledStudentIds = students.map((e: any) => e.alumnos?.id).filter(Boolean);
@@ -330,8 +339,8 @@ export default async function CursoDetallePage({
                   <div className="p-8 text-center text-sm text-ink-500 italic">No hay módulos configurados para este curso.</div>
                 ) : (
                   <div className="divide-y divide-lilac-50">
-                    {modules.map((m) => {
-                      const mTeachers = moduleTeachers.filter((mt: any) => mt.module_id === m.id);
+                    {modules.map((m: any) => {
+                      const mTeachers = m.modulo_profesores || [];
                       const mTeacherIds = mTeachers.map((mt: any) => mt.teacher_id);
 
                       return (
@@ -528,9 +537,6 @@ export default async function CursoDetallePage({
                           <Link href={`/erp/cursos/alumnos?id=${student.id}`} className="font-bold text-ink-900 hover:text-lilac-700">
                             {student.full_name}
                           </Link>
-                          {student.professional_title && (
-                            <div className="text-[10px] text-ink-500 font-medium">{student.professional_title}</div>
-                          )}
                         </td>
                         <td className="px-5 py-3.5 text-ink-700 text-xs">
                           {student.document_number}

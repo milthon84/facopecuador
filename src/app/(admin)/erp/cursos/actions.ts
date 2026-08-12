@@ -425,16 +425,30 @@ export async function getModuleAttendanceDataAction(moduleId: string) {
 
     const { data: moduleInscriptions } = await supabase
       .from("curso_modulo_inscripciones")
-      .select("id, billing_status, curso_inscripciones(status, alumnos(id, full_name, document_number, phone, email))")
+      .select("id, billing_status, invoices(invoice_number, invoice_items(description)), curso_inscripciones(status, payment_type, alumnos(id, full_name, document_number, phone, email))")
       .eq("module_id", moduleId);
 
     const students = (moduleInscriptions || [])
       .map((mi: any) => {
         const student = mi.curso_inscripciones?.alumnos;
         if (!student) return null;
+
+        const items = mi.invoices?.invoice_items || [];
+        const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
+          item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
+        );
+        const isFullCourse = mi.curso_inscripciones?.payment_type === "full_course";
+
+        let status = mi.billing_status as string;
+        if (isFullCourse) {
+          status = "invoiced";
+        } else if (status === "invoiced" && isInscriptionInvoice) {
+          status = "pending";
+        }
+
         return {
           moduloInscripcionId: mi.id,
-          billingStatus: mi.billing_status as string,
+          billingStatus: status,
           enrollmentStatus: mi.curso_inscripciones.status as string,
           studentId: student.id,
           fullName: student.full_name,

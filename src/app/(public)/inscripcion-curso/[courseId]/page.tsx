@@ -366,16 +366,7 @@ export default function InscripcionCursoPage() {
                 </FormField>
               </div>
 
-              {/* Título profesional */}
-              <FormField label="Título profesional" icon={<GraduationCap size={14} />}>
-                <input
-                  type="text"
-                  className={fieldClass(false)}
-                  value={form.professional_title}
-                  onChange={(e) => handleChange("professional_title", e.target.value)}
-                  placeholder="Ej: Odontólogo General, Especialista en Ortodoncia…"
-                />
-              </FormField>
+
 
               {/* Notas / Comentarios */}
               <FormField label="Comentarios adicionales (opcional)" icon={<BookOpen size={14} />}>
