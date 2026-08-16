@@ -166,12 +166,13 @@ export default async function UsuariosPage() {
           Crear nuevo usuario
         </h2>
         <p className="text-sm text-ink-500 mb-5">El usuario podrá ingresar con el email y contraseña que definas aquí.</p>
-        <form action={createUserAction} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form action={createUserAction} autoComplete="off" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-ink-700">Nombre completo *</label>
             <input
               name="full_name" required
               placeholder="Ej. María González"
+              autoComplete="off"
               className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
             />
           </div>
@@ -180,6 +181,7 @@ export default async function UsuariosPage() {
             <input
               name="email" type="email" required
               placeholder="correo@clinica.com"
+              autoComplete="off"
               className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
             />
           </div>
@@ -188,6 +190,7 @@ export default async function UsuariosPage() {
             <input
               name="password" type="password" required minLength={8}
               placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
               className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
             />
           </div>

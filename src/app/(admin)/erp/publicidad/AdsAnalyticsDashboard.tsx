@@ -612,6 +612,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
       {isAdmin && isConfigOpen && (
         <form
           onSubmit={handleSaveUrl}
+          autoComplete="off"
           className="bg-gradient-to-r from-purple-900 via-purple-950 to-slate-900 text-white p-5 rounded-2xl border border-purple-800 shadow-xl space-y-3"
         >
           <div className="flex items-center justify-between">
@@ -637,6 +638,8 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
               </label>
               <input
                 type="url"
+                name="ads_web_app_url"
+                autoComplete="off"
                 placeholder="https://script.google.com/macros/s/.../exec"
                 value={inputUrl}
                 onChange={(e) => setInputUrl(e.target.value)}
@@ -650,6 +653,8 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
               </label>
               <input
                 type="password"
+                name="claude_api_secret_key"
+                autoComplete="new-password"
                 placeholder="sk-ant-api03-..."
                 value={inputClaudeKey}
                 onChange={(e) => setInputClaudeKey(e.target.value)}
