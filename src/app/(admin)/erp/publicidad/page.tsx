@@ -23,9 +23,9 @@ export default async function PublicidadPage() {
     <div className="pb-10">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-900">Publicidad</h1>
+          <h1 className="text-2xl font-bold text-ink-900">Publicidad y Anuncios</h1>
           <p className="text-sm text-ink-600">
-            Administra las noticias y artículos que se muestran en los carruseles públicos de Cursos, Clínica y CoWorking.
+            Gestión de artículos y noticias públicas, más diagnóstico y análisis de consumos de anuncios.
           </p>
         </div>
       </div>

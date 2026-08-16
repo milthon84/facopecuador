@@ -2,9 +2,10 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, Edit2, Save, Undo } from "lucide-react";
+import { FileText, Plus, Edit2, Save, Undo, BarChart3 } from "lucide-react";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { savePostAction, deletePostAction } from "./actions";
+import AdsAnalyticsDashboard from "./AdsAnalyticsDashboard";
 
 interface Props {
   initialPosts: any[];
@@ -38,6 +39,7 @@ export default function PublicidadClientPage({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const [mainTab, setMainTab] = useState<"analisis" | "articulos">("analisis");
   const [categoryFilter, setCategoryFilter] = useState<"todos" | "cursos" | "clinica" | "coworking">("todos");
 
   const [editingPost, setEditingPost] = useState<any | null>(null);
@@ -156,7 +158,39 @@ export default function PublicidadClientPage({
   }
 
   return (
-    <div className="grid lg:grid-cols-12 gap-6 items-start">
+    <div className="space-y-6">
+      {/* Navegación de Pestañas Principales en Publicidad */}
+      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-0.5">
+        <button
+          type="button"
+          onClick={() => setMainTab("analisis")}
+          className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+            mainTab === "analisis"
+              ? "border-purple-600 text-purple-950 bg-purple-50/70 rounded-t-xl"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-xl"
+          }`}
+        >
+          <BarChart3 size={18} />
+          Análisis y Consumos de Anuncios
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("articulos")}
+          className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+            mainTab === "articulos"
+              ? "border-purple-600 text-purple-950 bg-purple-50/70 rounded-t-xl"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-xl"
+          }`}
+        >
+          <FileText size={18} />
+          Noticias y Artículos Web
+        </button>
+      </div>
+
+      {mainTab === "analisis" ? (
+        <AdsAnalyticsDashboard />
+      ) : (
+        <div className="grid lg:grid-cols-12 gap-6 items-start">
       {/* Columna Izquierda: Listado de artículos */}
       <div className="lg:col-span-7 space-y-4">
         <div className="card p-5 bg-white border border-lilac-100 shadow-sm">
@@ -572,6 +606,8 @@ export default function PublicidadClientPage({
           </form>
         </div>
       </div>
+    </div>
+      )}
     </div>
   );
 }
