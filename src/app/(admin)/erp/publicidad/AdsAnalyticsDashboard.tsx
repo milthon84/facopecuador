@@ -198,23 +198,42 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
   const [rawJsonResponse, setRawJsonResponse] = useState<string | null>(null);
   const [showJsonInspector, setShowJsonInspector] = useState<boolean>(false);
 
-  // Cargar URL y Claude API Key guardadas en localStorage al montar
+  // Cargar URL y Claude API Key guardadas en localStorage y servidor al montar
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     const savedClaude = localStorage.getItem(CLAUDE_KEY_STORAGE);
 
+    if (saved) {
+      setApiUrl(saved);
+      setInputUrl(saved);
+    }
     if (savedClaude) {
       setClaudeKey(savedClaude);
       setInputClaudeKey(savedClaude);
     }
 
-    if (saved) {
-      setApiUrl(saved);
-      setInputUrl(saved);
-      fetchLiveData(saved);
-    } else {
-      fetchLiveData("");
-    }
+    fetch("/api/admin/ads-config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.url) {
+            setApiUrl(data.url);
+            setInputUrl(data.url);
+            localStorage.setItem(STORAGE_KEY, data.url);
+          }
+          if (data.claudeKey) {
+            setClaudeKey(data.claudeKey);
+            setInputClaudeKey(data.claudeKey);
+            localStorage.setItem(CLAUDE_KEY_STORAGE, data.claudeKey);
+          }
+          fetchLiveData(data.url || saved || "");
+        } else {
+          fetchLiveData(saved || "");
+        }
+      })
+      .catch(() => {
+        fetchLiveData(saved || "");
+      });
   }, []);
 
   // Normalizador flexible para extraer periodos sin importar diferencias de nombre de clave en Google Apps Script
@@ -274,8 +293,8 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
     }
   }
 
-  // Guardar nueva URL de Apps Script y Claude API Key
-  function handleSaveUrl(e: React.FormEvent) {
+  // Guardar nueva URL de Apps Script y Claude API Key en cliente y servidor
+  async function handleSaveUrl(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = inputUrl.trim();
     const trimmedClaude = inputClaudeKey.trim();
@@ -288,12 +307,17 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
 
     setIsConfigOpen(false);
 
-    if (trimmed) {
-      fetchLiveData(trimmed);
-    } else {
-      setAdsData(EMPTY_ADS_DATA);
-      setErrorMsg(null);
+    try {
+      await fetch("/api/admin/ads-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: trimmed, claudeKey: trimmedClaude }),
+      });
+    } catch (err) {
+      console.error("Error al guardar configuración en servidor:", err);
     }
+
+    fetchLiveData(trimmed);
   }
 
   // Generar recomendaciones estratégicas llamando a la API de Claude
@@ -535,12 +559,6 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
     <div className="space-y-4">
       {/* Panel Unificado de Diagnóstico, Salud y Periodo */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Título de la Sección */}
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Diagnóstico por Periodo de Anuncios
-          </h1>
-        </div>
 
         {/* Controles de Período, Indicador 'Hoy' al lado del botón actualizar e Integración */}
         <div className="flex items-center gap-2.5 flex-wrap">

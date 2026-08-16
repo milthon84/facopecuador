@@ -1,11 +1,31 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { payload, period, apiKey } = body;
 
-    const keyToUse = (apiKey || process.env.ANTHROPIC_API_KEY || "").trim();
+    let keyToUse = (apiKey || "").trim();
+
+    if (!keyToUse) {
+      try {
+        const supabase = createAdminClient();
+        const { data } = await supabase
+          .from("web_settings")
+          .select("value")
+          .eq("key", "ads_config")
+          .maybeSingle();
+
+        if (data?.value?.claudeKey && typeof data.value.claudeKey === "string") {
+          keyToUse = data.value.claudeKey.trim();
+        }
+      } catch {}
+    }
+
+    if (!keyToUse) {
+      keyToUse = (process.env.ANTHROPIC_API_KEY || "").trim();
+    }
 
     if (!keyToUse) {
       return NextResponse.json(

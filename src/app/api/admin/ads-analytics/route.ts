@@ -1,8 +1,24 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   let targetUrl = searchParams.get("url")?.trim();
+
+  if (!targetUrl || !targetUrl.startsWith("http")) {
+    try {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from("web_settings")
+        .select("value")
+        .eq("key", "ads_config")
+        .maybeSingle();
+
+      if (data?.value?.url && typeof data.value.url === "string" && data.value.url.startsWith("http")) {
+        targetUrl = data.value.url.trim();
+      }
+    } catch {}
+  }
 
   if (!targetUrl || !targetUrl.startsWith("http")) {
     targetUrl = process.env.ADS_API_URL || process.env.NEXT_PUBLIC_ADS_API_URL || "";
@@ -10,7 +26,7 @@ export async function GET(req: Request) {
 
   if (!targetUrl || !targetUrl.startsWith("http")) {
     return NextResponse.json(
-      { error: "URL de Apps Script / Meta no válida o no configurada en el sistema." },
+      { error: "URL de Apps Script / Meta no configurada en el sistema. Inicie sesión como Administrador para ingresar la URL." },
       { status: 400 }
     );
   }
