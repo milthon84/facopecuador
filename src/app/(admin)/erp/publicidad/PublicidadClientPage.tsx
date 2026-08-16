@@ -12,6 +12,7 @@ interface Props {
   hasFacebookCredentials?: boolean;
   hasInstagramCredentials?: boolean;
   isAdmin?: boolean;
+  canEdit?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -37,6 +38,7 @@ export default function PublicidadClientPage({
   hasFacebookCredentials = false,
   hasInstagramCredentials = false,
   isAdmin = false,
+  canEdit = true,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -190,7 +192,7 @@ export default function PublicidadClientPage({
       </div>
 
       {mainTab === "analisis" ? (
-        <AdsAnalyticsDashboard isAdmin={isAdmin} />
+        <AdsAnalyticsDashboard isAdmin={isAdmin} canEdit={canEdit} />
       ) : (
         <div className="grid lg:grid-cols-12 gap-6 items-start">
       {/* Columna Izquierda: Listado de artículos */}
@@ -294,20 +296,22 @@ export default function PublicidadClientPage({
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <button
-                      onClick={() => handleEditPost(post)}
-                      className="p-1.5 text-lilac-700 hover:bg-lilac-50 rounded-lg transition"
-                      title="Editar artículo"
-                    >
-                      <Edit2 size={15} />
-                    </button>
-                    <ConfirmDeleteButton
-                      action={handleDeletePost}
-                      idValue={post.id}
-                      confirmMessage={`¿Estás seguro de que deseas eliminar la noticia "${post.title}"?`}
-                    />
-                  </div>
+                  {canEdit && (
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        onClick={() => handleEditPost(post)}
+                        className="p-1.5 text-lilac-700 hover:bg-lilac-50 rounded-lg transition"
+                        title="Editar artículo"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <ConfirmDeleteButton
+                        action={handleDeletePost}
+                        idValue={post.id}
+                        confirmMessage={`¿Estás seguro de que deseas eliminar la noticia "${post.title}"?`}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -315,9 +319,19 @@ export default function PublicidadClientPage({
         </div>
       </div>
 
-      {/* Columna Derecha: Formulario de Creación / Edición */}
+      {/* Columna Derecha: Formulario de Creación / Edición o Mensaje de Modo Lectura */}
       <div className="lg:col-span-5">
-        <div className="card p-5 bg-white border border-lilac-100 shadow-sm sticky top-6">
+        {!canEdit ? (
+          <div className="card p-6 bg-amber-50/60 border border-amber-200 shadow-sm rounded-2xl space-y-3 text-amber-900">
+            <h3 className="font-bold text-sm flex items-center gap-2 text-amber-800">
+              🔒 Modo Lectura
+            </h3>
+            <p className="text-xs leading-relaxed text-amber-800/90">
+              Tu rol tiene permiso de consulta (Ver) para la sección de Publicidad y Anuncios. Para publicar nuevos artículos, modificar existentes o eliminarlos, solicita permisos de edición a un Administrador.
+            </p>
+          </div>
+        ) : (
+          <div className="card p-5 bg-white border border-lilac-100 shadow-sm sticky top-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-base font-semibold text-ink-900 flex items-center gap-1.5">
               {editingPost ? (
@@ -607,6 +621,7 @@ export default function PublicidadClientPage({
             </button>
           </form>
         </div>
+        )}
       </div>
     </div>
       )}

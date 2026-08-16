@@ -172,9 +172,10 @@ const CLAUDE_KEY_STORAGE = "facop_claude_api_key";
 
 interface AdsAnalyticsDashboardProps {
   isAdmin?: boolean;
+  canEdit?: boolean;
 }
 
-export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsDashboardProps) {
+export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true }: AdsAnalyticsDashboardProps) {
   const [period, setPeriod] = useState<PeriodKey>("hoy");
   const [apiUrl, setApiUrl] = useState<string>("");
   const [inputUrl, setInputUrl] = useState<string>("");
@@ -596,7 +597,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
             {period === "hoy" ? "Hoy (24h)" : `Últimos ${period} días`}
           </span>
 
-          {isAdmin && (
+          {isAdmin && canEdit && (
             <button
               onClick={() => setIsConfigOpen(!isConfigOpen)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition cursor-pointer"
@@ -608,8 +609,8 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
         </div>
       </div>
 
-      {/* Modal / Panel Integrado para Configuración de Web App Google Apps Script (Solo Administradores) */}
-      {isAdmin && isConfigOpen && (
+      {/* Modal / Panel Integrado para Configuración de Web App Google Apps Script (Solo Administradores con permiso de Edición) */}
+      {isAdmin && canEdit && isConfigOpen && (
         <form
           onSubmit={handleSaveUrl}
           autoComplete="off"

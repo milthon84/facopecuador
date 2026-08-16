@@ -7,9 +7,10 @@ import { saveWebSettingsAction } from "./actions";
 
 interface Props {
   initialSettings: Record<string, any>;
+  canEdit?: boolean;
 }
 
-export default function SitioWebClientPage({ initialSettings }: Props) {
+export default function SitioWebClientPage({ initialSettings, canEdit = true }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -34,6 +35,7 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
 
   // Guardar Configuración General
   async function handleSaveSettings() {
+    if (!canEdit) return;
     setSettingsSuccess(false);
     setSettingsError(null);
 
@@ -71,17 +73,24 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {!canEdit && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+          <span>🔒 <b>Modo Lectura:</b> Tu rol solo tiene permiso de visualización para la Página Web / CMS. Para realizar cambios contacta con un Administrador.</span>
+        </div>
+      )}
+
       {/* Hero Section */}
       <div className="card p-6 bg-white border border-lilac-100 shadow-sm">
         <h2 className="text-base font-semibold text-ink-900 mb-4 flex items-center gap-2">
-          <Globe size={18} className="text-gold-600" /> Seccion Principal (Hero)
+          <Globe size={18} className="text-gold-600" /> Sección Principal (Hero)
         </h2>
         <div className="grid gap-4">
           <div>
             <label className="label text-ink-800">Título Principal</label>
             <input
               type="text"
-              className="input"
+              className="input disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={!canEdit}
               value={heroTitle}
               onChange={(e) => setHeroTitle(e.target.value)}
               placeholder="Ej: Clínica & Academia Odontológica FACOP"
@@ -90,7 +99,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
           <div>
             <label className="label text-ink-800">Subtítulo Descriptivo</label>
             <textarea
-              className="input min-h-[70px]"
+              className="input min-h-[70px] disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={!canEdit}
               value={heroSubtitle}
               onChange={(e) => setHeroSubtitle(e.target.value)}
               placeholder="Ej: Referentes en formación continua de posgrado y atención odontológica especializada..."
@@ -101,7 +111,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Texto Botón Reserva (CTA)</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={heroCtaText}
                 onChange={(e) => setHeroCtaText(e.target.value)}
                 placeholder="Ej: Reservar Cita Médica"
@@ -111,7 +122,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Texto Botón WhatsApp Cursos</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={heroCtaWhatsappText}
                 onChange={(e) => setHeroCtaWhatsappText(e.target.value)}
                 placeholder="Ej: Inscribirse en Cursos"
@@ -130,7 +142,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
           <div>
             <label className="label text-ink-800">Misión de la Clínica / Academia</label>
             <textarea
-              className="input min-h-[90px]"
+              className="input min-h-[90px] disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={!canEdit}
               value={aboutMission}
               onChange={(e) => setAboutMission(e.target.value)}
               placeholder="Escribe la misión institucional..."
@@ -139,7 +152,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
           <div>
             <label className="label text-ink-800">Visión a Futuro</label>
             <textarea
-              className="input min-h-[90px]"
+              className="input min-h-[90px] disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={!canEdit}
               value={aboutVision}
               onChange={(e) => setAboutVision(e.target.value)}
               placeholder="Escribe la visión institucional..."
@@ -159,7 +173,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Teléfono Público</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
                 placeholder="Ej: 0998214857"
@@ -169,7 +184,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Enlace de WhatsApp Corporativo</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={contactWhatsappLink}
                 onChange={(e) => setContactWhatsappLink(e.target.value)}
                 placeholder="Ej: https://wa.me/593..."
@@ -181,7 +197,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Enlace Facebook</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={contactFacebookUrl}
                 onChange={(e) => setContactFacebookUrl(e.target.value)}
                 placeholder="URL de Facebook"
@@ -191,7 +208,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Enlace Instagram</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={contactInstagramUrl}
                 onChange={(e) => setContactInstagramUrl(e.target.value)}
                 placeholder="URL de Instagram"
@@ -201,7 +219,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
               <label className="label text-ink-800">Enlace TikTok</label>
               <input
                 type="text"
-                className="input"
+                className="input disabled:bg-gray-100 disabled:text-gray-500"
+                disabled={!canEdit}
                 value={contactTiktokUrl}
                 onChange={(e) => setContactTiktokUrl(e.target.value)}
                 placeholder="URL de TikTok"
@@ -212,7 +231,8 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
             <label className="label text-ink-800">Dirección Física de la Clínica</label>
             <input
               type="text"
-              className="input"
+              className="input disabled:bg-gray-100 disabled:text-gray-500"
+              disabled={!canEdit}
               value={contactAddress}
               onChange={(e) => setContactAddress(e.target.value)}
               placeholder="Ej: Sector Iñaquito, Av. de los Shyris, Quito, Ecuador"
@@ -234,16 +254,18 @@ export default function SitioWebClientPage({ initialSettings }: Props) {
       )}
 
       {/* Botón de envío */}
-      <div className="flex justify-end pt-2">
-        <button
-          onClick={handleSaveSettings}
-          disabled={isPending}
-          className="btn-primary"
-        >
-          <Save size={16} />
-          {isPending ? "Guardando..." : "Guardar Cambios del Sitio"}
-        </button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={handleSaveSettings}
+            disabled={isPending}
+            className="btn-primary"
+          >
+            <Save size={16} />
+            {isPending ? "Guardando..." : "Guardar Cambios del Sitio"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

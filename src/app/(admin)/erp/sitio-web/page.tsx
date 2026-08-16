@@ -1,12 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { assertWritePermission } from "@/lib/auth-action";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import SitioWebClientPage from "./SitioWebClientPage";
 
 export const dynamic = "force-dynamic";
 
 export default async function SitioWebPage() {
-  // Verificar permisos de escritura en la ruta de gestión web
-  await assertWritePermission("/erp/sitio-web");
+  // Verificar permiso de lectura en la ruta de gestión web
+  await assertPermission("/erp/sitio-web");
+  const canEdit = await hasWritePermission("/erp/sitio-web");
 
   const supabase = createAdminClient();
 
@@ -32,7 +33,7 @@ export default async function SitioWebPage() {
         </div>
       </div>
 
-      <SitioWebClientPage initialSettings={settings} />
+      <SitioWebClientPage initialSettings={settings} canEdit={canEdit} />
     </div>
   );
 }
