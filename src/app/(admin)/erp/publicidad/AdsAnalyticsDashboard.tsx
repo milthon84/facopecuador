@@ -21,6 +21,7 @@ import {
   Clock,
   Sparkles,
   Bot,
+  Megaphone,
 } from "lucide-react";
 
 // Estructura de datos por campaña
@@ -157,196 +158,13 @@ function getAdStatus(r: CampaignRow): string {
   return r.e || (r as any).estado || (r as any).status || (r as any).veredicto || "Aceptable";
 }
 
-// Datos Demo por defecto (para cuando no hay URL configurada o mientras carga)
-const DEFAULT_DEMO_DATA: AdsDataPayload = {
-  hoy: [
-    {
-      a: "Curso Implantología Bucal - Quito",
-      b: 15.0,
-      c: { dir: "up", abs: "$2.00", pct: "+15%" },
-      ct: 12,
-      cc: 0.65,
-      ctr: "6.2%",
-      e: "Excelente",
-      d: 1,
-    },
-    {
-      a: "Consulta Odontología General",
-      b: 10.0,
-      c: { dir: "up", abs: "$1.00", pct: "+10%" },
-      ct: 8,
-      cc: 0.9,
-      ctr: "4.5%",
-      e: "Muy bueno",
-      d: 1,
-    },
-  ],
-  "30": [
-    {
-      a: "Curso Implantología Bucal - Quito",
-      b: 150.0,
-      c: { dir: "up", abs: "$30.00", pct: "+25%" },
-      ct: 210,
-      cc: 0.71,
-      ctr: "4.8%",
-      e: "Excelente",
-      d: 25,
-    },
-    {
-      a: "Consulta Odontología General",
-      b: 120.0,
-      c: { dir: "up", abs: "$10.00", pct: "+9%" },
-      ct: 140,
-      cc: 0.85,
-      ctr: "3.9%",
-      e: "Muy bueno",
-      d: 18,
-    },
-    {
-      a: "Alquiler CoWorking Dental por Horas",
-      b: 90.0,
-      c: { dir: "flat", abs: "$0.00", pct: "0%" },
-      ct: 65,
-      cc: 1.38,
-      ctr: "2.7%",
-      e: "Aceptable",
-      d: 12,
-    },
-    {
-      a: "Promoción Ortodoncia Invisible",
-      b: 80.0,
-      c: { dir: "down", abs: "$15.00", pct: "-15%" },
-      ct: 32,
-      cc: 2.5,
-      ctr: "1.9%",
-      e: "Débil",
-      d: 8,
-    },
-    {
-      a: "Especialidad Endodoncia Avanzada",
-      b: 60.0,
-      c: { dir: "down", abs: "$20.00", pct: "-25%" },
-      ct: 12,
-      cc: 5.0,
-      ctr: "1.1%",
-      e: "Atención",
-      d: 4,
-    },
-  ],
-  "14": [
-    {
-      a: "Curso Implantología Bucal - Quito",
-      b: 75.0,
-      c: { dir: "up", abs: "$15.00", pct: "+25%" },
-      ct: 110,
-      cc: 0.68,
-      ctr: "5.1%",
-      e: "Excelente",
-    },
-    {
-      a: "Consulta Odontología General",
-      b: 60.0,
-      c: { dir: "up", abs: "$5.00", pct: "+9%" },
-      ct: 68,
-      cc: 0.88,
-      ctr: "4.0%",
-      e: "Muy bueno",
-    },
-    {
-      a: "Alquiler CoWorking Dental por Horas",
-      b: 45.0,
-      c: { dir: "flat", abs: "$0.00", pct: "0%" },
-      ct: 31,
-      cc: 1.45,
-      ctr: "2.5%",
-      e: "Aceptable",
-    },
-    {
-      a: "Promoción Ortodoncia Invisible",
-      b: 40.0,
-      c: { dir: "down", abs: "$10.00", pct: "-20%" },
-      ct: 15,
-      cc: 2.66,
-      ctr: "1.8%",
-      e: "Débil",
-    },
-    {
-      a: "Especialidad Endodoncia Avanzada",
-      b: 30.0,
-      c: { dir: "down", abs: "$10.00", pct: "-25%" },
-      ct: 5,
-      cc: 6.0,
-      ctr: "0.9%",
-      e: "Atención",
-    },
-  ],
-  "7": [
-    {
-      a: "Curso Implantología Bucal - Quito",
-      b: 40.0,
-      c: { dir: "up", abs: "$10.00", pct: "+33%" },
-      ct: 62,
-      cc: 0.64,
-      ctr: "5.4%",
-      e: "Excelente",
-    },
-    {
-      a: "Consulta Odontología General",
-      b: 30.0,
-      c: { dir: "flat", abs: "$0.00", pct: "0%" },
-      ct: 33,
-      cc: 0.9,
-      ctr: "3.8%",
-      e: "Muy bueno",
-    },
-    {
-      a: "Alquiler CoWorking Dental por Horas",
-      b: 22.0,
-      c: { dir: "up", abs: "$2.00", pct: "+10%" },
-      ct: 15,
-      cc: 1.46,
-      ctr: "2.6%",
-      e: "Aceptable",
-    },
-    {
-      a: "Promoción Ortodoncia Invisible",
-      b: 20.0,
-      c: { dir: "down", abs: "$5.00", pct: "-20%" },
-      ct: 7,
-      cc: 2.85,
-      ctr: "1.6%",
-      e: "Débil",
-    },
-  ],
-  "3": [
-    {
-      a: "Curso Implantología Bucal - Quito",
-      b: 18.0,
-      c: { dir: "up", abs: "$4.00", pct: "+28%" },
-      ct: 29,
-      cc: 0.62,
-      ctr: "5.8%",
-      e: "Excelente",
-    },
-    {
-      a: "Consulta Odontología General",
-      b: 14.0,
-      c: { dir: "up", abs: "$2.00", pct: "+16%" },
-      ct: 15,
-      cc: 0.93,
-      ctr: "4.1%",
-      e: "Muy bueno",
-    },
-    {
-      a: "Alquiler CoWorking Dental por Horas",
-      b: 10.0,
-      c: { dir: "flat", abs: "$0.00", pct: "0%" },
-      ct: 7,
-      cc: 1.42,
-      ctr: "2.8%",
-      e: "Aceptable",
-    },
-  ],
+// Estructura vacía por defecto cuando no hay URL ni datos cargados
+const EMPTY_ADS_DATA: AdsDataPayload = {
+  hoy: [],
+  "30": [],
+  "14": [],
+  "7": [],
+  "3": [],
 };
 
 const STORAGE_KEY = "facop_ads_api_url";
@@ -374,9 +192,8 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [onlyActive, setOnlyActive] = useState<boolean>(false);
 
-  const [adsData, setAdsData] = useState<AdsDataPayload>(DEFAULT_DEMO_DATA);
+  const [adsData, setAdsData] = useState<AdsDataPayload>(EMPTY_ADS_DATA);
   const [loading, setLoading] = useState<boolean>(false);
-  const [usingDemo, setUsingDemo] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rawJsonResponse, setRawJsonResponse] = useState<string | null>(null);
   const [showJsonInspector, setShowJsonInspector] = useState<boolean>(false);
@@ -396,7 +213,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
       setInputUrl(saved);
       fetchLiveData(saved);
     } else {
-      setUsingDemo(true);
+      setAdsData(EMPTY_ADS_DATA);
     }
   }, []);
 
@@ -428,8 +245,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
   // Función para consumir los datos reales a través de nuestra API proxy en el servidor
   async function fetchLiveData(targetUrl: string) {
     if (!targetUrl || !targetUrl.startsWith("http")) {
-      setUsingDemo(true);
-      setAdsData(DEFAULT_DEMO_DATA);
+      setAdsData(EMPTY_ADS_DATA);
       setErrorMsg(null);
       setRawJsonResponse(null);
       return;
@@ -451,24 +267,11 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
       setRawJsonResponse(JSON.stringify(json, null, 2));
 
       const parsed = parsePeriodPayload(json);
-      const totalCount =
-        (parsed["hoy"]?.length || 0) +
-        (parsed["30"]?.length || 0) +
-        (parsed["14"]?.length || 0) +
-        (parsed["7"]?.length || 0) +
-        (parsed["3"]?.length || 0);
-
-      if (totalCount > 0 || typeof json === "object") {
-        setAdsData(parsed);
-        setUsingDemo(false);
-      } else {
-        throw new Error("El JSON recibido no contiene claves de periodo reconocidas (30, 14, 7, 3)");
-      }
+      setAdsData(parsed);
     } catch (err: any) {
       console.error("Error al cargar datos de anuncios:", err);
       setErrorMsg(err.message || "Error al conectar con la URL de Apps Script");
-      setUsingDemo(true);
-      setAdsData(DEFAULT_DEMO_DATA);
+      setAdsData(EMPTY_ADS_DATA);
     } finally {
       setLoading(false);
     }
@@ -491,8 +294,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
     if (trimmed) {
       fetchLiveData(trimmed);
     } else {
-      setUsingDemo(true);
-      setAdsData(DEFAULT_DEMO_DATA);
+      setAdsData(EMPTY_ADS_DATA);
       setErrorMsg(null);
     }
   }
@@ -741,13 +543,6 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
             Diagnóstico por Periodo de Anuncios
           </h1>
-          {usingDemo && (
-            <div className="mt-1">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
-                <Info size={12} /> Modo Demo
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Controles de Período, Indicador 'Hoy' al lado del botón actualizar e Integración */}
@@ -884,16 +679,46 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs text-rose-800">
           <div className="flex items-center gap-2">
             <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
-            <span>{errorMsg}. Se están mostrando los datos demostrativos.</span>
+            <span>{errorMsg}</span>
           </div>
-          <button
-            onClick={() => setIsConfigOpen(true)}
-            className="font-bold underline hover:text-rose-950 ml-2"
-          >
-            Revisar URL
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setIsConfigOpen(true)}
+              className="font-bold underline hover:text-rose-950 ml-2 cursor-pointer"
+            >
+              Revisar URL
+            </button>
+          )}
         </div>
       )}
+
+      {/* Estado vacío cuando no hay URL ni datos cargados */}
+      {!loading && (adsData["30"]?.length || 0) + (adsData["14"]?.length || 0) + (adsData["7"]?.length || 0) + (adsData["3"]?.length || 0) + (adsData["hoy"]?.length || 0) === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-8 sm:p-12 text-center space-y-4 shadow-sm my-4">
+          <div className="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 mx-auto flex items-center justify-center border border-purple-100 shadow-sm">
+            <Megaphone size={32} />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-lg font-bold text-slate-900">
+              No hay datos de publicidad para mostrar
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+              {isAdmin
+                ? "Ingresa la URL publicada de tu Google Apps Script / Meta API en la configuración para sincronizar y visualizar el diagnóstico de tus campañas."
+                : "No se registran métricas de campañas de publicidad. Consulte con el administrador para vincular la fuente de datos."}
+            </p>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={() => setIsConfigOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-purple-900 hover:bg-purple-800 rounded-xl transition shadow-md cursor-pointer"
+            >
+              <Settings size={15} /> Configurar URL de Datos
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
 
       {/* Tarjetas KPI (4 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1051,9 +876,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
                         No hay anuncios registrados para el periodo {period === "hoy" ? "de Hoy" : `de ${period} días`}.
                       </p>
                       <p className="text-xs text-slate-500">
-                        {usingDemo
-                          ? "Selecciona otro periodo para ver el informe."
-                          : `Tu Apps Script fue consultado con éxito, pero el objeto '${period}' está vacío en tu Google Sheet.`}
+                        Tu Apps Script fue consultado, pero la clave '{period}' no contiene campañas registradas en este período.
                       </p>
                       <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
                         {(["hoy", "3", "7", "14", "30"] as const).map((p) => {
@@ -1282,6 +1105,9 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
             )
           )}
         </div>
+      )}
+
+        </>
       )}
 
       {/* Pie de Página con resumen */}
