@@ -213,7 +213,7 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
       setInputUrl(saved);
       fetchLiveData(saved);
     } else {
-      setAdsData(EMPTY_ADS_DATA);
+      fetchLiveData("");
     }
   }, []);
 
@@ -243,19 +243,16 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
   }
 
   // Función para consumir los datos reales a través de nuestra API proxy en el servidor
-  async function fetchLiveData(targetUrl: string) {
-    if (!targetUrl || !targetUrl.startsWith("http")) {
-      setAdsData(EMPTY_ADS_DATA);
-      setErrorMsg(null);
-      setRawJsonResponse(null);
-      return;
-    }
-
+  async function fetchLiveData(targetUrl?: string) {
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      const proxyUrl = `/api/admin/ads-analytics?url=${encodeURIComponent(targetUrl)}`;
+      const urlToUse = targetUrl || apiUrl || "";
+      const proxyUrl = urlToUse && urlToUse.startsWith("http")
+        ? `/api/admin/ads-analytics?url=${encodeURIComponent(urlToUse)}`
+        : `/api/admin/ads-analytics`;
+
       const res = await fetch(proxyUrl, { cache: "no-store" });
       const result = await res.json();
 
@@ -564,16 +561,16 @@ export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsD
             ))}
           </div>
 
-          {apiUrl && (
-            <button
-              onClick={() => fetchLiveData(apiUrl)}
-              disabled={loading}
-              title="Refrescar datos desde Apps Script"
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition"
-            >
-              <RefreshCw size={16} className={loading ? "animate-spin text-purple-600" : ""} />
-            </button>
-          )}
+          {/* Botón de Actualizar (Disponible para Todos los Roles) */}
+          <button
+            onClick={() => fetchLiveData(apiUrl)}
+            disabled={loading}
+            title="Refrescar datos desde Apps Script"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin text-purple-600" : "text-purple-600"} />
+            <span>Actualizar</span>
+          </button>
 
           {/* Insignia del Período al lado del botón refrescar */}
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs font-bold">

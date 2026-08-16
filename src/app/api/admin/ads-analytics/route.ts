@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const targetUrl = searchParams.get("url")?.trim();
+  let targetUrl = searchParams.get("url")?.trim();
+
+  if (!targetUrl || !targetUrl.startsWith("http")) {
+    targetUrl = process.env.ADS_API_URL || process.env.NEXT_PUBLIC_ADS_API_URL || "";
+  }
 
   if (!targetUrl || !targetUrl.startsWith("http")) {
     return NextResponse.json(
-      { error: "URL de Apps Script / Meta no válida o no proporcionada." },
+      { error: "URL de Apps Script / Meta no válida o no configurada en el sistema." },
       { status: 400 }
     );
   }
