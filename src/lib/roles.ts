@@ -106,7 +106,7 @@ export function getFirstAllowedPath(
 
 
 export interface ResourceDef {
-  section: "Clínica" | "Cursos" | "General" | "Sistema";
+  section: "Clínica" | "Cursos" | "General" | "Publicidad" | "Sistema";
   path: string;
   label: string;
   hasEdit: boolean;
@@ -149,9 +149,14 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   // Sistema
   { section: "Sistema",       path: "/erp/facturacion/config",  label: "Config. SRI", hasEdit: true },
   { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
+  // Publicidad
+  { section: "Publicidad",    path: "/erp/publicidad",          label: "Publicidad y Anuncios", hasEdit: true },
+  { section: "Publicidad",    path: "/erp/sitio-web",           label: "Página Web / CMS", hasEdit: true },
+
+  // Sistema
+  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Config. SRI", hasEdit: true },
+  { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
   { section: "Sistema",       path: "/erp/roles",               label: "Roles", hasEdit: true },
-  { section: "Sistema",       path: "/erp/sitio-web",           label: "Gestión Web / CMS", hasEdit: true },
-  { section: "Sistema",       path: "/erp/publicidad",          label: "Publicidad / Artículos", hasEdit: true },
   { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría", hasEdit: false },
 ] as const;
 
@@ -162,18 +167,18 @@ export function getWritePathForResource(path: string): string {
   return path + "/modificar";
 }
 
-export const RESOURCE_SECTIONS = ["Clínica", "Cursos", "General", "Sistema"] as const;
+export const RESOURCE_SECTIONS = ["Clínica", "Cursos", "General", "Publicidad", "Sistema"] as const;
 
 // ── Navegación ────────────────────────────────────────────────────────────
 export interface NavItemDef {
   href: string;
   label: string;
   icon: string;
-  section: "Clínica" | "Cursos" | "General" | "Sistema";
+  section: "Clínica" | "Cursos" | "General" | "Publicidad" | "Sistema";
   roles: UserRole[]; // usado como fallback cuando DB no está disponible
 }
 
-export const NAV_SECTIONS = ["Clínica", "Cursos", "General", "Sistema"] as const;
+export const NAV_SECTIONS = ["Clínica", "Cursos", "General", "Publicidad", "Sistema"] as const;
 
 export const NAV_ITEMS: NavItemDef[] = [
   // Clínica
@@ -205,12 +210,14 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/activos",             label: "Activos Fijos",       icon: "Landmark",         section: "General",       roles: ["admin", "contador"] },
   { href: "/erp/contabilidad",        label: "Contabilidad",        icon: "FileBarChart2",    section: "General",       roles: ["admin", "contador"] },
 
+  // Publicidad
+  { href: "/erp/publicidad",          label: "Publicidad / Anuncios", icon: "Megaphone",       section: "Publicidad",    roles: ["admin"] },
+  { href: "/erp/sitio-web",           label: "Página Web / CMS",      icon: "Globe",           section: "Publicidad",    roles: ["admin"] },
+
   // Sistema
   { href: "/erp/facturacion/config",  label: "Config. SRI",         icon: "FileKey",          section: "Sistema",       roles: ["admin"] },
   { href: "/erp/usuarios",            label: "Usuarios",            icon: "UserCog",          section: "Sistema",       roles: ["admin"] },
   { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
-  { href: "/erp/sitio-web",           label: "Página Web / CMS",    icon: "Globe",            section: "Sistema",       roles: ["admin"] },
-  { href: "/erp/publicidad",          label: "Publicidad",          icon: "Newspaper",        section: "Sistema",       roles: ["admin"] },
   { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },
 ];
 

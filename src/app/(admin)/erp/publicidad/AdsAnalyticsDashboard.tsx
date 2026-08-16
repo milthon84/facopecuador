@@ -19,6 +19,8 @@ import {
   ArrowUp,
   ArrowDown,
   Clock,
+  Sparkles,
+  Bot,
 } from "lucide-react";
 
 // Estructura de datos por campaña
@@ -348,11 +350,24 @@ const DEFAULT_DEMO_DATA: AdsDataPayload = {
 };
 
 const STORAGE_KEY = "facop_ads_api_url";
+const CLAUDE_KEY_STORAGE = "facop_claude_api_key";
 
-export default function AdsAnalyticsDashboard() {
+interface AdsAnalyticsDashboardProps {
+  isAdmin?: boolean;
+}
+
+export default function AdsAnalyticsDashboard({ isAdmin = false }: AdsAnalyticsDashboardProps) {
   const [period, setPeriod] = useState<PeriodKey>("hoy");
   const [apiUrl, setApiUrl] = useState<string>("");
   const [inputUrl, setInputUrl] = useState<string>("");
+
+  const [claudeKey, setClaudeKey] = useState<string>("");
+  const [inputClaudeKey, setInputClaudeKey] = useState<string>("");
+
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
 
   const [sortField, setSortField] = useState<"a" | "b" | "ct" | "cc" | "ctr" | "e" | "d" | "st">("e");
@@ -366,9 +381,16 @@ export default function AdsAnalyticsDashboard() {
   const [rawJsonResponse, setRawJsonResponse] = useState<string | null>(null);
   const [showJsonInspector, setShowJsonInspector] = useState<boolean>(false);
 
-  // Cargar URL guardada en localStorage al montar
+  // Cargar URL y Claude API Key guardadas en localStorage al montar
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
+    const savedClaude = localStorage.getItem(CLAUDE_KEY_STORAGE);
+
+    if (savedClaude) {
+      setClaudeKey(savedClaude);
+      setInputClaudeKey(savedClaude);
+    }
+
     if (saved) {
       setApiUrl(saved);
       setInputUrl(saved);
@@ -452,12 +474,18 @@ export default function AdsAnalyticsDashboard() {
     }
   }
 
-  // Guardar nueva URL de Apps Script
+  // Guardar nueva URL de Apps Script y Claude API Key
   function handleSaveUrl(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = inputUrl.trim();
+    const trimmedClaude = inputClaudeKey.trim();
+
     setApiUrl(trimmed);
     localStorage.setItem(STORAGE_KEY, trimmed);
+
+    setClaudeKey(trimmedClaude);
+    localStorage.setItem(CLAUDE_KEY_STORAGE, trimmedClaude);
+
     setIsConfigOpen(false);
 
     if (trimmed) {
@@ -466,6 +494,46 @@ export default function AdsAnalyticsDashboard() {
       setUsingDemo(true);
       setAdsData(DEFAULT_DEMO_DATA);
       setErrorMsg(null);
+    }
+  }
+
+  // Generar recomendaciones estratégicas llamando a la API de Claude
+  async function fetchClaudeAiAnalysis() {
+    if (!currentRows || currentRows.length === 0) {
+      setAiError("No hay datos de anuncios registrados para analizar en este periodo.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      // Filtrar anuncios activos para enviar a la IA
+      const activeRows = currentRows.filter((r) => !getCampaignStatus(r).isPaused);
+      const rowsToAnalyze = activeRows.length > 0 ? activeRows : currentRows;
+
+      const res = await fetch("/api/admin/ads-ai-recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payload: rowsToAnalyze,
+          period,
+          apiKey: claudeKey || inputClaudeKey,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || `Respuesta HTTP ${res.status}`);
+      }
+
+      setAiAnalysis(result.analysis);
+    } catch (err: any) {
+      console.error("Error en análisis con Claude AI:", err);
+      setAiError(err.message || "Error al conectar con la API de Claude AI");
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -718,18 +786,20 @@ export default function AdsAnalyticsDashboard() {
             {period === "hoy" ? "Hoy (24h)" : `Últimos ${period} días`}
           </span>
 
-          <button
-            onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition"
-          >
-            <Settings size={15} />
-            <span className="hidden sm:inline">Configurar Meta/Apps Script</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setIsConfigOpen(!isConfigOpen)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition cursor-pointer"
+            >
+              <Settings size={15} />
+              <span className="hidden sm:inline">Configurar Meta/Apps Script</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Modal / Panel Integrado para Configuración de Web App Google Apps Script */}
-      {isConfigOpen && (
+      {/* Modal / Panel Integrado para Configuración de Web App Google Apps Script (Solo Administradores) */}
+      {isAdmin && isConfigOpen && (
         <form
           onSubmit={handleSaveUrl}
           className="bg-gradient-to-r from-purple-900 via-purple-950 to-slate-900 text-white p-5 rounded-2xl border border-purple-800 shadow-xl space-y-3"
@@ -747,22 +817,42 @@ export default function AdsAnalyticsDashboard() {
             </button>
           </div>
           <p className="text-xs text-purple-200 leading-relaxed">
-            Ingresa la URL publicada de tu Google Apps Script (terminada en <code>/exec</code>) o tu endpoint de sincronización de Meta Ads para obtener datos en vivo. Si se deja en blanco, se mostrará el reporte demostrativo.
+            Ingresa la URL publicada de tu Google Apps Script (terminada en <code>/exec</code>) y opcionalmente tu <b>Claude API Key</b> (Anthropic) para generar diagnósticos automáticos por IA.
           </p>
-          <div className="flex gap-2 flex-col sm:flex-row">
-            <input
-              type="url"
-              placeholder="https://script.google.com/macros/s/.../exec"
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              className="flex-1 px-4 py-2 text-xs text-slate-900 bg-white rounded-xl border border-purple-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
-            <div className="flex gap-2">
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[11px] font-bold text-amber-300 uppercase mb-1">
+                URL del Web App de Apps Script:
+              </label>
+              <input
+                type="url"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                className="w-full px-4 py-2 text-xs text-slate-900 bg-white rounded-xl border border-purple-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-amber-300 uppercase mb-1">
+                Claude API Key (Anthropic - Opcional):
+              </label>
+              <input
+                type="password"
+                placeholder="sk-ant-api03-..."
+                value={inputClaudeKey}
+                onChange={(e) => setInputClaudeKey(e.target.value)}
+                className="w-full px-4 py-2 text-xs text-slate-900 bg-white rounded-xl border border-purple-300 focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-1">
               <button
                 type="submit"
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-md shadow-amber-500/20"
               >
-                <Check size={14} /> Guardar URL
+                <Check size={14} /> Guardar Configuración
               </button>
               {rawJsonResponse && (
                 <button
@@ -771,24 +861,6 @@ export default function AdsAnalyticsDashboard() {
                   className="px-3 py-2 bg-purple-800 hover:bg-purple-700 text-purple-200 text-xs font-semibold rounded-xl border border-purple-700 transition"
                 >
                   {showJsonInspector ? "Ocultar JSON" : "Inspeccionar JSON API"}
-                </button>
-              )}
-              {inputUrl && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputUrl("");
-                    setApiUrl("");
-                    localStorage.removeItem(STORAGE_KEY);
-                    setUsingDemo(true);
-                    setAdsData(DEFAULT_DEMO_DATA);
-                    setErrorMsg(null);
-                    setRawJsonResponse(null);
-                    setIsConfigOpen(false);
-                  }}
-                  className="px-3 py-2 bg-purple-900 hover:bg-purple-800 text-purple-300 text-xs font-semibold rounded-xl border border-purple-700 transition"
-                >
-                  Restablecer
                 </button>
               )}
             </div>
@@ -1095,7 +1167,7 @@ export default function AdsAnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Bloque de Recomendaciones */}
+      {/* Bloque de Recomendaciones en Tarjetas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Escalar */}
         <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-sm space-y-3">
@@ -1150,6 +1222,67 @@ export default function AdsAnalyticsDashboard() {
           </ul>
         </div>
       </div>
+
+      {/* Bloque de Inteligencia Artificial Claude (Solo Administradores - Al Final) */}
+      {isAdmin && (
+        <div className="bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 rounded-2xl p-5 text-white border border-purple-800/80 shadow-lg space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-800/60 pb-3.5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center font-bold shadow-inner">
+                <Sparkles size={20} className="animate-pulse text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
+                  Recomendaciones de Inteligencia Artificial con Claude
+                  <span className="text-[10px] bg-purple-500/30 text-purple-200 border border-purple-400/30 px-2 py-0.5 rounded-full font-mono font-normal">
+                    Anthropic AI
+                  </span>
+                </h3>
+                <p className="text-xs text-purple-200/80 mt-0.5">
+                  Genera estrategias en vivo para potenciar anuncios ganadores y tomar medidas inmediatas.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={fetchClaudeAiAnalysis}
+              disabled={aiLoading}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-extrabold rounded-xl transition shadow-md shadow-amber-500/20 disabled:opacity-50 whitespace-nowrap cursor-pointer"
+            >
+              {aiLoading ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" /> Analizando métricas...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} /> Consultar a Claude AI
+                </>
+              )}
+            </button>
+          </div>
+
+          {aiError && (
+            <div className="p-3.5 bg-rose-950/80 border border-rose-800 rounded-xl text-xs text-rose-200 flex items-center gap-2">
+              <AlertCircle size={16} className="text-rose-400 flex-shrink-0" />
+              <span>{aiError}</span>
+            </div>
+          )}
+
+          {aiAnalysis ? (
+            <div className="p-4 bg-purple-950/60 rounded-xl border border-purple-800/80 text-xs sm:text-sm text-purple-100 space-y-3 leading-relaxed font-sans whitespace-pre-wrap">
+              {aiAnalysis}
+            </div>
+          ) : (
+            !aiLoading && (
+              <div className="p-3.5 bg-purple-950/40 rounded-xl border border-purple-900/60 text-xs text-purple-300/90 flex items-center justify-between">
+                <span>
+                  💡 Haz clic en <b>"Consultar a Claude AI"</b> para recibir sugerencias inteligentes de copy, presupuesto y optimización sobre los anuncios de este período.
+                </span>
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       {/* Pie de Página con resumen */}
       <div className="text-center text-xs text-slate-500 py-2 border-t border-slate-200/60">

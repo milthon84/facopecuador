@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { assertWritePermission } from "@/lib/auth-action";
 import PublicidadClientPage from "./PublicidadClientPage";
 
@@ -7,6 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function PublicidadPage() {
   // Verificar permisos de escritura en la ruta de gestión de publicidad
   await assertWritePermission("/erp/publicidad");
+
+  const sessionClient = createClient();
+  const { data: { user } } = await sessionClient.auth.getUser();
+  const isAdmin = (user?.app_metadata?.role as string) === "admin";
 
   const supabase = createAdminClient();
 
@@ -34,6 +39,7 @@ export default async function PublicidadPage() {
         initialPosts={postsData || []} 
         hasFacebookCredentials={hasFacebookCredentials}
         hasInstagramCredentials={hasInstagramCredentials}
+        isAdmin={isAdmin}
       />
     </div>
   );

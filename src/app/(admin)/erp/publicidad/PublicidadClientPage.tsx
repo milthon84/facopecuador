@@ -11,6 +11,7 @@ interface Props {
   initialPosts: any[];
   hasFacebookCredentials?: boolean;
   hasInstagramCredentials?: boolean;
+  isAdmin?: boolean;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -35,6 +36,7 @@ export default function PublicidadClientPage({
   initialPosts,
   hasFacebookCredentials = false,
   hasInstagramCredentials = false,
+  isAdmin = false,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -188,7 +190,7 @@ export default function PublicidadClientPage({
       </div>
 
       {mainTab === "analisis" ? (
-        <AdsAnalyticsDashboard />
+        <AdsAnalyticsDashboard isAdmin={isAdmin} />
       ) : (
         <div className="grid lg:grid-cols-12 gap-6 items-start">
       {/* Columna Izquierda: Listado de artículos */}
