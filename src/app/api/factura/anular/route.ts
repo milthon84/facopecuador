@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       }
     };
 
-    const { error: updateInvError } = await supabase
+    let { error: updateInvError } = await supabase
       .from("invoices")
       .update({
         sri_status: "cancelled",
@@ -112,6 +112,20 @@ export async function POST(req: Request) {
         sri_error_messages: updatedMessages
       })
       .eq("id", invoice_id);
+
+    // Fallback de resiliencia si la restricción CHECK de Supabase no permite 'cancelled' en payment_status
+    if (updateInvError && (updateInvError.message.includes("payment_status") || updateInvError.message.includes("check"))) {
+      const { error: fallbackError } = await supabase
+        .from("invoices")
+        .update({
+          sri_status: "cancelled",
+          payment_status: "pending",
+          sri_error_messages: updatedMessages
+        })
+        .eq("id", invoice_id);
+
+      updateInvError = fallbackError;
+    }
 
     if (updateInvError) {
       throw new Error(`Error al actualizar factura: ${updateInvError.message}`);

@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
 import PagoInscripcionModal from "@/components/PagoInscripcionModal";
+import PagoModuloModal from "@/components/PagoModuloModal";
 
 interface StudentDetailProps {
   student: any;
@@ -309,6 +310,7 @@ export default function StudentDetailClient({
                               enrollmentId={enroll.id}
                               studentId={student.id}
                               initialStatus={enroll.status}
+                              isMatriculado={isPaidOrMatriculado}
                               action={updateEnrollmentStatusAction}
                             />
                           )}
@@ -389,8 +391,8 @@ export default function StudentDetailClient({
                                         );
                                       } else if (mi.billing_status === "free") {
                                         return (
-                                          <span className="text-[10px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-xl">
-                                            Beca / Sin Costo
+                                          <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
+                                            Matriculado (Sin Factura)
                                           </span>
                                         );
                                       } else {
@@ -400,13 +402,17 @@ export default function StudentDetailClient({
                                               Pendiente
                                             </span>
                                             {canEdit && (
-                                              <Link
-                                                href={invoiceLink}
-                                                className="inline-flex items-center gap-1.5 bg-ink-900 hover:bg-ink-850 text-gold-400 hover:text-gold-300 border border-gold-500/40 hover:border-gold-400/70 text-[10px] font-bold py-1 px-3 rounded-xl shadow-2xs transition-all cursor-pointer"
-                                              >
-                                                <Receipt size={12} className="text-gold-400" />
-                                                <span>Facturar Módulo</span>
-                                              </Link>
+                                              <PagoModuloModal
+                                                studentName={student.full_name}
+                                                studentDoc={student.document_number}
+                                                studentEmail={student.email}
+                                                studentPhone={student.phone}
+                                                moduleInscriptionId={mi.id}
+                                                moduleName={`Módulo ${mod.number}: ${mod.name}`}
+                                                moduleCost={Number(mod.cost)}
+                                                courseId={curso.id}
+                                                returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
+                                              />
                                             )}
                                           </>
                                         );

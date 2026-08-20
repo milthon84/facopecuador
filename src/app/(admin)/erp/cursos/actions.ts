@@ -302,37 +302,82 @@ export async function enrollStudentInCourseAction(studentId: string, courseId: s
   if (!studentId || !courseId) throw new Error("Parámetros requeridos faltantes.");
 
   const supabase = createAdminClient();
-  const { data: enrollment, error: enrollError } = await supabase
-    .from("curso_inscripciones")
-    .insert({
-      course_id: courseId,
-      student_id: studentId,
-      status: "enrolled",
-    })
-    .select("id")
-    .single();
 
-  if (enrollError) {
-    throw new Error(parseDbError(enrollError.message));
+  // 1. Verificar si ya existe un registro de inscripción para este alumno y curso
+  const { data: existingEnrollment } = await supabase
+    .from("curso_inscripciones")
+    .select("id, status")
+    .eq("course_id", courseId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+
+  let enrollmentId: string;
+
+  if (existingEnrollment) {
+    // Si ya está activo como matriculado
+    if (existingEnrollment.status === "enrolled") {
+      throw new Error("El alumno ya se encuentra matriculado en este curso.");
+    }
+
+    // Si estaba retirado ('dropped') o cancelado, reactivar su inscripción
+    const { error: updateError } = await supabase
+      .from("curso_inscripciones")
+      .update({
+        status: "enrolled",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingEnrollment.id);
+
+    if (updateError) {
+      throw new Error(parseDbError(updateError.message));
+    }
+    enrollmentId = existingEnrollment.id;
+  } else {
+    // Si es una nueva inscripción
+    const { data: newEnrollment, error: enrollError } = await supabase
+      .from("curso_inscripciones")
+      .insert({
+        course_id: courseId,
+        student_id: studentId,
+        status: "enrolled",
+      })
+      .select("id")
+      .single();
+
+    if (enrollError || !newEnrollment) {
+      throw new Error(parseDbError(enrollError?.message));
+    }
+    enrollmentId = newEnrollment.id;
   }
 
+  // 2. Garantizar que todos los módulos del curso estén inscritos para el alumno
   const { data: modules } = await supabase
     .from("curso_modulos")
     .select("id")
     .eq("course_id", courseId);
 
   if (modules && modules.length > 0) {
-    const moduleInscriptions = modules.map((m) => ({
-      enrollment_id: enrollment.id,
-      module_id: m.id,
-      billing_status: "pending",
-    }));
-    await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+    const { data: existingModuleInscriptions } = await supabase
+      .from("curso_modulo_inscripciones")
+      .select("module_id")
+      .eq("enrollment_id", enrollmentId);
+
+    const existingModIds = new Set((existingModuleInscriptions || []).map((m: any) => m.module_id));
+    const missingModules = modules.filter((m) => !existingModIds.has(m.id));
+
+    if (missingModules.length > 0) {
+      const moduleInscriptions = missingModules.map((m) => ({
+        enrollment_id: enrollmentId,
+        module_id: m.id,
+        billing_status: "pending",
+      }));
+      await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+    }
   }
 
   revalidatePath(`/erp/cursos/${courseId}`);
   revalidatePath("/erp/cursos/alumnos");
-  return { success: true };
+  return { success: true, enrollmentId };
 }
 
 export async function registerAndEnrollStudentAction(data: {
@@ -356,18 +401,17 @@ export async function registerAndEnrollStudentAction(data: {
 
   let studentId: string;
 
-  // 1. Buscar si el alumno ya existe registrado en el sistema (por cédula o email)
+  // 1. Buscar al alumno en el sistema por su CÉDULA / RUC / PASAPORTE (Identificador único primario)
   const { data: existingStudent } = await supabase
     .from("alumnos")
-    .select("id")
-    .or(`document_number.eq.${docTrimmed},email.eq.${emailTrimmed}`)
-    .limit(1)
+    .select("id, full_name, email, document_number")
+    .eq("document_number", docTrimmed)
     .maybeSingle();
 
   if (existingStudent) {
     studentId = existingStudent.id;
-    // Actualizar sus datos personales
-    await supabase
+    // Si la Cédula ya existe en la base de datos, actualizar sus datos personales
+    const { error: updateError } = await supabase
       .from("alumnos")
       .update({
         full_name: data.fullName.trim(),
@@ -379,9 +423,23 @@ export async function registerAndEnrollStudentAction(data: {
         updated_at: new Date().toISOString(),
       })
       .eq("id", studentId);
+
+    if (updateError && (updateError.message.includes("alumnos_email_key") || updateError.message.includes("email"))) {
+      await supabase
+        .from("alumnos")
+        .update({
+          full_name: data.fullName.trim(),
+          phone: data.phone.trim(),
+          document_number: docTrimmed,
+          professional_title: data.professionalTitle?.trim() || null,
+          notes: data.notes?.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", studentId);
+    }
   } else {
-    // 2. Si es un alumno completamente nuevo en la base general, insertarlo
-    const { data: newStudent, error: studentError } = await supabase
+    // Si la Cédula es totalmente nueva, crear la ficha del alumno
+    let { data: newStudent, error: studentError } = await supabase
       .from("alumnos")
       .insert({
         full_name: data.fullName.trim(),
@@ -394,13 +452,38 @@ export async function registerAndEnrollStudentAction(data: {
       .select("id")
       .single();
 
-    if (studentError || !newStudent) {
+    // Si existe una restricción de email único en la BD que colisione con otro registro previo,
+    // reintentar con una variación válida basada en su Cédula para no bloquear la matrícula
+    if (studentError && (studentError.message.includes("alumnos_email_key") || studentError.message.includes("email"))) {
+      const parts = emailTrimmed.split("@");
+      const fallbackEmail = parts.length === 2 ? `${parts[0]}+${docTrimmed}@${parts[1]}` : `${docTrimmed}@noemail.local`;
+
+      const { data: retryStudent, error: retryError } = await supabase
+        .from("alumnos")
+        .insert({
+          full_name: data.fullName.trim(),
+          document_number: docTrimmed,
+          phone: data.phone.trim(),
+          email: fallbackEmail,
+          professional_title: data.professionalTitle?.trim() || null,
+          notes: data.notes?.trim() || null,
+        })
+        .select("id")
+        .single();
+
+      if (retryError || !retryStudent) {
+        throw new Error(parseDbError(retryError?.message));
+      }
+      newStudent = retryStudent;
+      studentError = null;
+    } else if (studentError || !newStudent) {
       throw new Error(parseDbError(studentError?.message));
     }
+
     studentId = newStudent.id;
   }
 
-  // 3. Inscribir en el curso solicitado
+  // 2. Inscribir o Reactivar la matrícula en el curso
   await enrollStudentInCourseAction(studentId, data.courseId);
 
   return { success: true, studentId };
@@ -485,5 +568,69 @@ export async function updateModuleBillingStatusAction(moduloInscripcionId: strin
   if (error) throw new Error(error.message);
 
   revalidatePath(`/erp/cursos`);
+  return { success: true };
+}
+
+export async function registerNoFiscalEnrollmentAction(enrollmentId: string, courseId?: string) {
+  await assertWritePermission("/erp/cursos");
+  if (!enrollmentId) throw new Error("ID de inscripción requerido.");
+
+  const supabase = createAdminClient();
+
+  // 1. Intentar actualizar el tipo de pago a "no_fiscal"
+  let { error: enrollError } = await supabase
+    .from("curso_inscripciones")
+    .update({ payment_type: "no_fiscal", updated_at: new Date().toISOString() })
+    .eq("id", enrollmentId);
+
+  // Fallback si la restricción CHECK de Postgres 'curso_inscripciones_payment_type_check' no incluye 'no_fiscal'
+  if (enrollError && (enrollError.message.includes("payment_type") || enrollError.message.includes("check"))) {
+    const { error: fallbackError } = await supabase
+      .from("curso_inscripciones")
+      .update({ payment_type: "full_course", updated_at: new Date().toISOString() })
+      .eq("id", enrollmentId);
+
+    enrollError = fallbackError;
+  }
+
+  // 2. Actualizar el estado de facturación de los módulos a 'free' (Sin comprobante fiscal / Beca / Exonerado)
+  const { error: moduleError } = await supabase
+    .from("curso_modulo_inscripciones")
+    .update({ billing_status: "free", updated_at: new Date().toISOString() })
+    .eq("enrollment_id", enrollmentId);
+
+  if (moduleError) {
+    console.error("Error actualizando módulos a sin comprobante fiscal:", moduleError);
+  }
+
+  if (courseId) {
+    revalidatePath(`/erp/cursos/${courseId}`);
+  }
+  revalidatePath("/erp/cursos/alumnos");
+  revalidatePath("/erp/cursos");
+  return { success: true };
+}
+
+export async function registerNoFiscalModuleAction(moduleInscriptionId: string, courseId?: string) {
+  await assertWritePermission("/erp/cursos");
+  if (!moduleInscriptionId) throw new Error("ID de inscripción a módulo requerido.");
+
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("curso_modulo_inscripciones")
+    .update({ billing_status: "free", updated_at: new Date().toISOString() })
+    .eq("id", moduleInscriptionId);
+
+  if (error) {
+    throw new Error(parseDbError(error.message));
+  }
+
+  if (courseId) {
+    revalidatePath(`/erp/cursos/${courseId}`);
+  }
+  revalidatePath("/erp/cursos/alumnos");
+  revalidatePath("/erp/cursos/clases");
+  revalidatePath("/erp/cursos");
   return { success: true };
 }

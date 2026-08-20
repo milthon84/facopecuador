@@ -129,7 +129,12 @@ export default function EnrollStudentModal({
       setTitle("");
       router.refresh();
     } catch (err: any) {
-      setErrorMsg(err.message || "Error al registrar y matricular.");
+      const msg = err?.message || String(err);
+      if (msg.includes("webpack") || msg.includes("is not a function")) {
+        setErrorMsg("El sistema fue actualizado. Por favor recarga la página (F5) para procesar la solicitud.");
+      } else {
+        setErrorMsg(msg || "Error al registrar y matricular.");
+      }
     } finally {
       setLoading(false);
     }

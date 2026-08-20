@@ -519,6 +519,7 @@ export default async function CursoDetallePage({
                     if (!student) return null;
 
                     const modInscriptions = e.curso_modulo_inscripciones || [];
+                    const isNoFiscal = e.payment_type === "no_fiscal" || modInscriptions.some((m: any) => m.billing_status === "free");
                     const isPaidFromModules = modInscriptions.some((m: any) => m.billing_status === "invoiced");
                     const matchedInvoice = courseInvoices.find((inv: any) => 
                       inv.client_document && 
@@ -529,7 +530,7 @@ export default async function CursoDetallePage({
                     const isPaidFromInvoice = !!matchedInvoice;
                     const paidInvoiceNumber = matchedInvoice?.invoice_number ||
                       modInscriptions.find((m: any) => m.billing_status === "invoiced")?.invoices?.invoice_number || null;
-                    const isPaidOrMatriculado = isPaidFromModules || isPaidFromInvoice || e.status === "completed";
+                    const isPaidOrMatriculado = isPaidFromModules || isPaidFromInvoice || isNoFiscal || e.status === "completed";
 
                     return (
                       <tr key={student.id} className="hover:bg-lilac-50/10">
@@ -546,7 +547,12 @@ export default async function CursoDetallePage({
                           <div className="text-ink-500">{student.phone}</div>
                         </td>
                         <td className="px-5 py-3.5 text-right flex items-center justify-end gap-2">
-                          {isPaidOrMatriculado || e.status === "completed" ? (
+                          {isNoFiscal ? (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-indigo-300 bg-indigo-50/90 text-indigo-900 shadow-2xs w-fit whitespace-nowrap">
+                              <CheckCircle2 size={13} className="text-indigo-600" />
+                              <span>Matriculado (Sin Factura)</span>
+                            </div>
+                          ) : isPaidOrMatriculado || e.status === "completed" ? (
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
                               <CheckCircle2 size={13} className="text-green-600" />
                               <span>Matriculado{paidInvoiceNumber ? ` — № ${paidInvoiceNumber}` : ""}</span>

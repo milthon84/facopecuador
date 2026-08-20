@@ -12,6 +12,7 @@ import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { sendCourseNoticeEmail } from "@/lib/email";
 import NoticeComposerClient from "@/components/NoticeComposerClient";
 import CourseClasesTabsClient from "./CourseClasesTabsClient";
+import PagoModuloModal from "@/components/PagoModuloModal";
 
 export const dynamic = "force-dynamic";
 
@@ -517,12 +518,12 @@ export default async function ClasesPage({
 
             const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
 
-            // Cargar alumnos inscritos con su tipo de pago
+            // Cargar alumnos inscritos (excluyendo explícitamente los retirados)
             const enrolledDocs = await supabase
               .from("curso_inscripciones")
               .select("id, status, created_at, payment_type, alumnos(*)")
               .eq("course_id", courseId)
-              .eq("status", "enrolled");
+              .neq("status", "dropped");
 
             const enrolledStudents = enrolledDocs.data || [];
 
@@ -540,8 +541,21 @@ export default async function ClasesPage({
             ]);
 
             const classes = classesRes.data || [];
-            const enrollmentsList = enrolledStudents;
             const moduleBillingList = moduleBillingRes.data || [];
+
+            // Filtrar ÚNICAMENTE a los alumnos que fueron efectivamente MATRICULADOS (excluyendo retirados y registros pendientes)
+            const enrollmentsList = enrolledStudents.filter((e: any) => {
+              if (e.status === "dropped") return false;
+
+              const isNoFiscal = e.payment_type === "no_fiscal";
+              const isFullCourse = e.payment_type === "full_course";
+              const isCompleted = e.status === "completed";
+
+              const mb = moduleBillingList.find((m: any) => m.enrollment_id === e.id);
+              const isModulePaid = mb && (mb.billing_status === "invoiced" || mb.billing_status === "free");
+
+              return isFullCourse || isNoFiscal || isCompleted || isModulePaid;
+            });
 
             // Determinar la clase activa a mostrar
             const activeClass = classes.find(c => c.id === classId) || classes[0] || null;
@@ -758,13 +772,17 @@ export default async function ClasesPage({
                                           Pendiente de Pago
                                         </span>
                                         {canEdit && (
-                                          <Link
-                                            href={invoiceLink}
-                                            className="inline-flex items-center gap-1.5 bg-ink-900 hover:bg-ink-850 text-gold-400 hover:text-gold-300 border border-gold-500/40 hover:border-gold-400/70 text-[10px] font-bold py-1 px-3 rounded-xl shadow-2xs transition-all cursor-pointer"
-                                          >
-                                            <Receipt size={12} className="text-gold-400" />
-                                            <span>Facturar Módulo</span>
-                                          </Link>
+                                           <PagoModuloModal
+                                             studentName={student.full_name}
+                                             studentDoc={student.document_number}
+                                             studentEmail={student.email}
+                                             studentPhone={student.phone}
+                                             moduleInscriptionId={billingInfo.inscriptionId}
+                                             moduleName={`Módulo ${selectedModule.number}: ${selectedModule.name}`}
+                                             moduleCost={Number(selectedModule.cost)}
+                                             courseId={courseId}
+                                             returnUrl={`/erp/cursos/clases?tab=clases&course_id=${courseId}&module_id=${selectedModule.id}&class_id=${activeClass.id}`}
+                                           />
                                         )}
                                       </div>
                                     )}

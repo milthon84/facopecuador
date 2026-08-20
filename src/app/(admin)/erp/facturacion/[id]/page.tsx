@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, CheckCircle2, XCircle, AlertCircle, Clock,
-  User, FileText, Hash, CreditCard, RefreshCw, Printer,
+  User, FileText, Hash, CreditCard, RefreshCw, Printer, Trash2,
 } from "lucide-react";
 import CopyButton from "@/components/CopyButton";
 import ReintentoSriButton from "@/components/ReintentoSriButton";
@@ -175,13 +175,36 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               )}
             </div>
 
-            {/* Mensajes de error SRI */}
+            {/* Mensajes y registros SRI / Anulación */}
             {invoice.sri_error_messages && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-2">
-                <p className="text-xs font-semibold text-red-700 mb-1">Mensajes SRI</p>
-                <pre className="text-xs text-red-600 whitespace-pre-wrap">
-                  {JSON.stringify(invoice.sri_error_messages, null, 2)}
-                </pre>
+              <div className="space-y-2 mt-2">
+                {(invoice.sri_error_messages as any).annulment && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Trash2 size={13} className="text-red-500" /> Registro de Anulación Local
+                    </p>
+                    <div className="text-slate-600 space-y-0.5 pt-0.5 text-[11px]">
+                      <p><b>Anulado por:</b> {(invoice.sri_error_messages as any).annulment.annulled_by}</p>
+                      <p><b>Fecha de anulación:</b> {new Date((invoice.sri_error_messages as any).annulment.annulled_at).toLocaleString("es-EC")}</p>
+                      <p><b>Estado original:</b> {(invoice.sri_error_messages as any).annulment.original_status} (pago: {(invoice.sri_error_messages as any).annulment.original_payment_status})</p>
+                    </div>
+                  </div>
+                )}
+
+                {Object.keys(invoice.sri_error_messages as object).filter((k) => k !== "annulment").length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-red-700 mb-1">Observaciones SRI</p>
+                    <pre className="text-xs text-red-600 whitespace-pre-wrap">
+                      {JSON.stringify(
+                        Object.fromEntries(
+                          Object.entries(invoice.sri_error_messages as object).filter(([k]) => k !== "annulment")
+                        ),
+                        null,
+                        2
+                      )}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </div>
