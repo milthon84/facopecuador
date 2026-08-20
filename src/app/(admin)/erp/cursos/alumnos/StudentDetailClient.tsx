@@ -392,7 +392,7 @@ export default function StudentDetailClient({
                                       } else if (mi.billing_status === "free") {
                                         return (
                                           <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
-                                            Matriculado (Sin Factura)
+                                            Pagado SF
                                           </span>
                                         );
                                       } else {

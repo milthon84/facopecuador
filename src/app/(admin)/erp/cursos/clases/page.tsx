@@ -763,8 +763,8 @@ export default async function ClasesPage({
                                           : `Facturado${billingInfo.invoiceNumber ? ` (#${billingInfo.invoiceNumber})` : ""}`}
                                       </span>
                                     ) : effectiveBillingStatus === "free" ? (
-                                      <span className="text-[9px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2 py-0.2 rounded-md">
-                                        Beca / Sin Costo
+                                      <span className="text-[9px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.2 rounded-md">
+                                        Pagado SF
                                       </span>
                                     ) : (
                                       <div className="flex items-center gap-1.5">

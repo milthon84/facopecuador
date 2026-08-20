@@ -593,14 +593,19 @@ export async function registerNoFiscalEnrollmentAction(enrollmentId: string, cou
     enrollError = fallbackError;
   }
 
-  // 2. Actualizar el estado de facturación de los módulos a 'free' (Sin comprobante fiscal / Beca / Exonerado)
-  const { error: moduleError } = await supabase
+  // 2. Actualizar la cuota de inscripción / primer módulo a 'free' (Pagado SF), manteniendo los siguientes módulos en 'pending' para su cobro por módulo
+  const { data: moduleInscriptions } = await supabase
     .from("curso_modulo_inscripciones")
-    .update({ billing_status: "free", updated_at: new Date().toISOString() })
-    .eq("enrollment_id", enrollmentId);
+    .select("id")
+    .eq("enrollment_id", enrollmentId)
+    .order("id", { ascending: true });
 
-  if (moduleError) {
-    console.error("Error actualizando módulos a sin comprobante fiscal:", moduleError);
+  if (moduleInscriptions && moduleInscriptions.length > 0) {
+    const firstModuleId = moduleInscriptions[0].id;
+    await supabase
+      .from("curso_modulo_inscripciones")
+      .update({ billing_status: "free", updated_at: new Date().toISOString() })
+      .eq("id", firstModuleId);
   }
 
   if (courseId) {
