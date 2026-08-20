@@ -520,12 +520,12 @@ export default async function CursoDetallePage({
 
                     const modInscriptions = e.curso_modulo_inscripciones || [];
                     const isNoFiscal = e.payment_type === "no_fiscal" || modInscriptions.some((m: any) => m.billing_status === "free");
-                    const isPaidFromModules = modInscriptions.some((m: any) => m.billing_status === "invoiced");
+                    const isPaidFromModules = modInscriptions.some((m: any) => m.billing_status === "invoiced") || e.payment_type === "full_course";
                     const matchedInvoice = courseInvoices.find((inv: any) => 
                       inv.client_document && 
                       student.document_number && 
                       inv.client_document.trim() === student.document_number.trim() && 
-                      new Date(inv.created_at) >= new Date(new Date(e.created_at).getTime() - 120000)
+                      inv.invoice_items?.some((item: any) => item.description?.toLowerCase().includes(course.name.toLowerCase()))
                     );
                     const isPaidFromInvoice = !!matchedInvoice;
                     const paidInvoiceNumber = matchedInvoice?.invoice_number ||

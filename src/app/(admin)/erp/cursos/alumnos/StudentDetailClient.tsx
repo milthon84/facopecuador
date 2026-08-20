@@ -289,12 +289,9 @@ export default function StudentDetailClient({
                     (a: any, b: any) => (a.curso_modulos?.number || 0) - (b.curso_modulos?.number || 0)
                   );
 
-                  const isPaidFromModules = sortedModules.some((m: any) => m.billing_status === "invoiced");
-                  const isPaidFromInvoice = (invoices || []).some((inv: any) => 
-                    inv.sri_status !== "cancelled" && 
-                    new Date(inv.created_at) >= new Date(new Date(enroll.created_at).getTime() - 120000)
-                  );
-                  const isPaidOrMatriculado = isPaidFromModules || isPaidFromInvoice || enroll.status === "completed";
+                  const isNoFiscal = enroll.payment_type === "no_fiscal" || sortedModules.some((m: any) => m.billing_status === "free");
+                  const isPaidFromModules = sortedModules.some((m: any) => m.billing_status === "invoiced") || enroll.payment_type === "full_course";
+                  const isPaidOrMatriculado = isPaidFromModules || isNoFiscal || enroll.status === "completed";
 
                   return (
                     <div key={enroll.id} className="bg-white border border-lilac-100 rounded-2xl shadow-2xs overflow-hidden">
@@ -315,14 +312,21 @@ export default function StudentDetailClient({
                             />
                           )}
                           <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            isPaidOrMatriculado || enroll.status === "completed"
+                            isNoFiscal
+                              ? "bg-indigo-50 text-indigo-900 border-indigo-200"
+                              : isPaidOrMatriculado || enroll.status === "completed"
                               ? "bg-green-50 text-green-700 border-green-200"
                               : enroll.status === "dropped"
                               ? "bg-red-50 text-red-700 border-red-100"
                               : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}>
-                            {isPaidOrMatriculado || enroll.status === "completed" ? "Matriculado" :
-                             enroll.status === "dropped" ? "Retirado" : "Inscrito"}
+                            {isNoFiscal
+                              ? "Matriculado (Sin Factura)"
+                              : isPaidOrMatriculado || enroll.status === "completed"
+                              ? "Matriculado"
+                              : enroll.status === "dropped"
+                              ? "Retirado"
+                              : "Inscrito"}
                           </span>
 
                           {!isPaidOrMatriculado && enroll.status !== "dropped" && canEdit && (
