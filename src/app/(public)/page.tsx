@@ -83,14 +83,14 @@ export default async function HomePage() {
     return true;
   });
 
-  // 3. Obtener noticias publicadas y vigentes (no expiradas) — últimas 6
+  // 3. Obtener noticias publicadas y vigentes (no expiradas) — hasta 30
   const { data: posts, error: postsError } = await supabase
     .from("web_posts")
-    .select("id, title, slug, content, image_url, created_at, category, expires_at")
+    .select("id, title, slug, content, image_url, video_url, created_at, category, expires_at")
     .eq("status", "published")
     .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
     .order("created_at", { ascending: false })
-    .limit(6);
+    .limit(30);
 
   if (postsError) {
     console.error("Error al obtener web_posts:", postsError.message);

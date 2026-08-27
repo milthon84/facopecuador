@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { BookOpen, ArrowRight, CalendarDays, GraduationCap } from "lucide-react";
 
@@ -39,6 +39,7 @@ interface Props {
 export default function CursosCarousel({ courses, posts = [], whatsappPhone, onCourseChange }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const items: CarouselItem[] = useMemo(
     () => [
@@ -57,7 +58,8 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
     }
   }, [currentIndex, items, onCourseChange]);
 
-  const next = useCallback(() => {
+  const next = useCallback((e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (totalItems <= 1 || animating) return;
     setAnimating(true);
     setTimeout(() => {
@@ -66,24 +68,44 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
     }, 420);
   }, [totalItems, animating]);
 
-  useEffect(() => {
-    if (totalItems <= 1) return;
-    const interval = setInterval(next, 6000);
-    return () => clearInterval(interval);
-  }, [next, totalItems]);
-
-  if (totalItems === 0) return null;
-
-  // Elemento actual (principal) y siguiente elemento (secundario superpuesto)
   const activeItem = items[currentIndex];
   const nextItem = items[(currentIndex + 1) % totalItems];
+
+  const activeVideo = activeItem?.kind === "post" ? activeItem.data.video_url : null;
+  const activeImage = activeItem?.data.image_url;
+
+  // Control de avance automático:
+  // - Si el elemento activo contiene VIDEO: NO se usa temporizador fijo. Avanza al finalizar el video (onEnded).
+  // - Si es IMAGEN o texto: Avanza de forma regular cada 6 segundos.
+  useEffect(() => {
+    if (totalItems <= 1) return;
+
+    if (activeVideo) {
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {});
+      }
+
+      const safetyTimer = setTimeout(() => {
+        next();
+      }, 25000);
+
+      return () => clearTimeout(safetyTimer);
+    }
+
+    const interval = setInterval(() => {
+      next();
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [next, totalItems, activeVideo, currentIndex]);
+
+  if (totalItems === 0) return null;
 
   const activeIsCourse = activeItem.kind === "course";
   const activeTitle = activeIsCourse ? activeItem.data.name : activeItem.data.title;
   const activeDate = activeIsCourse ? activeItem.data.start_date : activeItem.data.created_at;
   const activeDesc = activeIsCourse ? activeItem.data.description : activeItem.data.content;
-  const activeImage = activeItem.data.image_url;
-  const activeVideo = activeItem.kind === "post" ? activeItem.data.video_url : null;
 
   const nextIsCourse = nextItem.kind === "course";
   const nextTitle = nextIsCourse ? nextItem.data.name : nextItem.data.title;
@@ -99,10 +121,10 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
   return (
     <div
       className="relative w-full h-[520px] sm:h-[580px] cursor-pointer select-none"
-      onClick={next}
+      onClick={() => next()}
       title="Clic para ver el siguiente afiche"
     >
-      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior izquierda ── */}
+      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior izquierda (Precarga activa) ── */}
       {totalItems > 1 && (
         <div
           className={`absolute bottom-0 left-0 w-56 sm:w-64 h-72 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 bg-white
@@ -122,6 +144,8 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
                 muted
                 loop
                 playsInline
+                preload="auto"
+                poster={nextImage || undefined}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -162,11 +186,16 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
         {activeVideo ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
             <video
+              ref={videoRef}
+              key={activeVideo}
               src={activeVideo}
               autoPlay
               muted
-              loop
               playsInline
+              preload="auto"
+              poster={activeImage || undefined}
+              onEnded={() => next()}
+              onError={() => next()}
               className="w-full h-full object-cover"
             />
           </div>
@@ -241,6 +270,7 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
     </div>
   );
 }
+
 
 
 
