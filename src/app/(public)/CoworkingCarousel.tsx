@@ -275,29 +275,31 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
           </div>
         )}
 
-        {/* Gradiente Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/75 to-transparent pointer-events-none" />
+        {/* Gradiente sutil únicamente en el borde inferior para lectura de texto sin oscurecer la imagen/afiche */}
+        {(activePost.image_url || activePost.video_url) && (
+          <div className="absolute bottom-0 left-0 right-0 h-44 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none z-10" />
+        )}
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 pt-24 z-10 space-y-3">
-          <div className="space-y-1.5">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-gold-400 text-[10px] font-bold tracking-wider uppercase">
+        <div className="absolute bottom-0 left-0 right-0 p-5 z-20 space-y-2">
+          <div className="space-y-1">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/40 text-gold-400 text-[10px] font-bold tracking-wider uppercase backdrop-blur-md">
               <Sparkles size={11} />
               {activePost.video_url ? "Video Promocional" : "Espacio Odontológico"}
             </span>
-            <h3 className="font-extrabold text-white text-base sm:text-xl leading-snug line-clamp-2 drop-shadow-md">
+            <h3 className="font-extrabold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-lg">
               {activePost.title}
             </h3>
-            <p className="text-slate-300 text-xs leading-relaxed line-clamp-2 font-light">
+            <p className="text-slate-200 text-xs leading-relaxed line-clamp-2 font-light drop-shadow">
               {activePost.content}
             </p>
           </div>
 
-          <div className="flex items-center pt-3 border-t border-white/15">
+          <div className="flex items-center pt-2 border-t border-white/20">
             {activePost.slug ? (
               <Link
                 href={`/noticias/${activePost.slug}`}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
               >
                 <span>Leer artículo completo</span>
                 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
@@ -308,7 +310,7 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
               >
                 <span>Consultar disponibilidad y alquiler</span>
                 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />

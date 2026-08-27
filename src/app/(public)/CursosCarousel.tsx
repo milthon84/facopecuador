@@ -213,8 +213,13 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
           </div>
         )}
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 pt-24 z-10 space-y-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent">
-          <div className="space-y-1.5">
+        {/* Gradiente sutil únicamente en el borde inferior para lectura de texto sin oscurecer la imagen/afiche */}
+        {(activeImage || activeVideo) && (
+          <div className="absolute bottom-0 left-0 right-0 h-44 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none z-10" />
+        )}
+
+        <div className="absolute bottom-0 left-0 right-0 p-5 z-20 space-y-2">
+          <div className="space-y-1">
             {activeIsCourse && (
               <div className="flex items-center gap-2 text-gold-400">
                 <CalendarDays size={13} />
@@ -223,15 +228,15 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
                 </span>
               </div>
             )}
-            <h3 className="font-extrabold text-white text-base sm:text-xl leading-snug line-clamp-2 drop-shadow-md">
+            <h3 className="font-extrabold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-lg">
               {activeTitle}
             </h3>
-            <p className="text-slate-300 text-xs leading-relaxed line-clamp-2 font-light">
+            <p className="text-slate-200 text-xs leading-relaxed line-clamp-2 font-light drop-shadow">
               {activeDesc || "Capacitación de posgrado con especialistas de alto nivel."}
             </p>
           </div>
 
-          <div className="flex justify-between items-center pt-3 border-t border-white/15">
+          <div className="flex justify-between items-center pt-2 border-t border-white/20">
             {activeIsCourse ? (
               <>
                 <a
@@ -239,7 +244,7 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
                 >
                   Más información
                   <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
@@ -258,7 +263,7 @@ export default function CursosCarousel({ courses, posts = [], whatsappPhone, onC
               <Link
                 href={`/noticias/${activeItem.data.slug}`}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group"
+                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
               >
                 <span>Leer artículo completo</span>
                 <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
