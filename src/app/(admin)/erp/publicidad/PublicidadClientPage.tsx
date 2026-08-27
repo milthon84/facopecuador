@@ -2,9 +2,30 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, Edit2, Save, Undo, BarChart3 } from "lucide-react";
+import {
+  FileText,
+  Plus,
+  Edit2,
+  Undo,
+  BarChart3,
+  Search,
+  LayoutGrid,
+  LayoutList,
+  Video,
+  Image as ImageIcon,
+  X,
+  Play,
+  CheckCircle2,
+  Calendar,
+  Filter,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  ExternalLink,
+} from "lucide-react";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
-import { savePostAction, deletePostAction } from "./actions";
+import { savePostAction, deletePostAction, togglePostStatusAction } from "./actions";
 import AdsAnalyticsDashboard from "./AdsAnalyticsDashboard";
 
 interface Props {
@@ -21,7 +42,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   coworking: "CoWorking",
 };
 
-// Fecha de expiración por defecto: hoy + 2 meses (formato yyyy-mm-dd para <input type="date">)
+const ITEMS_PER_PAGE = 8;
+
 function defaultExpiresAt(): string {
   const d = new Date();
   d.setMonth(d.getMonth() + 2);
@@ -33,7 +55,7 @@ function isExpired(expiresAt: string | null | undefined): boolean {
   return new Date(expiresAt).getTime() < Date.now();
 }
 
-export default function PublicidadClientPage({ 
+export default function PublicidadClientPage({
   initialPosts,
   hasFacebookCredentials = false,
   hasInstagramCredentials = false,
@@ -43,13 +65,26 @@ export default function PublicidadClientPage({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [mainTab, setMainTab] = useState<"analisis" | "articulos">("analisis");
-  const [categoryFilter, setCategoryFilter] = useState<"todos" | "cursos" | "clinica" | "coworking">("todos");
+  // Pestañas principales (Análisis / Artículos)
+  const [mainTab, setMainTab] = useState<"analisis" | "articulos">("articulos");
 
+  // Filtros y Búsqueda
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"todos" | "cursos" | "clinica" | "coworking">("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | "published" | "draft" | "expired">("todos");
+  const [mediaFilter, setMediaFilter] = useState<"todos" | "video" | "image">("todos");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "expiring_soon" | "title">("newest");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Estado para Modal de Creación / Edición
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<any | null>(null);
+
+  // Campos de Formulario
   const [postTitle, setPostTitle] = useState("");
   const [postContent, setPostContent] = useState("");
-  const [postStatus, setPostStatus] = useState<"draft" | "published">("draft");
+  const [postStatus, setPostStatus] = useState<"draft" | "published">("published");
   const [postCategory, setPostCategory] = useState<"cursos" | "clinica" | "coworking">("clinica");
   const [postExpiresAt, setPostExpiresAt] = useState(defaultExpiresAt());
   const [postSuccess, setPostSuccess] = useState(false);
@@ -60,13 +95,97 @@ export default function PublicidadClientPage({
   const [hasImage, setHasImage] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
 
-  const filteredPosts = useMemo(() => {
-    if (categoryFilter === "todos") return initialPosts;
-    return initialPosts.filter((p) => p.category === categoryFilter);
-  }, [initialPosts, categoryFilter]);
+  // Métricas rápidas
+  const metrics = useMemo(() => {
+    const total = initialPosts.length;
+    const published = initialPosts.filter((p) => p.status === "published" && !isExpired(p.expires_at)).length;
+    const drafts = initialPosts.filter((p) => p.status === "draft").length;
+    const expired = initialPosts.filter((p) => isExpired(p.expires_at)).length;
+    const withVideo = initialPosts.filter((p) => !!p.video_url).length;
+    return { total, published, drafts, expired, withVideo };
+  }, [initialPosts]);
 
-  // Cargar Artículo para Edición
-  function handleEditPost(post: any) {
+  // Filtrado y Ordenamiento
+  const processedPosts = useMemo(() => {
+    let result = [...initialPosts];
+
+    // Búsqueda por texto
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      result = result.filter(
+        (p) => p.title?.toLowerCase().includes(q) || p.content?.toLowerCase().includes(q)
+      );
+    }
+
+    // Filtro Categoría
+    if (categoryFilter !== "todos") {
+      result = result.filter((p) => p.category === categoryFilter);
+    }
+
+    // Filtro Estado
+    if (statusFilter === "published") {
+      result = result.filter((p) => p.status === "published" && !isExpired(p.expires_at));
+    } else if (statusFilter === "draft") {
+      result = result.filter((p) => p.status === "draft");
+    } else if (statusFilter === "expired") {
+      result = result.filter((p) => isExpired(p.expires_at));
+    }
+
+    // Filtro Formato Multimedia
+    if (mediaFilter === "video") {
+      result = result.filter((p) => !!p.video_url);
+    } else if (mediaFilter === "image") {
+      result = result.filter((p) => !!p.image_url && !p.video_url);
+    }
+
+    // Ordenamiento
+    result.sort((a, b) => {
+      if (sortBy === "newest") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (sortBy === "oldest") {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      if (sortBy === "expiring_soon") {
+        const timeA = a.expires_at ? new Date(a.expires_at).getTime() : Infinity;
+        const timeB = b.expires_at ? new Date(b.expires_at).getTime() : Infinity;
+        return timeA - timeB;
+      }
+      if (sortBy === "title") {
+        return (a.title || "").localeCompare(b.title || "");
+      }
+      return 0;
+    });
+
+    return result;
+  }, [initialPosts, searchTerm, categoryFilter, statusFilter, mediaFilter, sortBy]);
+
+  // Paginación
+  const totalPages = Math.ceil(processedPosts.length / ITEMS_PER_PAGE) || 1;
+  const paginatedPosts = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return processedPosts.slice(start, start + ITEMS_PER_PAGE);
+  }, [processedPosts, currentPage]);
+
+  // Abrir Modal para Crear Nuevo Anuncio
+  function handleOpenCreateModal() {
+    setEditingPost(null);
+    setPostTitle("");
+    setPostContent("");
+    setPostStatus("published");
+    setPostCategory("clinica");
+    setPostExpiresAt(defaultExpiresAt());
+    setPublishFacebook(false);
+    setPublishInstagram(false);
+    setHasImage(false);
+    setHasVideo(false);
+    setPostSuccess(false);
+    setPostError(null);
+    setIsModalOpen(true);
+  }
+
+  // Abrir Modal para Editar Anuncio
+  function handleOpenEditModal(post: any) {
     setEditingPost(post);
     setPostTitle(post.title);
     setPostContent(post.content);
@@ -79,25 +198,18 @@ export default function PublicidadClientPage({
     setHasVideo(!!post.video_url);
     setPostSuccess(false);
     setPostError(null);
+    setIsModalOpen(true);
   }
 
-  // Cancelar Edición de Artículo
-  function handleCancelEdit() {
+  // Cerrar Modal
+  function handleCloseModal() {
+    setIsModalOpen(false);
     setEditingPost(null);
-    setPostTitle("");
-    setPostContent("");
-    setPostStatus("draft");
-    setPostCategory("clinica");
-    setPostExpiresAt(defaultExpiresAt());
-    setPublishFacebook(false);
-    setPublishInstagram(false);
-    setHasImage(false);
-    setHasVideo(false);
-    setPostSuccess(false);
     setPostError(null);
+    setPostSuccess(false);
   }
 
-  // Guardar Artículo (Creación o Actualización)
+  // Guardar (Creación / Edición)
   async function handleSavePost(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPostSuccess(false);
@@ -131,27 +243,35 @@ export default function PublicidadClientPage({
         } else {
           setPostSuccess(true);
         }
-        setPostTitle("");
-        setPostContent("");
-        setPostStatus("draft");
-        setPostCategory("clinica");
-        setPostExpiresAt(defaultExpiresAt());
-        setPublishFacebook(false);
-        setPublishInstagram(false);
-        setHasImage(false);
-        setHasVideo(false);
-        setEditingPost(null);
-        // Limpiar inputs del formulario
-        const form = e.target as HTMLFormElement;
-        form.reset();
-        router.refresh();
+
+        setTimeout(() => {
+          handleCloseModal();
+          router.refresh();
+        }, 600);
       } catch (err: any) {
         setPostError(err.message || "Error al guardar el artículo");
       }
     });
   }
 
-  // Eliminar Artículo
+  // Cambiar Estado Rápido (Publicado <-> Borrador) en 1-Clic
+  async function handleToggleStatus(post: any) {
+    if (!canEdit) return;
+    startTransition(async () => {
+      try {
+        const res = await togglePostStatusAction(post.id, post.status);
+        if (!res.success) {
+          alert(res.error || "No se pudo cambiar el estado.");
+          return;
+        }
+        router.refresh();
+      } catch (err: any) {
+        alert(err.message || "Error al cambiar estado.");
+      }
+    });
+  }
+
+  // Eliminar Anuncio
   async function handleDeletePost(formData: FormData) {
     const id = formData.get("id") as string;
     if (!id) return;
@@ -171,21 +291,9 @@ export default function PublicidadClientPage({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Navegación de Pestañas Principales en Publicidad */}
+    <div className="space-y-6 w-full">
+      {/* ── ENCABEZADO Y NAVEGACIÓN DE PESTAÑAS PRINCIPALES ── */}
       <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-0.5">
-        <button
-          type="button"
-          onClick={() => setMainTab("analisis")}
-          className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
-            mainTab === "analisis"
-              ? "border-purple-600 text-purple-950 bg-purple-50/70 rounded-t-xl"
-              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-xl"
-          }`}
-        >
-          <BarChart3 size={18} />
-          Análisis y Consumos de Anuncios
-        </button>
         <button
           type="button"
           onClick={() => setMainTab("articulos")}
@@ -198,451 +306,796 @@ export default function PublicidadClientPage({
           <FileText size={18} />
           Noticias y Artículos Web
         </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("analisis")}
+          className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all whitespace-nowrap ${
+            mainTab === "analisis"
+              ? "border-purple-600 text-purple-950 bg-purple-50/70 rounded-t-xl"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-xl"
+          }`}
+        >
+          <BarChart3 size={18} />
+          Análisis y Consumos de Anuncios
+        </button>
       </div>
 
       {mainTab === "analisis" ? (
         <AdsAnalyticsDashboard isAdmin={isAdmin} canEdit={canEdit} />
       ) : (
-        <div className="grid lg:grid-cols-12 gap-6 items-start">
-      {/* Columna Izquierda: Listado de artículos */}
-      <div className="lg:col-span-7 space-y-4">
-        <div className="card p-5 bg-white border border-lilac-100 shadow-sm">
-          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h2 className="text-base font-semibold text-ink-900">
-              Artículos ({filteredPosts.length})
-            </h2>
-            <select
-              className="input !w-auto text-xs py-1.5"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as any)}
-            >
-              <option value="todos">Todos los destinos</option>
-              <option value="cursos">Cursos</option>
-              <option value="clinica">Clínica</option>
-              <option value="coworking">CoWorking</option>
-            </select>
-          </div>
-          {filteredPosts.length === 0 ? (
-            <p className="text-sm text-ink-600">No hay artículos para este destino todavía.</p>
-          ) : (
-            <div className="divide-y divide-lilac-100">
-              {filteredPosts.map((post) => (
-                <div key={post.id} className="py-4 flex gap-4 items-start first:pt-0 last:pb-0">
-                  {post.image_url ? (
-                    <img
-                      src={post.image_url}
-                      alt={post.title}
-                      className="w-20 h-20 object-cover rounded-xl border border-lilac-100 flex-shrink-0"
-                    />
-                  ) : post.video_url ? (
-                    <video
-                      src={post.video_url}
-                      className="w-20 h-20 object-cover rounded-xl border border-lilac-100 flex-shrink-0 bg-black"
-                    />
-                  ) : (
-                    <div className="w-20 h-20 bg-lilac-50 rounded-xl flex items-center justify-center text-lilac-400 border border-lilac-100 flex-shrink-0">
-                      <FileText size={24} />
-                    </div>
-                  )}
-                  <div className="flex-grow min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                          post.status === "published"
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : "bg-gray-100 text-gray-700 border-gray-200"
-                        }`}
-                      >
-                        {post.status === "published" ? "Publicado" : "Borrador"}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-lilac-50 text-lilac-700 border-lilac-200">
-                        {CATEGORY_LABELS[post.category] || "Clínica"}
-                      </span>
-                      {isExpired(post.expires_at) && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-200">
-                          Expirado
-                        </span>
-                      )}
-                      <span className="text-xs text-ink-600">
-                        {new Date(post.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold text-ink-900 text-sm truncate">{post.title}</h3>
-                    <p className="text-xs text-ink-600 line-clamp-2 mt-1">{post.content}</p>
-                    {post.expires_at && (
-                      <p className="text-[11px] text-ink-500 mt-1">
-                        Expira: {new Date(post.expires_at).toLocaleDateString()}
-                      </p>
-                    )}
-                    {(post.facebook_post_id || post.instagram_post_id) && (
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        {post.facebook_post_id && (
-                          <a
-                            href={post.facebook_post_id}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[10px] text-blue-600 hover:text-blue-800 font-semibold hover:underline bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full transition"
-                          >
-                            <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                            </svg>
-                            Facebook
-                          </a>
-                        )}
-                        {post.instagram_post_id && (
-                          <a
-                            href={post.instagram_post_id}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[10px] text-pink-600 hover:text-pink-800 font-semibold hover:underline bg-pink-50 border border-pink-100 px-2 py-0.5 rounded-full transition"
-                          >
-                            <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
-                              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.848.072 3.159 0 3.567-.014 4.847-.072 4.36-.2 6.78-2.618 6.98-6.98.059-1.28.073-1.689.073-4.848 0-3.159-.014-3.567-.073-4.847-.2-4.36-2.617-6.78-6.98-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
-                            </svg>
-                            Instagram
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {canEdit && (
-                    <div className="flex flex-col items-end gap-1">
-                      <button
-                        onClick={() => handleEditPost(post)}
-                        className="p-1.5 text-lilac-700 hover:bg-lilac-50 rounded-lg transition"
-                        title="Editar artículo"
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                      <ConfirmDeleteButton
-                        action={handleDeletePost}
-                        idValue={post.id}
-                        confirmMessage={`¿Estás seguro de que deseas eliminar la noticia "${post.title}"?`}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Columna Derecha: Formulario de Creación / Edición o Mensaje de Modo Lectura */}
-      <div className="lg:col-span-5">
-        {!canEdit ? (
-          <div className="card p-6 bg-amber-50/60 border border-amber-200 shadow-sm rounded-2xl space-y-3 text-amber-900">
-            <h3 className="font-bold text-sm flex items-center gap-2 text-amber-800">
-              🔒 Modo Lectura
-            </h3>
-            <p className="text-xs leading-relaxed text-amber-800/90">
-              Tu rol tiene permiso de consulta (Ver) para la sección de Publicidad y Anuncios. Para publicar nuevos artículos, modificar existentes o eliminarlos, solicita permisos de edición a un Administrador.
-            </p>
-          </div>
-        ) : (
-          <div className="card p-5 bg-white border border-lilac-100 shadow-sm sticky top-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-base font-semibold text-ink-900 flex items-center gap-1.5">
-              {editingPost ? (
-                <>
-                  <Edit2 size={16} className="text-gold-600" /> Editar Artículo
-                </>
-              ) : (
-                <>
-                  <Plus size={18} className="text-lilac-600" /> Crear Nuevo Artículo
-                </>
-              )}
-            </h2>
-            {editingPost && (
-              <button
-                onClick={handleCancelEdit}
-                className="text-xs text-lilac-700 hover:underline flex items-center gap-1"
-              >
-                <Undo size={12} /> Cancelar edición
-              </button>
-            )}
-          </div>
-
-          <form onSubmit={handleSavePost} className="space-y-4">
-            <div>
-              <label className="label text-ink-800">Título del Artículo *</label>
-              <input
-                type="text"
-                name="title"
-                required
-                value={postTitle}
-                onChange={(e) => setPostTitle(e.target.value)}
-                placeholder="Ej: Innovador Coworking Dental en Quito..."
-                className="input"
-              />
+        <div className="space-y-6">
+          {/* ── BARRA DE MÉTRICAS RÁPIDAS (RESUMEN) ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-sm">
+                {metrics.total}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Total Anuncios</p>
+                <p className="text-xs font-bold text-slate-900">Registrados</p>
+              </div>
             </div>
 
-            <div>
-              <label className="label text-ink-800">Imagen de Portada</label>
-              {editingPost && editingPost.image_url && (
-                <div className="mb-2">
-                  <p className="text-xs text-ink-600 mb-1">Imagen actual:</p>
-                  <img
-                    src={editingPost.image_url}
-                    alt="Preview"
-                    className="h-20 w-auto object-cover rounded-lg border border-lilac-200"
-                  />
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                {metrics.published}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Publicados</p>
+                <p className="text-xs font-bold text-emerald-700">En Carruseles</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
+                {metrics.drafts}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Borradores</p>
+                <p className="text-xs font-bold text-slate-700">En revisión</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
+                {metrics.expired}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Expirados</p>
+                <p className="text-xs font-bold text-rose-700">Vencidos</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3 col-span-2 sm:col-span-1">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
+                {metrics.withVideo}
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Con Video</p>
+                <p className="text-xs font-bold text-amber-700">Multimedia</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── BARRA SUPERIOR DE BÚSQUEDA, FILTROS Y BOTÓN "+ NUEVO ANUNCIO" ── */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Búsqueda en tiempo real */}
+              <div className="relative flex-grow max-w-md">
+                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Buscar anuncio por título o contenido..."
+                  className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-purple-600 transition-all"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Selector de Vista (Lista vs Galería Tarjetas) */}
+                <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm("¿Estás seguro de quitar la imagen actual?")) {
-                        editingPost.image_url = null;
-                        setHasImage(false);
-                        setEditingPost({ ...editingPost });
-                      }
-                    }}
-                    className="text-[10px] text-red-600 hover:underline mt-1 block"
+                    onClick={() => setViewMode("grid")}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      viewMode === "grid"
+                        ? "bg-white text-purple-950 shadow-sm font-bold"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                    title="Vista Galería (Tarjetas)"
                   >
-                    Eliminar imagen actual
+                    <LayoutGrid size={16} />
                   </button>
-                </div>
-              )}
-              <input
-                type="file"
-                name="imageFile"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setHasImage(true);
-                  } else if (!editingPost?.image_url) {
-                    setHasImage(false);
-                  }
-                }}
-                className="block w-full text-xs text-ink-600
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-xl file:border-0
-                  file:text-xs file:font-semibold
-                  file:bg-lilac-50 file:text-lilac-700
-                  hover:file:bg-lilac-100"
-              />
-            </div>
-
-            <div>
-              <label className="label text-ink-800">Archivo de Video</label>
-              {editingPost && editingPost.video_url && (
-                <div className="mb-2">
-                  <p className="text-xs text-ink-600 mb-1">Video actual:</p>
-                  <video
-                    src={editingPost.video_url}
-                    controls
-                    className="h-28 w-auto object-contain rounded-lg border border-lilac-200 bg-black"
-                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm("¿Estás seguro de quitar el video actual?")) {
-                        editingPost.video_url = null;
-                        setHasVideo(false);
-                        setEditingPost({ ...editingPost });
-                      }
-                    }}
-                    className="text-[10px] text-red-650 hover:underline mt-1 block"
+                    onClick={() => setViewMode("list")}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      viewMode === "list"
+                        ? "bg-white text-purple-950 shadow-sm font-bold"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                    title="Vista Lista Compacta"
                   >
-                    Eliminar video actual
+                    <LayoutList size={16} />
                   </button>
                 </div>
-              )}
-              <input
-                type="file"
-                name="videoFile"
-                accept="video/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    if (file.size > 100 * 1024 * 1024) {
-                      setPostError("El archivo de video seleccionado supera el límite de 100 MB. Elige un video más liviano.");
-                      e.target.value = "";
-                      setHasVideo(false);
-                      return;
-                    }
-                    setPostError(null);
-                    setHasVideo(true);
-                  } else if (!editingPost?.video_url) {
-                    setHasVideo(false);
-                  }
-                }}
-                className="block w-full text-xs text-ink-600
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-xl file:border-0
-                  file:text-xs file:font-semibold
-                  file:bg-lilac-50 file:text-lilac-700
-                  hover:file:bg-lilac-100"
-              />
-              <p className="text-[11px] text-ink-500 mt-1">
-                Formatos permitidos: MP4, WebM, MOV (Máx. 100 MB).
-              </p>
+
+                {/* BOTÓN PRINCIPAL DE CREACIÓN (+ Crear Nuevo Anuncio en Popup Modal) */}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateModal}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-purple-700 via-purple-800 to-slate-900 hover:from-purple-800 hover:to-slate-950 text-white text-xs font-bold shadow-lg shadow-purple-900/20 transition-all active:scale-95"
+                  >
+                    <Plus size={16} />
+                    <span>Crear Nuevo Anuncio</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label className="label text-ink-800">Contenido del Artículo *</label>
-              <textarea
-                name="content"
-                required
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                placeholder="Escribe aquí el contenido completo de la noticia..."
-                className="input min-h-[160px]"
-              />
-            </div>
+            {/* Segunda fila de filtros avanzados */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap text-xs">
+              <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
+                <Filter size={12} /> Filtros:
+              </span>
 
-            <div>
-              <label className="label text-ink-800">Destino del Artículo *</label>
+              {/* Filtro Destino */}
               <select
-                name="category"
-                required
-                className="input"
-                value={postCategory}
-                onChange={(e) => setPostCategory(e.target.value as any)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer"
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value as any);
+                  setCurrentPage(1);
+                }}
               >
+                <option value="todos">Todos los Destinos</option>
                 <option value="cursos">Cursos</option>
                 <option value="clinica">Clínica</option>
                 <option value="coworking">CoWorking</option>
               </select>
-              <p className="text-[11px] text-ink-500 mt-1">
-                Define en qué sección y carrusel del sitio público aparecerá este artículo.
-              </p>
-            </div>
 
-            <div>
-              <label className="label text-ink-800">Fecha de Expiración *</label>
-              <input
-                type="date"
-                name="expires_at"
-                required
-                value={postExpiresAt}
-                onChange={(e) => setPostExpiresAt(e.target.value)}
-                className="input"
-              />
-              <p className="text-[11px] text-ink-500 mt-1">
-                Después de esta fecha el artículo se desactiva automáticamente y deja de mostrarse en los carruseles públicos. Por defecto son 2 meses desde hoy.
-              </p>
-            </div>
-
-            <div>
-              <label className="label text-ink-800">Estado de Publicación</label>
+              {/* Filtro Estado */}
               <select
-                name="status"
-                className="input"
-                value={postStatus}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer"
+                value={statusFilter}
                 onChange={(e) => {
-                  const val = e.target.value as "draft" | "published";
-                  setPostStatus(val);
-                  if (val === "published") {
-                    if (!editingPost?.facebook_post_id && hasFacebookCredentials) setPublishFacebook(true);
-                    if (!editingPost?.instagram_post_id && (hasImage || hasVideo) && hasInstagramCredentials) setPublishInstagram(true);
-                  } else {
-                    setPublishFacebook(false);
-                    setPublishInstagram(false);
-                  }
+                  setStatusFilter(e.target.value as any);
+                  setCurrentPage(1);
                 }}
               >
-                <option value="draft">Borrador (Oculto al público)</option>
-                <option value="published">Publicado (Visible en el sitio web)</option>
+                <option value="todos">Todos los Estados</option>
+                <option value="published">🟢 Publicados</option>
+                <option value="draft">⚪ Borradores</option>
+                <option value="expired">🔴 Expirados</option>
               </select>
+
+              {/* Filtro Formato Multimedia */}
+              <select
+                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer"
+                value={mediaFilter}
+                onChange={(e) => {
+                  setMediaFilter(e.target.value as any);
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="todos">Todos los Formatos</option>
+                <option value="video">🎬 Solo Videos</option>
+                <option value="image">🖼️ Solo Imágenes</option>
+              </select>
+
+              {/* Ordenamiento */}
+              <div className="ml-auto flex items-center gap-1.5">
+                <ArrowUpDown size={12} className="text-slate-400" />
+                <select
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:border-purple-600 cursor-pointer"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                >
+                  <option value="newest">Más recientes primero</option>
+                  <option value="expiring_soon">Próximos a expirar</option>
+                  <option value="oldest">Más antiguos primero</option>
+                  <option value="title">Título (A-Z)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── LISTADO / GALERÍA DE ANUNCIOS ── */}
+          {processedPosts.length === 0 ? (
+            <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-sm space-y-3">
+              <FileText size={40} className="mx-auto text-slate-300" />
+              <h3 className="font-bold text-slate-800 text-sm">No se encontraron anuncios</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto font-light">
+                No hay resultados que coincidan con los filtros o término de búsqueda ingresado.
+              </p>
+              {(searchTerm || categoryFilter !== "todos" || statusFilter !== "todos" || mediaFilter !== "todos") && (
+                <button
+                  onClick={() => {
+                    setSearchTerm("");
+                    setCategoryFilter("todos");
+                    setStatusFilter("todos");
+                    setMediaFilter("todos");
+                  }}
+                  className="px-4 py-2 rounded-xl bg-purple-50 text-purple-700 text-xs font-bold hover:bg-purple-100 transition"
+                >
+                  Limpiar todos los filtros
+                </button>
+              )}
+            </div>
+          ) : viewMode === "grid" ? (
+            /* ── VISTA GALERÍA (CUADRÍCULA DE TARJETAS) ── */
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {paginatedPosts.map((post) => {
+                const expired = isExpired(post.expires_at);
+
+                return (
+                  <div
+                    key={post.id}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group"
+                  >
+                    {/* MINIATURA / MULTIMEDIA DE PORTADA (IMAGEN O VIDEO CON PREVIEW FOTOGRAMA) */}
+                    <div className="relative h-44 bg-slate-950 overflow-hidden">
+                      {post.video_url ? (
+                        <div className="w-full h-full relative">
+                          <video
+                            src={`${post.video_url}#t=0.5`}
+                            preload="metadata"
+                            poster={post.image_url || undefined}
+                            className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20" />
+                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/90 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
+                            <Play size={10} className="fill-white text-white" />
+                            Video
+                          </span>
+                        </div>
+                      ) : post.image_url ? (
+                        <div className="w-full h-full relative">
+                          <img
+                            src={post.image_url}
+                            alt={post.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
+                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
+                            <ImageIcon size={10} />
+                            Afiche
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
+                          <FileText size={32} className="text-purple-400/80 mb-1" />
+                          <span className="text-[10px] text-gold-400 font-bold uppercase tracking-wider">
+                            FACOP Ecuador
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Insignia de Destino */}
+                      <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/40 text-gold-400 text-[10px] font-bold tracking-wider uppercase backdrop-blur-md">
+                        {CATEGORY_LABELS[post.category] || "Clínica"}
+                      </span>
+                    </div>
+
+                    {/* CUERPO DE LA TARJETA */}
+                    <div className="p-4 flex-grow flex flex-col justify-between space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          {/* BOTÓN TOGGLE RÁPIDO DE ESTADO (1-CLIC) */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(post)}
+                            disabled={!canEdit || isPending}
+                            title={canEdit ? "Clic para cambiar estado rápido" : undefined}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                              expired
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : post.status === "published"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                            }`}
+                          >
+                            {expired ? "🔴 Expirado" : post.status === "published" ? "🟢 Publicado" : "⚪ Borrador"}
+                          </button>
+
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {new Date(post.created_at).toLocaleDateString("es-EC", { month: "short", day: "numeric" })}
+                          </span>
+                        </div>
+
+                        <h3 className="font-extrabold text-slate-900 text-sm leading-snug line-clamp-2 group-hover:text-purple-900 transition-colors">
+                          {post.title}
+                        </h3>
+
+                        <p className="text-xs text-slate-500 font-light line-clamp-2 leading-relaxed">
+                          {post.content}
+                        </p>
+                      </div>
+
+                      {/* PIE DE TARJETA — FECHA EXPIRACIÓN & ACCIONES */}
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        {post.expires_at && (
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <Calendar size={11} className="text-slate-400" />
+                              Expira:
+                            </span>
+                            <span className={`font-semibold ${expired ? "text-rose-600" : "text-slate-700"}`}>
+                              {new Date(post.expires_at).toLocaleDateString("es-EC", { month: "short", day: "numeric" })}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Botones Redes & Edición */}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-1">
+                            {post.facebook_post_id && (
+                              <a
+                                href={post.facebook_post_id}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                                title="Ver en Facebook"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                            {post.instagram_post_id && (
+                              <a
+                                href={post.instagram_post_id}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 rounded-md bg-pink-50 text-pink-600 hover:bg-pink-100 transition"
+                                title="Ver en Instagram"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            )}
+                          </div>
+
+                          {canEdit && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(post)}
+                                className="p-1.5 text-purple-700 hover:bg-purple-50 rounded-lg transition"
+                                title="Editar anuncio"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <ConfirmDeleteButton
+                                action={handleDeletePost}
+                                idValue={post.id}
+                                confirmMessage={`¿Estás seguro de eliminar el anuncio "${post.title}"?`}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ── VISTA LISTA COMPACTA ── */
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+              {paginatedPosts.map((post) => {
+                const expired = isExpired(post.expires_at);
+
+                return (
+                  <div key={post.id} className="p-4 hover:bg-slate-50/80 transition-colors flex items-center gap-4">
+                    {/* Miniatura lista */}
+                    <div className="relative w-20 h-20 rounded-xl bg-slate-950 overflow-hidden flex-shrink-0 border border-slate-200">
+                      {post.video_url ? (
+                        <div className="w-full h-full relative">
+                          <video
+                            src={`${post.video_url}#t=0.5`}
+                            preload="metadata"
+                            poster={post.image_url || undefined}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-slate-950/30 flex items-center justify-center">
+                            <Play size={14} className="fill-white text-white" />
+                          </div>
+                        </div>
+                      ) : post.image_url ? (
+                        <img src={post.image_url} alt={post.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-purple-50 flex items-center justify-center text-purple-400">
+                          <FileText size={20} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info Anuncio */}
+                    <div className="flex-grow min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* TOGGLE ESTADO 1-CLIC */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(post)}
+                          disabled={!canEdit || isPending}
+                          title={canEdit ? "Clic para cambiar estado rápido" : undefined}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                            expired
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : post.status === "published"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                          }`}
+                        >
+                          {expired ? "🔴 Expirado" : post.status === "published" ? "🟢 Publicado" : "⚪ Borrador"}
+                        </button>
+
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-50 text-purple-900 border-purple-200">
+                          {CATEGORY_LABELS[post.category] || "Clínica"}
+                        </span>
+
+                        <span className="text-xs text-slate-400 font-medium">
+                          {new Date(post.created_at).toLocaleDateString("es-EC")}
+                        </span>
+                      </div>
+
+                      <h3 className="font-bold text-slate-900 text-sm truncate">{post.title}</h3>
+                      <p className="text-xs text-slate-500 font-light line-clamp-1">{post.content}</p>
+
+                      {post.expires_at && (
+                        <p className="text-[11px] text-slate-400">
+                          Expira: {new Date(post.expires_at).toLocaleDateString("es-EC")}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Acciones Editar / Eliminar */}
+                    {canEdit && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(post)}
+                          className="p-2 text-purple-700 hover:bg-purple-100/70 rounded-xl transition"
+                          title="Editar anuncio"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <ConfirmDeleteButton
+                          action={handleDeletePost}
+                          idValue={post.id}
+                          confirmMessage={`¿Estás seguro de eliminar el anuncio "${post.title}"?`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── PAGINADOR DE NAVEGACIÓN ── */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-xs font-semibold text-slate-700">
+              <span className="text-slate-500 font-normal">
+                Mostrando página <strong className="text-slate-900">{currentPage}</strong> de <strong className="text-slate-900">{totalPages}</strong> ({processedPosts.length} anuncios)
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-xl font-bold transition ${
+                      currentPage === page
+                        ? "bg-purple-950 text-white shadow-md"
+                        : "hover:bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── POPUP MODAL PARA CREACIÓN / EDICIÓN DE ANUNCIOS ── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            {/* Encabezado del Modal */}
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-900 flex items-center justify-center">
+                  {editingPost ? <Edit2 size={16} /> : <Plus size={18} />}
+                </div>
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  {editingPost ? "Editar Anuncio Publicitario" : "Crear Nuevo Anuncio Publicitario"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="p-1.5 rounded-full hover:bg-slate-200/80 text-slate-400 hover:text-slate-700 transition"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            {/* Integración con Facebook e Instagram */}
-            {postStatus === "published" && (
-              <div className="p-3.5 bg-lilac-50/40 border border-lilac-100 rounded-xl space-y-3">
-                <span className="text-xs font-bold text-ink-800 block">
-                  Publicación Automática en Redes
-                </span>
+            {/* Formulario Modal */}
+            <form onSubmit={handleSavePost} className="p-6 space-y-4 overflow-y-auto flex-grow">
+              {postError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+                  {postError}
+                </div>
+              )}
+              {postSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>Anuncio guardado exitosamente.</span>
+                </div>
+              )}
 
-                {/* Facebook Checkbox */}
-                {editingPost && editingPost.facebook_post_id ? (
-                  <div className="flex items-center gap-2 text-[11px] text-green-700 bg-green-50/60 border border-green-200 p-2 rounded-lg">
-                    <span>✓ Publicado en Facebook Page</span>
-                    <a
-                      href={editingPost.facebook_post_id}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-blue-600 hover:text-blue-800 ml-auto font-medium"
-                    >
-                      Ver post
-                    </a>
-                  </div>
-                ) : (
-                  <label className={`flex items-center gap-2.5 text-xs select-none ${!hasFacebookCredentials ? 'text-ink-400 opacity-60 cursor-not-allowed' : 'text-ink-700 cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      disabled={!hasFacebookCredentials}
-                      checked={publishFacebook}
-                      onChange={(e) => setPublishFacebook(e.target.checked)}
-                      className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 w-4 h-4 cursor-pointer disabled:opacity-50"
-                    />
-                    <span>
-                      Compartir en Facebook Page al guardar
-                      {!hasFacebookCredentials && <span className="text-[10px] text-amber-600 block">(No configurado en el servidor)</span>}
-                    </span>
+              {/* Título del Anuncio */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Título del Anuncio *
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  required
+                  value={postTitle}
+                  onChange={(e) => setPostTitle(e.target.value)}
+                  placeholder="Ej: Innovador Coworking Dental en Quito..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600"
+                />
+              </div>
+
+              {/* Grid 2 Columnas: Destino y Expiración */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Destino del Anuncio *
                   </label>
-                )}
+                  <select
+                    name="category"
+                    required
+                    value={postCategory}
+                    onChange={(e) => setPostCategory(e.target.value as any)}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600 bg-white font-semibold text-slate-800"
+                  >
+                    <option value="clinica">Clínica</option>
+                    <option value="cursos">Cursos</option>
+                    <option value="coworking">CoWorking</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Define en qué carrusel del sitio aparecerá este afiche.
+                  </p>
+                </div>
 
-                {/* Instagram Checkbox */}
-                {editingPost && editingPost.instagram_post_id ? (
-                  <div className="flex items-center gap-2 text-[11px] text-green-700 bg-green-50/60 border border-green-200 p-2 rounded-lg">
-                    <span>✓ Publicado en Instagram</span>
-                    <a
-                      href={editingPost.instagram_post_id}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-blue-600 hover:text-blue-800 ml-auto font-medium"
-                    >
-                      Ver post
-                    </a>
-                  </div>
-                ) : (
-                  <label className={`flex items-center gap-2.5 text-xs select-none ${(!hasInstagramCredentials || (!hasImage && !hasVideo)) ? 'text-ink-400 opacity-60 cursor-not-allowed' : 'text-ink-700 cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      disabled={!hasInstagramCredentials || (!hasImage && !hasVideo)}
-                      checked={publishInstagram}
-                      onChange={(e) => setPublishInstagram(e.target.checked)}
-                      className="rounded border-lilac-300 text-lilac-600 focus:ring-lilac-500 w-4 h-4 cursor-pointer disabled:opacity-50"
-                    />
-                    <span>
-                      Compartir en Instagram al guardar
-                      {!hasInstagramCredentials ? (
-                        <span className="text-[10px] text-amber-600 block">(No configurado en el servidor)</span>
-                      ) : (!hasImage && !hasVideo) ? (
-                        <span className="text-[10px] text-gold-600 block">(Requiere subir una imagen o un video)</span>
-                      ) : null}
-                    </span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Fecha de Expiración *
                   </label>
+                  <input
+                    type="date"
+                    name="expires_at"
+                    required
+                    value={postExpiresAt}
+                    onChange={(e) => setPostExpiresAt(e.target.value)}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600 bg-white font-semibold text-slate-800"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Se desactiva automáticamente tras esta fecha.
+                  </p>
+                </div>
+              </div>
+
+              {/* Estado de Publicación */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Estado de Publicación
+                </label>
+                <div className="flex items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="radio"
+                      name="status"
+                      value="published"
+                      checked={postStatus === "published"}
+                      onChange={() => setPostStatus("published")}
+                      className="accent-purple-600"
+                    />
+                    <span className="text-emerald-700 font-bold">🟢 Publicado (Visible en web)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="radio"
+                      name="status"
+                      value="draft"
+                      checked={postStatus === "draft"}
+                      onChange={() => setPostStatus("draft")}
+                      className="accent-purple-600"
+                    />
+                    <span className="text-slate-600 font-bold">⚪ Borrador (Oculto)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Subida Imagen de Portada */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <ImageIcon size={14} className="text-purple-700" />
+                  Imagen de Portada (Afiche)
+                </label>
+                {editingPost && editingPost.image_url && (
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                    <img src={editingPost.image_url} alt="Preview" className="h-14 w-14 object-cover rounded-lg" />
+                    <div className="flex-grow">
+                      <p className="text-xs font-bold text-slate-800">Imagen actual en uso</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm("¿Deseas quitar la imagen actual?")) {
+                            editingPost.image_url = null;
+                            setHasImage(false);
+                            setEditingPost({ ...editingPost });
+                          }
+                        }}
+                        className="text-[10px] text-rose-600 font-bold hover:underline"
+                      >
+                        Quitar imagen actual
+                      </button>
+                    </div>
+                  </div>
                 )}
+                <input
+                  type="file"
+                  name="imageFile"
+                  accept="image/*"
+                  onChange={(e) => setHasImage(!!e.target.files?.length)}
+                  className="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-100 file:text-purple-900 hover:file:bg-purple-200 cursor-pointer"
+                />
               </div>
-            )}
 
-            {/* Mensajes de éxito / error */}
-            {postSuccess && (
-              <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs rounded-xl">
-                ¡Artículo guardado correctamente!
+              {/* Subida Archivo de Video */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Video size={14} className="text-purple-700" />
+                  Archivo de Video (Opcional - Máx 100 MB)
+                </label>
+                {editingPost && editingPost.video_url && (
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                    <video src={`${editingPost.video_url}#t=0.5`} preload="metadata" className="h-14 w-14 object-cover rounded-lg bg-black" />
+                    <div className="flex-grow">
+                      <p className="text-xs font-bold text-slate-800">Video actual cargado</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm("¿Deseas quitar el video actual?")) {
+                            editingPost.video_url = null;
+                            setHasVideo(false);
+                            setEditingPost({ ...editingPost });
+                          }
+                        }}
+                        className="text-[10px] text-rose-600 font-bold hover:underline"
+                      >
+                        Quitar video actual
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  name="videoFile"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={(e) => setHasVideo(!!e.target.files?.length)}
+                  className="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-100 file:text-purple-900 hover:file:bg-purple-200 cursor-pointer"
+                />
               </div>
-            )}
-            {postError && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl">
-                {postError}
-              </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={isPending}
-              className="btn-primary w-full"
-            >
-              <Save size={16} />
-              {isPending ? "Guardando..." : editingPost ? "Actualizar Artículo" : "Publicar Artículo"}
-            </button>
-          </form>
+              {/* Contenido / Descripción */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Contenido del Anuncio / Descripción *
+                </label>
+                <textarea
+                  name="content"
+                  required
+                  rows={3}
+                  value={postContent}
+                  onChange={(e) => setPostContent(e.target.value)}
+                  placeholder="Escribe aquí el texto descriptivo del anuncio..."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-purple-600"
+                />
+              </div>
+
+              {/* Opciones de Publicación en Redes Social Meta */}
+              {(hasFacebookCredentials || hasInstagramCredentials) && (
+                <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-2">
+                  <span className="block text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-purple-700" />
+                    Publicación Simultánea en Redes Sociales (Meta)
+                  </span>
+                  <div className="flex items-center gap-4 pt-1">
+                    {hasFacebookCredentials && (
+                      <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={publishFacebook}
+                          onChange={(e) => setPublishFacebook(e.target.checked)}
+                          className="accent-purple-600 rounded"
+                        />
+                        <span>Publicar en Facebook</span>
+                      </label>
+                    )}
+                    {hasInstagramCredentials && (
+                      <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={publishInstagram}
+                          onChange={(e) => setPublishInstagram(e.target.checked)}
+                          className="accent-purple-600 rounded"
+                        />
+                        <span>Publicar en Instagram</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Pie con Botones Guardar / Cancelar */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="inline-flex items-center gap-2 px-6 py-2 rounded-xl bg-purple-950 hover:bg-slate-900 text-white text-xs font-bold shadow-lg transition active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Guardando..." : editingPost ? "Actualizar Anuncio" : "Guardar y Publicar"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-        )}
-      </div>
-    </div>
       )}
     </div>
   );

@@ -106,25 +106,25 @@ export default async function NoticiaDetailPage({ params }: Props) {
         </div>
 
         {/* Widget lateral / inferior de Acción */}
-        <div className="mt-12 p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl border border-slate-800">
-          <div>
-            <h3 className="font-bold text-lg text-gold-400 mb-1">¿Deseas consultarnos algo?</h3>
-            <p className="text-xs text-slate-400 max-w-md">
+        <div className="mt-12 p-6 sm:px-10 sm:py-8 rounded-3xl bg-gradient-to-r from-slate-900 to-slate-950 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl border border-slate-800">
+          <div className="flex-1 text-center sm:text-left">
+            <h3 className="font-bold text-lg sm:text-xl text-gold-400 mb-1">¿Deseas consultarnos algo?</h3>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md leading-relaxed mx-auto sm:mx-0">
               Escríbenos por WhatsApp o agenda una consulta directamente con nuestros profesionales independientes.
             </p>
           </div>
-          <div className="flex gap-3 w-full sm:w-auto">
-            <Link href="/cita-clinica" className="btn-primary text-xs py-3 px-5 shadow-md justify-center flex-1 sm:flex-none">
-              <CalendarDays size={14} />
+          <div className="flex items-center gap-3.5 w-full sm:w-auto flex-shrink-0 justify-center">
+            <Link href="/cita-clinica" className="btn-primary text-xs sm:text-sm py-3 px-6 shadow-md justify-center flex-1 sm:flex-none whitespace-nowrap">
+              <CalendarDays size={16} />
               Reservar Cita
             </Link>
             <a
               href={contact.whatsapp_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white text-slate-900 px-5 py-3 text-xs font-semibold shadow-md hover:bg-slate-100 transition flex-1 sm:flex-none"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-slate-900 px-6 py-3 text-xs sm:text-sm font-bold shadow-md hover:bg-slate-100 transition flex-1 sm:flex-none whitespace-nowrap"
             >
-              <Phone size={14} className="text-green-600" />
+              <Phone size={16} className="text-green-600" />
               WhatsApp
             </a>
           </div>

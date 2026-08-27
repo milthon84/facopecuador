@@ -249,3 +249,33 @@ export async function deletePostAction(id: string): Promise<{ success: boolean; 
     return { success: false, error: err?.message || "Ocurrió un error inesperado al eliminar el artículo." };
   }
 }
+
+// Cambiar rápidamente estado (Publicado <-> Borrador)
+export async function togglePostStatusAction(id: string, currentStatus: string): Promise<{ success: boolean; error?: string; newStatus?: string }> {
+  try {
+    await assertWritePermission("/erp/publicidad");
+
+    const newStatus = currentStatus === "published" ? "draft" : "published";
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from("web_posts")
+      .update({
+        status: newStatus,
+        published_at: newStatus === "published" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) {
+      return { success: false, error: `Error al cambiar el estado: ${error.message}` };
+    }
+
+    revalidatePath("/");
+    revalidatePath("/erp/publicidad");
+    return { success: true, newStatus };
+  } catch (err: any) {
+    console.error("Error general en togglePostStatusAction:", err);
+    return { success: false, error: err?.message || "Ocurrió un error al cambiar el estado." };
+  }
+}
