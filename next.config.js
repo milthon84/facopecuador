@@ -8,8 +8,9 @@ const nextConfig = {
   reactStrictMode: true,
 
   experimental: {
+    middlewareClientMaxBodySize: "100mb",
     serverActions: {
-      bodySizeLimit: "50mb",
+      bodySizeLimit: "100mb",
     },
   },
 
@@ -40,7 +41,9 @@ const nextConfig = {
               // Scripts Next.js (necesita unsafe-inline para hydration)
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               // Imágenes: self + datos inline (logos, etc.)
-              "img-src 'self' data: blob: https://*.supabase.co",
+              "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
+              // Multimedia (videos/audios): Supabase + blob
+              "media-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
               // Fuentes
               "font-src 'self'",
               // No iframes

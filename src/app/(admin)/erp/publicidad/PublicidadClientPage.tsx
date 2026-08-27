@@ -120,6 +120,11 @@ export default function PublicidadClientPage({
     startTransition(async () => {
       try {
         const res = await savePostAction(formData);
+        if (!res.success) {
+          setPostError(res.error || "Error al guardar el artículo");
+          return;
+        }
+
         if (res.publishWarning) {
           setPostError(`Guardado en web con éxito, pero falló en redes sociales: ${res.publishWarning}`);
           setPostSuccess(true);
@@ -153,7 +158,11 @@ export default function PublicidadClientPage({
 
     startTransition(async () => {
       try {
-        await deletePostAction(id);
+        const res = await deletePostAction(id);
+        if (!res.success) {
+          alert(res.error || "Error al eliminar el artículo");
+          return;
+        }
         router.refresh();
       } catch (err: any) {
         alert(err.message || "Error al eliminar el artículo");
@@ -446,6 +455,13 @@ export default function PublicidadClientPage({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
+                    if (file.size > 100 * 1024 * 1024) {
+                      setPostError("El archivo de video seleccionado supera el límite de 100 MB. Elige un video más liviano.");
+                      e.target.value = "";
+                      setHasVideo(false);
+                      return;
+                    }
+                    setPostError(null);
                     setHasVideo(true);
                   } else if (!editingPost?.video_url) {
                     setHasVideo(false);
@@ -458,6 +474,9 @@ export default function PublicidadClientPage({
                   file:bg-lilac-50 file:text-lilac-700
                   hover:file:bg-lilac-100"
               />
+              <p className="text-[11px] text-ink-500 mt-1">
+                Formatos permitidos: MP4, WebM, MOV (Máx. 100 MB).
+              </p>
             </div>
 
             <div>

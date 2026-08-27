@@ -20,209 +20,232 @@ function slugify(text: string): string {
 }
 
 // Guardar o actualizar artículo (Post)
-export async function savePostAction(formData: FormData) {
-  await assertWritePermission("/erp/publicidad");
+export async function savePostAction(formData: FormData): Promise<{ success: boolean; error?: string; publishWarning?: string }> {
+  try {
+    await assertWritePermission("/erp/publicidad");
 
-  const id = formData.get("id") as string | null;
-  const title = (formData.get("title") as string)?.trim();
-  const content = (formData.get("content") as string)?.trim();
-  const status = formData.get("status") as "draft" | "published";
-  const category = formData.get("category") as string;
-  const expiresAtInput = (formData.get("expires_at") as string)?.trim();
-  
-  const imageFile = formData.get("imageFile") as File | null;
-  let imageUrl = formData.get("existingImageUrl") as string | null;
+    const id = formData.get("id") as string | null;
+    const title = (formData.get("title") as string)?.trim();
+    const content = (formData.get("content") as string)?.trim();
+    const status = formData.get("status") as "draft" | "published";
+    const category = formData.get("category") as string;
+    const expiresAtInput = (formData.get("expires_at") as string)?.trim();
+    
+    const imageFile = formData.get("imageFile") as File | null;
+    let imageUrl = formData.get("existingImageUrl") as string | null;
 
-  const videoFile = formData.get("videoFile") as File | null;
-  let videoUrl = formData.get("existingVideoUrl") as string | null;
+    const videoFile = formData.get("videoFile") as File | null;
+    let videoUrl = formData.get("existingVideoUrl") as string | null;
 
-  if (!title || !content) {
-    throw new Error("El título y el contenido son obligatorios");
-  }
-
-  if (!["cursos", "clinica", "coworking"].includes(category)) {
-    throw new Error("Debes seleccionar un destino válido para el artículo");
-  }
-
-  // Fecha de expiración: si no se especifica, por defecto 2 meses desde hoy
-  let expiresAt: string;
-  if (expiresAtInput) {
-    const parsed = new Date(`${expiresAtInput}T23:59:59`);
-    if (isNaN(parsed.getTime())) {
-      throw new Error("La fecha de expiración no es válida");
+    if (!title || !content) {
+      return { success: false, error: "El título y el contenido son obligatorios" };
     }
-    expiresAt = parsed.toISOString();
-  } else {
-    const fallback = new Date();
-    fallback.setMonth(fallback.getMonth() + 2);
-    expiresAt = fallback.toISOString();
-  }
 
-  const slug = slugify(title);
-  const supabase = createAdminClient();
+    if (!["cursos", "clinica", "coworking"].includes(category)) {
+      return { success: false, error: "Debes seleccionar un destino válido para el artículo" };
+    }
 
-  // Procesar archivo de imagen si fue seleccionado
-  if (imageFile && imageFile.size > 0) {
-    try {
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${Date.now()}_img.${fileExt}`;
-      const arrayBuffer = await imageFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      const { error: uploadError } = await supabase.storage
-        .from("web-assets")
-        .upload(fileName, buffer, {
-          contentType: imageFile.type,
-        });
-
-      if (!uploadError) {
-        const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
-        imageUrl = data.publicUrl;
-      } else {
-        console.error("Error al subir archivo de imagen:", uploadError.message);
+    // Fecha de expiración: si no se especifica, por defecto 2 meses desde hoy
+    let expiresAt: string;
+    if (expiresAtInput) {
+      const parsed = new Date(`${expiresAtInput}T23:59:59`);
+      if (isNaN(parsed.getTime())) {
+        return { success: false, error: "La fecha de expiración no es válida" };
       }
-    } catch (err) {
-      console.error("Excepción al subir archivo de imagen:", err);
+      expiresAt = parsed.toISOString();
+    } else {
+      const fallback = new Date();
+      fallback.setMonth(fallback.getMonth() + 2);
+      expiresAt = fallback.toISOString();
     }
-  }
 
-  // Procesar archivo de video si fue seleccionado
-  if (videoFile && videoFile.size > 0) {
-    try {
-      const fileExt = videoFile.name.split(".").pop();
-      const fileName = `${Date.now()}_vid.${fileExt}`;
-      const arrayBuffer = await videoFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+    const slug = slugify(title);
+    const supabase = createAdminClient();
 
-      const { error: uploadError } = await supabase.storage
-        .from("web-assets")
-        .upload(fileName, buffer, {
-          contentType: videoFile.type,
-        });
-
-      if (!uploadError) {
-        const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
-        videoUrl = data.publicUrl;
-      } else {
-        console.error("Error al subir archivo de video:", uploadError.message);
-      }
-    } catch (err) {
-      console.error("Excepción al subir archivo de video:", err);
-    }
-  }
-
-  const publishFacebook = formData.get("publish_to_facebook") === "true";
-  const publishInstagram = formData.get("publish_to_instagram") === "true";
-
-  let facebookPostId: string | null = null;
-  let instagramPostId: string | null = null;
-  let publishWarning: string | null = null;
-
-  if (id) {
-    // Obtener IDs de publicación en redes sociales ya existentes
-    const { data: existingPost } = await supabase
-      .from("web_posts")
-      .select("facebook_post_id, instagram_post_id")
-      .eq("id", id)
-      .single();
-    if (existingPost) {
-      facebookPostId = existingPost.facebook_post_id;
-      instagramPostId = existingPost.instagram_post_id;
-    }
-  }
-
-  if (status === "published") {
-    const shouldPublishFacebook = publishFacebook && !facebookPostId;
-    const shouldPublishInstagram = publishInstagram && !instagramPostId;
-
-    if (shouldPublishFacebook || shouldPublishInstagram) {
+    // Procesar archivo de imagen si fue seleccionado
+    if (imageFile && imageFile.size > 0) {
       try {
-        const { publishToMeta } = await import("@/lib/meta");
-        const publishResult = await publishToMeta({
-          title,
-          content,
-          imageUrl,
-          videoUrl,
-          publishFacebook: shouldPublishFacebook,
-          publishInstagram: shouldPublishInstagram,
-        });
+        const fileExt = imageFile.name.split(".").pop();
+        const fileName = `${Date.now()}_img.${fileExt}`;
+        const arrayBuffer = await imageFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
 
-        if (publishResult.facebookPostId) {
-          facebookPostId = publishResult.facebookPostId;
-        }
-        if (publishResult.instagramPostId) {
-          instagramPostId = publishResult.instagramPostId;
-        }
-        if (publishResult.errors && publishResult.errors.length > 0) {
-          publishWarning = publishResult.errors.join(". ");
+        const { error: uploadError } = await supabase.storage
+          .from("web-assets")
+          .upload(fileName, buffer, {
+            contentType: imageFile.type || "image/jpeg",
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
+          imageUrl = data.publicUrl;
+        } else {
+          console.error("Error al subir archivo de imagen:", uploadError.message);
+          return { success: false, error: `Error al subir la imagen de portada: ${uploadError.message}` };
         }
       } catch (err: any) {
-        console.error("Error al publicar en Meta:", err);
-        publishWarning = `No se pudo conectar con Meta: ${err.message || err}`;
+        console.error("Excepción al subir archivo de imagen:", err);
+        return { success: false, error: `Excepción al procesar la imagen: ${err?.message || err}` };
       }
     }
-  }
 
-  const postData: any = {
-    title,
-    slug,
-    content,
-    status,
-    category,
-    expires_at: expiresAt,
-    image_url: imageUrl,
-    video_url: videoUrl,
-    facebook_post_id: facebookPostId,
-    instagram_post_id: instagramPostId,
-    published_at: status === "published" ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString(),
-  };
+    // Procesar archivo de video si fue seleccionado
+    if (videoFile && videoFile.size > 0) {
+      // Límite de 100MB
+      if (videoFile.size > 100 * 1024 * 1024) {
+        return { success: false, error: "El archivo de video supera el límite de 100 MB permitido." };
+      }
+      try {
+        const fileExt = videoFile.name.split(".").pop();
+        const fileName = `${Date.now()}_vid.${fileExt}`;
+        const arrayBuffer = await videoFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
 
-  if (id) {
-    // Modo Edición
-    const { error } = await supabase
-      .from("web_posts")
-      .update(postData)
-      .eq("id", id);
+        const { error: uploadError } = await supabase.storage
+          .from("web-assets")
+          .upload(fileName, buffer, {
+            contentType: videoFile.type || "video/mp4",
+            upsert: true,
+          });
 
-    if (error) {
-      throw new Error(`Error al actualizar el artículo: ${error.message}`);
+        if (!uploadError) {
+          const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
+          videoUrl = data.publicUrl;
+        } else {
+          console.error("Error al subir archivo de video:", uploadError.message);
+          return {
+            success: false,
+            error: `Error al subir el video a Supabase Storage: ${uploadError.message}. Verifica que el bucket 'web-assets' exista y esté configurado como público.`
+          };
+        }
+      } catch (err: any) {
+        console.error("Excepción al subir archivo de video:", err);
+        return { success: false, error: `Excepción al procesar el archivo de video: ${err?.message || err}` };
+      }
     }
-  } else {
-    // Modo Creación
-    const { error } = await supabase
-      .from("web_posts")
-      .insert({
-        ...postData,
-        created_at: new Date().toISOString(),
-      });
 
-    if (error) {
-      throw new Error(`Error al crear el artículo: ${error.message}`);
+    const publishFacebook = formData.get("publish_to_facebook") === "true";
+    const publishInstagram = formData.get("publish_to_instagram") === "true";
+
+    let facebookPostId: string | null = null;
+    let instagramPostId: string | null = null;
+    let publishWarning: string | null = null;
+
+    if (id) {
+      // Obtener IDs de publicación en redes sociales ya existentes
+      const { data: existingPost } = await supabase
+        .from("web_posts")
+        .select("facebook_post_id, instagram_post_id")
+        .eq("id", id)
+        .single();
+      if (existingPost) {
+        facebookPostId = existingPost.facebook_post_id;
+        instagramPostId = existingPost.instagram_post_id;
+      }
     }
-  }
 
-  revalidatePath("/");
-  revalidatePath("/erp/publicidad");
-  return { success: true, publishWarning };
+    if (status === "published") {
+      const shouldPublishFacebook = publishFacebook && !facebookPostId;
+      const shouldPublishInstagram = publishInstagram && !instagramPostId;
+
+      if (shouldPublishFacebook || shouldPublishInstagram) {
+        try {
+          const { publishToMeta } = await import("@/lib/meta");
+          const publishResult = await publishToMeta({
+            title,
+            content,
+            imageUrl,
+            videoUrl,
+            publishFacebook: shouldPublishFacebook,
+            publishInstagram: shouldPublishInstagram,
+          });
+
+          if (publishResult.facebookPostId) {
+            facebookPostId = publishResult.facebookPostId;
+          }
+          if (publishResult.instagramPostId) {
+            instagramPostId = publishResult.instagramPostId;
+          }
+          if (publishResult.errors && publishResult.errors.length > 0) {
+            publishWarning = publishResult.errors.join(". ");
+          }
+        } catch (err: any) {
+          console.error("Error al publicar en Meta:", err);
+          publishWarning = `No se pudo conectar con Meta: ${err.message || err}`;
+        }
+      }
+    }
+
+    const postData: any = {
+      title,
+      slug,
+      content,
+      status,
+      category,
+      expires_at: expiresAt,
+      image_url: imageUrl,
+      video_url: videoUrl,
+      facebook_post_id: facebookPostId,
+      instagram_post_id: instagramPostId,
+      published_at: status === "published" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (id) {
+      // Modo Edición
+      const { error } = await supabase
+        .from("web_posts")
+        .update(postData)
+        .eq("id", id);
+
+      if (error) {
+        return { success: false, error: `Error al actualizar el artículo en la base de datos: ${error.message}` };
+      }
+    } else {
+      // Modo Creación
+      const { error } = await supabase
+        .from("web_posts")
+        .insert({
+          ...postData,
+          created_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        return { success: false, error: `Error al crear el artículo en la base de datos: ${error.message}` };
+      }
+    }
+
+    revalidatePath("/");
+    revalidatePath("/erp/publicidad");
+    return { success: true, publishWarning: publishWarning || undefined };
+  } catch (err: any) {
+    console.error("Error general en savePostAction:", err);
+    return { success: false, error: err?.message || "Ocurrió un error inesperado al procesar la solicitud." };
+  }
 }
 
 // Eliminar artículo (Post)
-export async function deletePostAction(id: string) {
-  await assertWritePermission("/erp/publicidad");
+export async function deletePostAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await assertWritePermission("/erp/publicidad");
 
-  const supabase = createAdminClient();
+    const supabase = createAdminClient();
 
-  const { error } = await supabase
-    .from("web_posts")
-    .delete()
-    .eq("id", id);
+    const { error } = await supabase
+      .from("web_posts")
+      .delete()
+      .eq("id", id);
 
-  if (error) {
-    throw new Error(`Error al eliminar el artículo: ${error.message}`);
+    if (error) {
+      return { success: false, error: `Error al eliminar el artículo: ${error.message}` };
+    }
+
+    revalidatePath("/");
+    revalidatePath("/erp/publicidad");
+    return { success: true };
+  } catch (err: any) {
+    console.error("Error general en deletePostAction:", err);
+    return { success: false, error: err?.message || "Ocurrió un error inesperado al eliminar el artículo." };
   }
-
-  revalidatePath("/");
-  revalidatePath("/erp/publicidad");
-  return { success: true };
 }
