@@ -284,8 +284,8 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
           </div>
         )}
 
-        {/* Franja opaca únicamente en la parte inferior para máxima legibilidad del texto blanco */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-20 space-y-1 bg-slate-950/85 backdrop-blur-md border-t border-white/10 rounded-b-3xl">
+        {/* Franja de cristal oscuro suave para perfecta lectura del texto blanco sin oscurecer en exceso */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-20 space-y-1 bg-slate-950/55 backdrop-blur-md border-t border-white/10 rounded-b-3xl">
           <h3 className="font-extrabold text-white text-base sm:text-lg leading-snug line-clamp-2 group-hover/maincard:text-gold-300 transition-colors">
             {activePost.title}
           </h3>

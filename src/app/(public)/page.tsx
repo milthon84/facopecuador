@@ -239,11 +239,11 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── SECCIÓN 1: CURSOS Y DIPLOMADOS ── */}
+      {/* ── SECCIÓN 1: CURSOS Y DIPLOMADOS — Muestra únicamente cursos Abiertos (active) ── */}
       <section id="cursos" className="px-4 sm:px-8 lg:px-12 py-6 max-w-[1400px] mx-auto relative">
         <div className="relative bg-gradient-to-l from-purple-200/40 via-purple-50/20 via-60% to-transparent p-6 sm:p-8 lg:p-10 shadow-none rounded-3xl">
           <CursosSection
-            courses={courses || []}
+            courses={(courses || []).filter((c) => c.status === "active")}
             posts={cursosPosts}
             whatsappPhone={contact.phone}
             whatsappLink={contact.whatsapp_link}

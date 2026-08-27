@@ -13,6 +13,7 @@ interface Course {
   start_date: string;
   end_date: string;
   image_url?: string | null;
+  status?: string;
 }
 
 interface Post {
@@ -47,6 +48,7 @@ const DEFAULT_CURSO_ITEM: CarouselItem = {
     start_date: new Date().toISOString(),
     end_date: new Date().toISOString(),
     image_url: null,
+    status: "active",
   },
 };
 
@@ -56,12 +58,18 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
   const [animating, setAnimating] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Filtrar para mostrar únicamente cursos que estén Abiertos (status === "active" o no especificado)
+  const activeCoursesOnly = useMemo(
+    () => courses.filter((c) => !c.status || c.status === "active"),
+    [courses]
+  );
+
   const rawItems: CarouselItem[] = useMemo(
     () => [
-      ...courses.map((c) => ({ kind: "course" as const, data: c })),
+      ...activeCoursesOnly.map((c) => ({ kind: "course" as const, data: c })),
       ...posts.map((p) => ({ kind: "post" as const, data: p })),
     ],
-    [courses, posts]
+    [activeCoursesOnly, posts]
   );
 
   const items: CarouselItem[] = useMemo(() => {
@@ -324,8 +332,8 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
           </div>
         )}
 
-        {/* Franja opaca únicamente en la parte inferior para máxima legibilidad del texto blanco */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-20 space-y-1 bg-slate-950/85 backdrop-blur-md border-t border-white/10 rounded-b-3xl">
+        {/* Franja de cristal oscuro suave para perfecta lectura del texto blanco sin oscurecer en exceso */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-20 space-y-1 bg-slate-950/55 backdrop-blur-md border-t border-white/10 rounded-b-3xl">
           {activeIsCourse && (
             <div className="flex items-center gap-2 text-gold-400">
               <CalendarDays size={13} />
