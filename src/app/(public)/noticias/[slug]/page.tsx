@@ -106,25 +106,25 @@ export default async function NoticiaDetailPage({ params }: Props) {
         </div>
 
         {/* Widget lateral / inferior de Acción */}
-        <div className="mt-12 p-8 sm:p-10 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-purple-950 text-white text-center shadow-xl border border-slate-800 space-y-5">
-          <div className="max-w-xl mx-auto space-y-1.5">
-            <h3 className="font-extrabold text-xl sm:text-2xl text-gold-400">¿Deseas consultarnos algo?</h3>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+        <div className="mt-12 px-8 py-7 sm:px-10 sm:py-8 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl border border-slate-800">
+          <div className="max-w-xs text-center sm:text-left">
+            <h3 className="font-extrabold text-lg sm:text-xl text-gold-400 mb-1">¿Deseas consultarnos algo?</h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
               Escríbenos por WhatsApp o agenda una consulta directamente con nuestros profesionales independientes.
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-1">
-            <Link href="/cita-clinica" className="btn-primary text-xs sm:text-sm py-3.5 px-7 shadow-lg inline-flex items-center justify-center gap-2 font-bold">
-              <CalendarDays size={16} />
+          <div className="flex items-center gap-3.5 flex-shrink-0 justify-center w-full sm:w-auto">
+            <Link href="/cita-clinica" className="btn-primary text-xs py-3 px-5 shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap font-bold">
+              <CalendarDays size={15} />
               Reservar Cita
             </Link>
             <a
               href={contact.whatsapp_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white text-slate-900 px-7 py-3.5 text-xs sm:text-sm font-extrabold shadow-lg hover:bg-slate-100 transition active:scale-95"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white text-slate-900 px-5 py-3 text-xs font-extrabold shadow-md hover:bg-slate-100 transition whitespace-nowrap"
             >
-              <Phone size={16} className="text-green-600" />
+              <Phone size={15} className="text-green-600" />
               WhatsApp
             </a>
           </div>
