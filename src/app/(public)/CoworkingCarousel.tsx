@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Users, ArrowRight, ChevronLeft, ChevronRight, Sparkles, Building2 } from "lucide-react";
 
 interface Post {
@@ -50,6 +51,7 @@ const DEFAULT_COWORKING_POSTS: Post[] = [
 ];
 
 export default function CoworkingCarousel({ posts = [] }: Props) {
+  const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -98,13 +100,11 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
     if (totalItems <= 1) return;
 
     if (activePost?.video_url) {
-      // Intentar reproducir el video de inmediato al cambiar a un slide con video
       if (videoRef.current) {
         videoRef.current.currentTime = 0;
         videoRef.current.play().catch(() => {});
       }
 
-      // Temporizador de respaldo (25s) en caso de que el video falle o no emita evento de finalización
       const safetyTimer = setTimeout(() => {
         next();
       }, 25000);
@@ -112,7 +112,6 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
       return () => clearTimeout(safetyTimer);
     }
 
-    // Avance regular para imágenes / afiches estáticos
     const interval = setInterval(() => {
       next();
     }, 6500);
@@ -125,12 +124,18 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
   );
   const whatsappLink = `https://wa.me/593998214857?text=${coworkingWaMessage}`;
 
+  // Navegación al hacer clic sobre la imagen/video principal
+  const handleMainCardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (activePost.slug) {
+      router.push(`/noticias/${activePost.slug}`);
+    } else {
+      window.open(whatsappLink, "_blank");
+    }
+  };
+
   return (
-    <div
-      className="relative w-full h-[520px] sm:h-[580px] cursor-pointer select-none group/carousel"
-      onClick={() => next()}
-      title="Clic para ver el siguiente afiche"
-    >
+    <div className="relative w-full h-[520px] sm:h-[580px] select-none group/carousel">
       {/* ── CONTROLES MANUALES DE NAVEGACIÓN (BOTONES PREV / NEXT) ── */}
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
         <button
@@ -174,10 +179,12 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
         ))}
       </div>
 
-      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior izquierda (Precarga activa) ── */}
+      {/* ── TARJETA SECUNDARIA SUPERPUESTA — Esquina inferior izquierda (Al clic avanza al siguiente) ── */}
       {totalItems > 1 && (
         <div
-          className={`absolute bottom-0 left-0 w-56 sm:w-64 h-72 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 bg-slate-900
+          onClick={next}
+          title="Ver siguiente afiche"
+          className={`absolute bottom-0 left-0 w-56 sm:w-64 h-72 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/90 bg-slate-900 cursor-pointer
             transition-all duration-500 ease-out group hover:scale-105
             ${animating
               ? "scale-105 -translate-x-4 translate-y-4 -rotate-3 opacity-0"
@@ -225,10 +232,12 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
         </div>
       )}
 
-      {/* ── TARJETA PRINCIPAL DESTACADA — Ocupa ~76% del ancho desde la derecha ── */}
+      {/* ── TARJETA PRINCIPAL DESTACADA — Al clic abre la publicidad/noticia correspondiente ── */}
       <div
-        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-purple-950/20 bg-slate-950 border border-slate-700/60
-          transition-all duration-500 ease-out
+        onClick={handleMainCardClick}
+        title={`Abrir publicidad: ${activePost.title}`}
+        className={`absolute top-0 right-0 rounded-3xl overflow-hidden shadow-2xl shadow-purple-950/20 bg-slate-950 border border-slate-700/60 cursor-pointer
+          transition-all duration-500 ease-out group/maincard
           ${animating
             ? "translate-x-8 translate-y-4 opacity-0 scale-95"
             : "translate-x-0 translate-y-0 opacity-100 scale-100"
@@ -249,7 +258,7 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
               poster={activePost.image_url || undefined}
               onEnded={() => next()}
               onError={() => next()}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>
         ) : activePost.image_url ? (
@@ -257,7 +266,7 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
             <img
               src={activePost.image_url}
               alt={activePost.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>
         ) : (
@@ -275,53 +284,20 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
           </div>
         )}
 
-        {/* Gradiente sutil únicamente en el borde inferior para lectura de texto sin oscurecer la imagen/afiche */}
-        {(activePost.image_url || activePost.video_url) && (
-          <div className="absolute bottom-0 left-0 right-0 h-44 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none z-10" />
-        )}
-
-        <div className="absolute bottom-0 left-0 right-0 p-5 z-20 space-y-2">
-          <div className="space-y-1">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-950/90 border border-purple-500/40 text-gold-400 text-[10px] font-bold tracking-wider uppercase backdrop-blur-md">
-              <Sparkles size={11} />
-              {activePost.video_url ? "Video Promocional" : "Espacio Odontológico"}
-            </span>
-            <h3 className="font-extrabold text-white text-base sm:text-lg leading-snug line-clamp-2 drop-shadow-lg">
-              {activePost.title}
-            </h3>
-            <p className="text-slate-200 text-xs leading-relaxed line-clamp-2 font-light drop-shadow">
-              {activePost.content}
-            </p>
-          </div>
-
-          <div className="flex items-center pt-2 border-t border-white/20">
-            {activePost.slug ? (
-              <Link
-                href={`/noticias/${activePost.slug}`}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
-              >
-                <span>Leer artículo completo</span>
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </Link>
-            ) : (
-              <a
-                href={whatsappLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="w-full inline-flex items-center justify-between text-xs font-semibold text-gold-400 hover:text-gold-300 transition-colors group drop-shadow"
-              >
-                <span>Consultar disponibilidad y alquiler</span>
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </a>
-            )}
-          </div>
+        {/* Franja opaca únicamente en la parte inferior para máxima legibilidad del texto blanco */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-20 space-y-1 bg-slate-950/85 backdrop-blur-md border-t border-white/10 rounded-b-3xl">
+          <h3 className="font-extrabold text-white text-base sm:text-lg leading-snug line-clamp-2 group-hover/maincard:text-gold-300 transition-colors">
+            {activePost.title}
+          </h3>
+          <p className="text-slate-200 text-xs leading-relaxed line-clamp-2 font-light">
+            {activePost.content}
+          </p>
         </div>
       </div>
     </div>
   );
 }
+
 
 
 
