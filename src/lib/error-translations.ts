@@ -7,8 +7,10 @@ const AUTH_ERROR_MAP: Record<string, string> = {
   "new password should be different from the old one": "La nueva contraseña debe ser diferente a la anterior.",
   "invalid password": "La contraseña ingresada no es válida.",
   "user not found": "Usuario no encontrado.",
-  "signup requires a valid email": "El registro requiere un correo electrónico válido.",
-  "too many requests": "Demasiadas solicitudes. Por favor, intenta de nuevo más tarde."
+  "too many requests": "Demasiadas solicitudes. Por favor, intenta de nuevo más tarde.",
+  "email rate limit exceeded": "Has superado el límite de envíos de correo de Supabase. Por favor espera 60 segundos antes de solicitar un nuevo enlace.",
+  "rate limit exceeded": "Has superado el límite de solicitudes de Supabase. Por favor espera 60 segundos antes de intentar de nuevo.",
+  "for security purposes, you can only request this once every": "Por seguridad, solo puedes solicitar la recuperación una vez cada 60 segundos."
 };
 
 export function translateAuthError(errorMsg: string | undefined | null): string {

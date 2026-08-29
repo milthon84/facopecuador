@@ -1042,38 +1042,78 @@ export default function PublicidadClientPage({
               </div>
 
               {/* Opciones de Publicación en Redes Social Meta */}
-              {(hasFacebookCredentials || hasInstagramCredentials) && (
-                <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-2">
-                  <span className="block text-xs font-bold text-purple-950 flex items-center gap-1.5">
+              <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
                     <Sparkles size={14} className="text-purple-700" />
                     Publicación Simultánea en Redes Sociales (Meta)
                   </span>
-                  <div className="flex items-center gap-4 pt-1">
-                    {hasFacebookCredentials && (
-                      <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={publishFacebook}
-                          onChange={(e) => setPublishFacebook(e.target.checked)}
-                          className="accent-purple-600 rounded"
-                        />
-                        <span>Publicar en Facebook</span>
-                      </label>
+                  {(!hasFacebookCredentials || !hasInstagramCredentials) && (
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
+                      Credenciales incompletas en .env
+                    </span>
+                  )}
+                </div>
+
+                {editingPost && (editingPost.facebook_post_id || editingPost.instagram_post_id) && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                    {editingPost.facebook_post_id && (
+                      <a
+                        href={editingPost.facebook_post_id}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-100/70 hover:bg-blue-200/70 px-2.5 py-1 rounded-lg transition"
+                      >
+                        <ExternalLink size={12} />
+                        Ver en Facebook
+                      </a>
                     )}
-                    {hasInstagramCredentials && (
-                      <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={publishInstagram}
-                          onChange={(e) => setPublishInstagram(e.target.checked)}
-                          className="accent-purple-600 rounded"
-                        />
-                        <span>Publicar en Instagram</span>
-                      </label>
+                    {editingPost.instagram_post_id && (
+                      <a
+                        href={editingPost.instagram_post_id}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-pink-700 bg-pink-100/70 hover:bg-pink-200/70 px-2.5 py-1 rounded-lg transition"
+                      >
+                        <ExternalLink size={12} />
+                        Ver en Instagram
+                      </a>
                     )}
                   </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={publishFacebook}
+                      onChange={(e) => setPublishFacebook(e.target.checked)}
+                      className="accent-purple-600 rounded cursor-pointer"
+                    />
+                    <span>Publicar en Facebook</span>
+                    {hasFacebookCredentials ? (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-normal">(requiere credencial)</span>
+                    )}
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={publishInstagram}
+                      onChange={(e) => setPublishInstagram(e.target.checked)}
+                      className="accent-purple-600 rounded cursor-pointer"
+                    />
+                    <span>Publicar en Instagram</span>
+                    {hasInstagramCredentials ? (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-normal">(requiere credencial)</span>
+                    )}
+                  </label>
                 </div>
-              )}
+              </div>
 
               {/* Pie con Botones Guardar / Cancelar */}
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">

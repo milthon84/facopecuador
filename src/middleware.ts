@@ -219,7 +219,7 @@ export async function middleware(req: NextRequest) {
   addSecurityHeaders(res);
 
   // ── Proteger rutas del panel de administración ─────────────────────────
-  if (pathname.startsWith("/erp") && pathname !== "/erp/login") {
+  if (pathname.startsWith("/erp") && pathname !== "/erp/login" && pathname !== "/erp/reset-password") {
     const supabase = buildSupabaseClient(req, res);
     let user = null;
     try {

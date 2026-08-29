@@ -35,34 +35,7 @@ export default function AppointmentActions({
     return null;
   }
 
-  if (appointment.status === "attended") {
-    const patient = Array.isArray(appointment.patient) ? appointment.patient[0] : appointment.patient;
-    if (isBilled) {
-      return (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
-          <CheckCircle2 size={13} className="text-green-600" />
-          <span>Facturado {invoiceNumber ? `— № ${invoiceNumber}` : ""}</span>
-        </div>
-      );
-    }
-    if (!canModifyBilling) {
-      return null;
-    }
-    return (
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/erp/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
-          className="inline-flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
-        >
-          <Receipt size={14} /> Facturar
-        </Link>
-      </div>
-    );
-  }
-
-  if (!canModifyCalendar) {
-    return null;
-  }
+  const patient = Array.isArray(appointment.patient) ? appointment.patient[0] : appointment.patient;
 
   async function updateStatus(status: string, extra: Record<string, any> = {}) {
     setLoading(true);
@@ -140,25 +113,47 @@ export default function AppointmentActions({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => router.push(`/erp/citas/${appointment.id}/atencion`)}
-          disabled={disabled}
-          className="btn-secondary text-xs"
-        >
-          <CheckCircle2 size={14} /> Marcar atendida
-        </button>
-        <button
-          onClick={() => updateStatus("no_show")}
-          disabled={disabled}
-          className="btn-ghost text-xs"
-        >
-          <AlertCircle size={14} /> {activeStatus === "no_show" ? "Procesando..." : "No asistió"}
-        </button>
-        {appointment.status !== "cancelled" && (
-          <button onClick={() => setShowCancel(!showCancel)} disabled={disabled} className="btn-danger">
-            <XCircle size={14} /> Cancelar
-          </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Estado de Facturación / Botón Facturar */}
+        {isBilled ? (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
+            <CheckCircle2 size={13} className="text-green-600" />
+            <span>Facturado {invoiceNumber ? `— № ${invoiceNumber}` : ""}</span>
+          </div>
+        ) : (
+          canModifyBilling && (
+            <Link
+              href={`/erp/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
+              className="inline-flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
+            >
+              <Receipt size={14} /> Facturar Cita
+            </Link>
+          )
+        )}
+
+        {/* Acciones de Cita Agendada */}
+        {appointment.status === "scheduled" && canModifyCalendar && (
+          <>
+            <button
+              onClick={() => router.push(`/erp/citas/${appointment.id}/atencion`)}
+              disabled={disabled}
+              className="btn-secondary text-xs"
+            >
+              <CheckCircle2 size={14} /> Marcar atendida
+            </button>
+            <button
+              onClick={() => updateStatus("no_show")}
+              disabled={disabled}
+              className="btn-ghost text-xs"
+            >
+              <AlertCircle size={14} /> {activeStatus === "no_show" ? "Procesando..." : "No asistió"}
+            </button>
+            {appointment.status !== "cancelled" && (
+              <button onClick={() => setShowCancel(!showCancel)} disabled={disabled} className="btn-danger">
+                <XCircle size={14} /> Cancelar
+              </button>
+            )}
+          </>
         )}
       </div>
 

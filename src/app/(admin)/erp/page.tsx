@@ -355,7 +355,7 @@ export default async function AdminDashboard({
                           reason={appt.reason}
                         />
                       )}
-                      {hasFicha && (
+                      {(appt.status === "scheduled" || appt.status === "attended") && (
                         isBilled ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm whitespace-nowrap" title={`Factura No. ${invoiceNumber}`}>
                             <CheckCircle2 size={12} className="text-green-600" />
