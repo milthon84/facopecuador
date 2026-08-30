@@ -131,29 +131,26 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
 
     let facebookPostId: string | null = null;
     let instagramPostId: string | null = null;
-    let tiktokPostId: string | null = null;
     let publishWarning: string | null = null;
 
     if (id) {
       // Obtener IDs de publicación en redes sociales ya existentes
       const { data: existingPost } = await supabase
         .from("web_posts")
-        .select("facebook_post_id, instagram_post_id, tiktok_post_id")
+        .select("facebook_post_id, instagram_post_id")
         .eq("id", id)
         .single();
       if (existingPost) {
         facebookPostId = existingPost.facebook_post_id;
         instagramPostId = existingPost.instagram_post_id;
-        tiktokPostId = (existingPost as any).tiktok_post_id || null;
       }
     }
 
     const isExpiredOrDraft = status === "draft" || (expiresAtInput && new Date(`${expiresAtInput}T23:59:59`).getTime() < Date.now());
 
-    // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM / TIKTOK, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
+    // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
     const unpublishFacebook = id && facebookPostId && (!publishFacebook || isExpiredOrDraft);
     const unpublishInstagram = id && instagramPostId && (!publishInstagram || isExpiredOrDraft);
-    const unpublishTikTok = id && tiktokPostId && (!publishTikTok || isExpiredOrDraft);
 
     if (unpublishFacebook || unpublishInstagram) {
       try {
@@ -173,10 +170,6 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
 
       if (unpublishFacebook) facebookPostId = null;
       if (unpublishInstagram) instagramPostId = null;
-    }
-
-    if (unpublishTikTok) {
-      tiktokPostId = null;
     }
 
     // SI EL ANUNCIO ESTÁ PUBLICADO Y VIGENTE, Y SE MARCÓ PUBLICAR EN REDES SOCIALES:
@@ -212,8 +205,8 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
         }
       }
 
-      // Publicación en TikTok
-      const shouldPublishTikTok = publishTikTok && !tiktokPostId;
+      // Publicación en TikTok únicamente si fue seleccionada explícitamente y existe token y video
+      const shouldPublishTikTok = publishTikTok && !!process.env.TIKTOK_ACCESS_TOKEN && !!videoUrl;
       if (shouldPublishTikTok) {
         try {
           const { publishToTikTok } = await import("@/lib/tiktok");
@@ -223,14 +216,12 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
             videoUrl,
           });
 
-          if (ttResult.tiktokPostId) {
-            tiktokPostId = ttResult.tiktokPostId;
-          } else if (ttResult.error) {
+          if (ttResult.error) {
             publishWarning = (publishWarning ? publishWarning + ". " : "") + `TikTok: ${ttResult.error}`;
           }
         } catch (err: any) {
           console.error("Error al publicar en TikTok:", err);
-          publishWarning = (publishWarning ? publishWarning + ". " : "") + `No se pudo conectar con TikTok: ${err.message || err}`;
+          publishWarning = (publishWarning ? publishWarning + ". " : "") + `TikTok Error: ${err.message || err}`;
         }
       }
     }
@@ -246,7 +237,6 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       video_url: videoUrl,
       facebook_post_id: facebookPostId,
       instagram_post_id: instagramPostId,
-      tiktok_post_id: tiktokPostId,
       published_at: status === "published" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
