@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Lock, CheckCircle2, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
 import { translateAuthError } from "@/lib/error-translations";
+import { updatePasswordServerAction } from "@/app/(admin)/erp/login/actions";
 import Link from "next/link";
 
 export default function ResetPasswordPage() {
@@ -112,27 +113,44 @@ export default function ResetPasswordPage() {
     const supabase = createClient();
 
     try {
-      // Garantizar que la sesión esté activa extrayendo los tokens del hash antes de actualizar la clave
-      if (typeof window !== "undefined" && window.location.hash.includes("access_token=")) {
-        const params = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = params.get("access_token");
-        const refreshToken = params.get("refresh_token");
+      let tokenToUse: string | null = null;
 
-        if (accessToken && refreshToken) {
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+      if (typeof window !== "undefined") {
+        const hash = window.location.hash || "";
+        const search = window.location.search || "";
+
+        if (hash.includes("access_token=")) {
+          const params = new URLSearchParams(hash.substring(1));
+          tokenToUse = params.get("access_token");
+        } else if (search.includes("code=")) {
+          const params = new URLSearchParams(search);
+          tokenToUse = params.get("code");
         }
       }
 
+      if (!tokenToUse) {
+        const { data: { session } } = await supabase.auth.getSession();
+        tokenToUse = session?.access_token || null;
+      }
+
+      // 1. Intentar actualizar mediante Server Action ultra-segura con cliente Admin
+      const serverRes = await updatePasswordServerAction(tokenToUse, password);
+      if (serverRes.success) {
+        setSuccess(true);
+        setTimeout(() => {
+          window.location.replace("/erp/login");
+        }, 2000);
+        return;
+      }
+
+      // 2. Fallback: Intentar con cliente si la Server Action devolvió algún detalle
       const { error: updateErr } = await supabase.auth.updateUser({
         password: password,
         data: { require_password_change: false },
       });
 
       if (updateErr) {
-        throw updateErr;
+        throw new Error(serverRes.error || updateErr.message);
       }
 
       setSuccess(true);
