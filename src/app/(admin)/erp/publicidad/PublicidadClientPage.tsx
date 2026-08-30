@@ -192,8 +192,8 @@ export default function PublicidadClientPage({
     setPostStatus(post.status);
     setPostCategory(post.category || "clinica");
     setPostExpiresAt(post.expires_at ? new Date(post.expires_at).toISOString().slice(0, 10) : defaultExpiresAt());
-    setPublishFacebook(false);
-    setPublishInstagram(false);
+    setPublishFacebook(!!post.facebook_post_id);
+    setPublishInstagram(!!post.instagram_post_id);
     setHasImage(!!post.image_url);
     setHasVideo(!!post.video_url);
     setPostSuccess(false);
@@ -1048,7 +1048,7 @@ export default function PublicidadClientPage({
                     <Sparkles size={14} className="text-purple-700" />
                     Publicación Simultánea en Redes Sociales (Meta)
                   </span>
-                  {(!hasFacebookCredentials || !hasInstagramCredentials) && (
+                  {(!hasFacebookCredentials && !hasInstagramCredentials) && (
                     <span className="text-[10px] font-semibold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
                       Credenciales incompletas en .env
                     </span>
@@ -1091,7 +1091,11 @@ export default function PublicidadClientPage({
                       className="accent-purple-600 rounded cursor-pointer"
                     />
                     <span>Publicar en Facebook</span>
-                    {hasFacebookCredentials ? (
+                    {editingPost?.facebook_post_id ? (
+                      <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md font-bold">
+                        ✓ Publicado en Facebook
+                      </span>
+                    ) : hasFacebookCredentials ? (
                       <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-normal">(requiere credencial)</span>
@@ -1106,7 +1110,11 @@ export default function PublicidadClientPage({
                       className="accent-purple-600 rounded cursor-pointer"
                     />
                     <span>Publicar en Instagram</span>
-                    {hasInstagramCredentials ? (
+                    {editingPost?.instagram_post_id ? (
+                      <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md font-bold">
+                        ✓ Publicado en Instagram
+                      </span>
+                    ) : hasInstagramCredentials ? (
                       <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-normal">(requiere credencial)</span>

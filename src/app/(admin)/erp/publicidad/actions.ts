@@ -145,7 +145,33 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       }
     }
 
-    if (status === "published") {
+    const isExpiredOrDraft = status === "draft" || (expiresAtInput && new Date(`${expiresAtInput}T23:59:59`).getTime() < Date.now());
+
+    // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
+    const unpublishFacebook = id && facebookPostId && (!publishFacebook || isExpiredOrDraft);
+    const unpublishInstagram = id && instagramPostId && (!publishInstagram || isExpiredOrDraft);
+
+    if (unpublishFacebook || unpublishInstagram) {
+      try {
+        const { deleteFromMeta } = await import("@/lib/meta");
+        const deleteRes = await deleteFromMeta({
+          facebookPostId: unpublishFacebook ? facebookPostId : null,
+          instagramPostId: unpublishInstagram ? instagramPostId : null,
+        });
+
+        if (deleteRes.errors && deleteRes.errors.length > 0) {
+          publishWarning = `Despublicado con advertencias: ${deleteRes.errors.join(". ")}`;
+        }
+      } catch (err: any) {
+        console.error("Error al despublicar de Meta:", err);
+      }
+
+      if (unpublishFacebook) facebookPostId = null;
+      if (unpublishInstagram) instagramPostId = null;
+    }
+
+    // SI EL ANUNCIO ESTÁ PUBLICADO Y VIGENTE, Y SE MARCÓ PUBLICAR EN FACEBOOK / INSTAGRAM:
+    if (status === "published" && !isExpiredOrDraft) {
       const shouldPublishFacebook = publishFacebook && !facebookPostId;
       const shouldPublishInstagram = publishInstagram && !instagramPostId;
 
@@ -232,6 +258,25 @@ export async function deletePostAction(id: string): Promise<{ success: boolean; 
 
     const supabase = createAdminClient();
 
+    // Despublicar de Meta antes de eliminar de la base de datos
+    const { data: post } = await supabase
+      .from("web_posts")
+      .select("facebook_post_id, instagram_post_id")
+      .eq("id", id)
+      .single();
+
+    if (post && (post.facebook_post_id || post.instagram_post_id)) {
+      try {
+        const { deleteFromMeta } = await import("@/lib/meta");
+        await deleteFromMeta({
+          facebookPostId: post.facebook_post_id,
+          instagramPostId: post.instagram_post_id,
+        });
+      } catch (err: any) {
+        console.error("Error despublicando de Meta al borrar anuncio:", err);
+      }
+    }
+
     const { error } = await supabase
       .from("web_posts")
       .delete()
@@ -258,13 +303,44 @@ export async function togglePostStatusAction(id: string, currentStatus: string):
     const newStatus = currentStatus === "published" ? "draft" : "published";
     const supabase = createAdminClient();
 
+    let facebookPostId: string | null | undefined = undefined;
+    let instagramPostId: string | null | undefined = undefined;
+
+    // Si se pasa a Borrador (draft), despublicar de Facebook e Instagram
+    if (newStatus === "draft") {
+      const { data: post } = await supabase
+        .from("web_posts")
+        .select("facebook_post_id, instagram_post_id")
+        .eq("id", id)
+        .single();
+
+      if (post && (post.facebook_post_id || post.instagram_post_id)) {
+        try {
+          const { deleteFromMeta } = await import("@/lib/meta");
+          await deleteFromMeta({
+            facebookPostId: post.facebook_post_id,
+            instagramPostId: post.instagram_post_id,
+          });
+        } catch (err: any) {
+          console.error("Error despublicando de Meta al cambiar estado a borrador:", err);
+        }
+        facebookPostId = null;
+        instagramPostId = null;
+      }
+    }
+
+    const updateData: any = {
+      status: newStatus,
+      published_at: newStatus === "published" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (facebookPostId === null) updateData.facebook_post_id = null;
+    if (instagramPostId === null) updateData.instagram_post_id = null;
+
     const { error } = await supabase
       .from("web_posts")
-      .update({
-        status: newStatus,
-        published_at: newStatus === "published" ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", id);
 
     if (error) {
