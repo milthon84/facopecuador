@@ -24,6 +24,7 @@ export default async function PublicidadPage() {
 
   const hasFacebookCredentials = !!(process.env.META_PAGE_ID && process.env.META_PAGE_ACCESS_TOKEN);
   const hasInstagramCredentials = !!(process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID && process.env.META_PAGE_ACCESS_TOKEN);
+  const hasTikTokCredentials = !!process.env.TIKTOK_ACCESS_TOKEN;
 
   return (
     <div className="pb-10">
@@ -40,6 +41,7 @@ export default async function PublicidadPage() {
         initialPosts={postsData || []} 
         hasFacebookCredentials={hasFacebookCredentials}
         hasInstagramCredentials={hasInstagramCredentials}
+        hasTikTokCredentials={hasTikTokCredentials}
         isAdmin={isAdmin}
         canEdit={canEdit}
       />

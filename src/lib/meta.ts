@@ -9,6 +9,7 @@ interface PublishParams {
   videoUrl: string | null;
   publishFacebook: boolean;
   publishInstagram: boolean;
+  category?: string;
 }
 
 interface PublishResult {
@@ -21,6 +22,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Publica un artículo en la página de Facebook y/o cuenta comercial de Instagram configuradas.
+ * Selecciona dinámicamente entre la cuenta de Clínica Quito y FACOP Ecuador según la categoría.
  */
 export async function publishToMeta({
   title,
@@ -29,10 +31,21 @@ export async function publishToMeta({
   videoUrl,
   publishFacebook,
   publishInstagram,
+  category,
 }: PublishParams): Promise<PublishResult> {
-  const pageId = process.env.META_PAGE_ID;
-  const pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN;
-  const instagramAccountId = process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID;
+  const isEcuadorBrand = category === "cursos" || category === "coworking";
+
+  const pageId = isEcuadorBrand
+    ? (process.env.META_ECUADOR_PAGE_ID || process.env.META_PAGE_ID)
+    : process.env.META_PAGE_ID;
+
+  const pageAccessToken = isEcuadorBrand
+    ? (process.env.META_ECUADOR_PAGE_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN)
+    : process.env.META_PAGE_ACCESS_TOKEN;
+
+  const instagramAccountId = isEcuadorBrand
+    ? (process.env.META_ECUADOR_INSTAGRAM_BUSINESS_ACCOUNT_ID || process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID)
+    : process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID;
 
   const result: PublishResult = {};
   const errors: string[] = [];
@@ -281,6 +294,7 @@ export async function publishToMeta({
 interface DeleteParams {
   facebookPostId?: string | null;
   instagramPostId?: string | null;
+  category?: string;
 }
 
 /**
@@ -289,8 +303,13 @@ interface DeleteParams {
 export async function deleteFromMeta({
   facebookPostId,
   instagramPostId,
+  category,
 }: DeleteParams): Promise<{ errors?: string[] }> {
-  const pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN;
+  const isEcuadorBrand = category === "cursos" || category === "coworking";
+  const pageAccessToken = isEcuadorBrand
+    ? (process.env.META_ECUADOR_PAGE_ACCESS_TOKEN || process.env.META_PAGE_ACCESS_TOKEN)
+    : process.env.META_PAGE_ACCESS_TOKEN;
+
   const errors: string[] = [];
 
   if (!pageAccessToken) {

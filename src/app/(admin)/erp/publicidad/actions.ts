@@ -127,29 +127,33 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
 
     const publishFacebook = formData.get("publish_to_facebook") === "true";
     const publishInstagram = formData.get("publish_to_instagram") === "true";
+    const publishTikTok = formData.get("publish_to_tiktok") === "true";
 
     let facebookPostId: string | null = null;
     let instagramPostId: string | null = null;
+    let tiktokPostId: string | null = null;
     let publishWarning: string | null = null;
 
     if (id) {
       // Obtener IDs de publicación en redes sociales ya existentes
       const { data: existingPost } = await supabase
         .from("web_posts")
-        .select("facebook_post_id, instagram_post_id")
+        .select("facebook_post_id, instagram_post_id, tiktok_post_id")
         .eq("id", id)
         .single();
       if (existingPost) {
         facebookPostId = existingPost.facebook_post_id;
         instagramPostId = existingPost.instagram_post_id;
+        tiktokPostId = (existingPost as any).tiktok_post_id || null;
       }
     }
 
     const isExpiredOrDraft = status === "draft" || (expiresAtInput && new Date(`${expiresAtInput}T23:59:59`).getTime() < Date.now());
 
-    // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
+    // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM / TIKTOK, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
     const unpublishFacebook = id && facebookPostId && (!publishFacebook || isExpiredOrDraft);
     const unpublishInstagram = id && instagramPostId && (!publishInstagram || isExpiredOrDraft);
+    const unpublishTikTok = id && tiktokPostId && (!publishTikTok || isExpiredOrDraft);
 
     if (unpublishFacebook || unpublishInstagram) {
       try {
@@ -157,10 +161,11 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
         const deleteRes = await deleteFromMeta({
           facebookPostId: unpublishFacebook ? facebookPostId : null,
           instagramPostId: unpublishInstagram ? instagramPostId : null,
+          category,
         });
 
         if (deleteRes.errors && deleteRes.errors.length > 0) {
-          publishWarning = `Despublicado con advertencias: ${deleteRes.errors.join(". ")}`;
+          publishWarning = `Despublicado de Meta con advertencias: ${deleteRes.errors.join(". ")}`;
         }
       } catch (err: any) {
         console.error("Error al despublicar de Meta:", err);
@@ -170,7 +175,11 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       if (unpublishInstagram) instagramPostId = null;
     }
 
-    // SI EL ANUNCIO ESTÁ PUBLICADO Y VIGENTE, Y SE MARCÓ PUBLICAR EN FACEBOOK / INSTAGRAM:
+    if (unpublishTikTok) {
+      tiktokPostId = null;
+    }
+
+    // SI EL ANUNCIO ESTÁ PUBLICADO Y VIGENTE, Y SE MARCÓ PUBLICAR EN REDES SOCIALES:
     if (status === "published" && !isExpiredOrDraft) {
       const shouldPublishFacebook = publishFacebook && !facebookPostId;
       const shouldPublishInstagram = publishInstagram && !instagramPostId;
@@ -185,6 +194,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
             videoUrl,
             publishFacebook: shouldPublishFacebook,
             publishInstagram: shouldPublishInstagram,
+            category,
           });
 
           if (publishResult.facebookPostId) {
@@ -194,11 +204,33 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
             instagramPostId = publishResult.instagramPostId;
           }
           if (publishResult.errors && publishResult.errors.length > 0) {
-            publishWarning = publishResult.errors.join(". ");
+            publishWarning = (publishWarning ? publishWarning + ". " : "") + publishResult.errors.join(". ");
           }
         } catch (err: any) {
           console.error("Error al publicar en Meta:", err);
-          publishWarning = `No se pudo conectar con Meta: ${err.message || err}`;
+          publishWarning = (publishWarning ? publishWarning + ". " : "") + `No se pudo conectar con Meta: ${err.message || err}`;
+        }
+      }
+
+      // Publicación en TikTok
+      const shouldPublishTikTok = publishTikTok && !tiktokPostId;
+      if (shouldPublishTikTok) {
+        try {
+          const { publishToTikTok } = await import("@/lib/tiktok");
+          const ttResult = await publishToTikTok({
+            title,
+            content,
+            videoUrl,
+          });
+
+          if (ttResult.tiktokPostId) {
+            tiktokPostId = ttResult.tiktokPostId;
+          } else if (ttResult.error) {
+            publishWarning = (publishWarning ? publishWarning + ". " : "") + `TikTok: ${ttResult.error}`;
+          }
+        } catch (err: any) {
+          console.error("Error al publicar en TikTok:", err);
+          publishWarning = (publishWarning ? publishWarning + ". " : "") + `No se pudo conectar con TikTok: ${err.message || err}`;
         }
       }
     }
@@ -214,6 +246,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       video_url: videoUrl,
       facebook_post_id: facebookPostId,
       instagram_post_id: instagramPostId,
+      tiktok_post_id: tiktokPostId,
       published_at: status === "published" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
@@ -261,7 +294,7 @@ export async function deletePostAction(id: string): Promise<{ success: boolean; 
     // Despublicar de Meta antes de eliminar de la base de datos
     const { data: post } = await supabase
       .from("web_posts")
-      .select("facebook_post_id, instagram_post_id")
+      .select("facebook_post_id, instagram_post_id, category")
       .eq("id", id)
       .single();
 
@@ -271,6 +304,7 @@ export async function deletePostAction(id: string): Promise<{ success: boolean; 
         await deleteFromMeta({
           facebookPostId: post.facebook_post_id,
           instagramPostId: post.instagram_post_id,
+          category: post.category,
         });
       } catch (err: any) {
         console.error("Error despublicando de Meta al borrar anuncio:", err);
@@ -310,7 +344,7 @@ export async function togglePostStatusAction(id: string, currentStatus: string):
     if (newStatus === "draft") {
       const { data: post } = await supabase
         .from("web_posts")
-        .select("facebook_post_id, instagram_post_id")
+        .select("facebook_post_id, instagram_post_id, category")
         .eq("id", id)
         .single();
 
@@ -320,6 +354,7 @@ export async function togglePostStatusAction(id: string, currentStatus: string):
           await deleteFromMeta({
             facebookPostId: post.facebook_post_id,
             instagramPostId: post.instagram_post_id,
+            category: post.category,
           });
         } catch (err: any) {
           console.error("Error despublicando de Meta al cambiar estado a borrador:", err);

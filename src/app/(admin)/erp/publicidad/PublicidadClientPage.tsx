@@ -32,6 +32,7 @@ interface Props {
   initialPosts: any[];
   hasFacebookCredentials?: boolean;
   hasInstagramCredentials?: boolean;
+  hasTikTokCredentials?: boolean;
   isAdmin?: boolean;
   canEdit?: boolean;
 }
@@ -59,6 +60,7 @@ export default function PublicidadClientPage({
   initialPosts,
   hasFacebookCredentials = false,
   hasInstagramCredentials = false,
+  hasTikTokCredentials = false,
   isAdmin = false,
   canEdit = true,
 }: Props) {
@@ -92,6 +94,7 @@ export default function PublicidadClientPage({
 
   const [publishFacebook, setPublishFacebook] = useState(false);
   const [publishInstagram, setPublishInstagram] = useState(false);
+  const [publishTikTok, setPublishTikTok] = useState(false);
   const [hasImage, setHasImage] = useState(false);
   const [hasVideo, setHasVideo] = useState(false);
 
@@ -177,6 +180,7 @@ export default function PublicidadClientPage({
     setPostExpiresAt(defaultExpiresAt());
     setPublishFacebook(false);
     setPublishInstagram(false);
+    setPublishTikTok(false);
     setHasImage(false);
     setHasVideo(false);
     setPostSuccess(false);
@@ -194,6 +198,7 @@ export default function PublicidadClientPage({
     setPostExpiresAt(post.expires_at ? new Date(post.expires_at).toISOString().slice(0, 10) : defaultExpiresAt());
     setPublishFacebook(!!post.facebook_post_id);
     setPublishInstagram(!!post.instagram_post_id);
+    setPublishTikTok(!!post.tiktok_post_id);
     setHasImage(!!post.image_url);
     setHasVideo(!!post.video_url);
     setPostSuccess(false);
@@ -228,6 +233,7 @@ export default function PublicidadClientPage({
 
     formData.set("publish_to_facebook", publishFacebook ? "true" : "false");
     formData.set("publish_to_instagram", publishInstagram ? "true" : "false");
+    formData.set("publish_to_tiktok", publishTikTok ? "true" : "false");
 
     startTransition(async () => {
       try {
@@ -1041,21 +1047,21 @@ export default function PublicidadClientPage({
                 />
               </div>
 
-              {/* Opciones de Publicación en Redes Social Meta */}
+              {/* Opciones de Publicación en Redes Sociales (Meta & TikTok) */}
               <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
                     <Sparkles size={14} className="text-purple-700" />
-                    Publicación Simultánea en Redes Sociales (Meta)
+                    Publicación Simultánea en Redes Sociales (Facebook, Instagram, TikTok)
                   </span>
-                  {(!hasFacebookCredentials && !hasInstagramCredentials) && (
+                  {(!hasFacebookCredentials && !hasInstagramCredentials && !hasTikTokCredentials) && (
                     <span className="text-[10px] font-semibold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
                       Credenciales incompletas en .env
                     </span>
                   )}
                 </div>
 
-                {editingPost && (editingPost.facebook_post_id || editingPost.instagram_post_id) && (
+                {editingPost && (editingPost.facebook_post_id || editingPost.instagram_post_id || editingPost.tiktok_post_id) && (
                   <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
                     {editingPost.facebook_post_id && (
                       <a
@@ -1077,6 +1083,17 @@ export default function PublicidadClientPage({
                       >
                         <ExternalLink size={12} />
                         Ver en Instagram
+                      </a>
+                    )}
+                    {editingPost.tiktok_post_id && (
+                      <a
+                        href={editingPost.tiktok_post_id}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 bg-slate-200/80 hover:bg-slate-300/80 px-2.5 py-1 rounded-lg transition"
+                      >
+                        <ExternalLink size={12} />
+                        Ver en TikTok
                       </a>
                     )}
                   </div>
@@ -1118,6 +1135,25 @@ export default function PublicidadClientPage({
                       <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-normal">(requiere credencial)</span>
+                    )}
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={publishTikTok}
+                      onChange={(e) => setPublishTikTok(e.target.checked)}
+                      className="accent-purple-600 rounded cursor-pointer"
+                    />
+                    <span>Publicar en TikTok</span>
+                    {editingPost?.tiktok_post_id ? (
+                      <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md font-bold">
+                        ✓ Publicado en TikTok
+                      </span>
+                    ) : hasTikTokCredentials ? (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Configurado</span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-normal">(requiere credencial / video)</span>
                     )}
                   </label>
                 </div>
