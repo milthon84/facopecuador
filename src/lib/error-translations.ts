@@ -10,7 +10,12 @@ const AUTH_ERROR_MAP: Record<string, string> = {
   "too many requests": "Demasiadas solicitudes. Por favor, intenta de nuevo más tarde.",
   "email rate limit exceeded": "Has superado el límite de envíos de correo de Supabase. Por favor espera 60 segundos antes de solicitar un nuevo enlace.",
   "rate limit exceeded": "Has superado el límite de solicitudes de Supabase. Por favor espera 60 segundos antes de intentar de nuevo.",
-  "for security purposes, you can only request this once every": "Por seguridad, solo puedes solicitar la recuperación una vez cada 60 segundos."
+  "for security purposes, you can only request this once every": "Por seguridad, solo puedes solicitar la recuperación una vez cada 60 segundos.",
+  "auth session missing": "La sesión de recuperación no está activa o el enlace ha caducado. Por favor solicita un nuevo enlace desde la pantalla de login.",
+  "session expired": "El enlace de recuperación ha caducado. Solicita un nuevo correo de restablecimiento.",
+  "jwt expired": "El enlace de recuperación ha caducado. Solicita un nuevo correo de restablecimiento.",
+  "same password": "La nueva contraseña debe ser diferente a la contraseña anterior.",
+  "password should be different": "La nueva contraseña debe ser diferente a la contraseña anterior."
 };
 
 export function translateAuthError(errorMsg: string | undefined | null): string {

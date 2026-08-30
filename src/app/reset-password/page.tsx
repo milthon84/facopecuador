@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Lock, CheckCircle2, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
+import { translateAuthError } from "@/lib/error-translations";
 import Link from "next/link";
 
 export default function ResetPasswordPage() {
@@ -80,7 +81,8 @@ export default function ResetPasswordPage() {
         window.location.replace("/erp/login");
       }, 2000);
     } catch (err: any) {
-      setError(err.message || "Error al actualizar la contraseña.");
+      console.error("Error al actualizar contraseña:", err);
+      setError(translateAuthError(err?.message || String(err)));
       setLoading(false);
     }
   }
