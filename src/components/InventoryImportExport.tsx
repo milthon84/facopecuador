@@ -24,7 +24,6 @@ export default function InventoryImportExport({ canImport = true }: { canImport?
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Resetear input para permitir subir el mismo archivo de nuevo
     e.target.value = "";
 
     setStatus("loading");
@@ -53,7 +52,6 @@ export default function InventoryImportExport({ canImport = true }: { canImport?
       setMessage(data.message || "Importación completada.");
       if (data.warnings) setWarnings(data.warnings);
 
-      // Refrescar la tabla de inventario
       router.refresh();
     } catch {
       setStatus("error");
@@ -69,31 +67,37 @@ export default function InventoryImportExport({ canImport = true }: { canImport?
 
   return (
     <div className="flex flex-col gap-2">
-      {/* Botones */}
-      <div className="flex gap-2">
+      {/* Botones compactos integrados en cabecera */}
+      <div className="flex items-center gap-2">
         {/* Exportar */}
         <button
+          type="button"
           onClick={handleExport}
-          className="flex items-center gap-2 text-sm font-medium bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-4 py-2 rounded-xl transition-colors shadow-sm"
+          className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-3 py-1.5 rounded-xl transition-colors shadow-2xs cursor-pointer"
+          title="Descargar plantilla / reporte Excel de inventario"
         >
-          <Download size={16} className="text-lilac-600" />
-          Descargar Excel
+          <Download size={15} className="text-lilac-600 shrink-0" />
+          <span className="hidden sm:inline">Descargar Excel</span>
+          <span className="sm:hidden">Exportar</span>
         </button>
 
         {/* Importar */}
         {canImport && (
           <>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={status === "loading"}
-              className="flex items-center gap-2 text-sm font-medium bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-4 py-2 rounded-xl transition-colors shadow-sm disabled:opacity-60"
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-3 py-1.5 rounded-xl transition-colors shadow-2xs disabled:opacity-60 cursor-pointer"
+              title="Cargar catálogo de productos desde Excel"
             >
               {status === "loading" ? (
-                <Loader2 size={16} className="animate-spin text-lilac-500" />
+                <Loader2 size={15} className="animate-spin text-lilac-500 shrink-0" />
               ) : (
-                <Upload size={16} className="text-lilac-600" />
+                <Upload size={15} className="text-lilac-600 shrink-0" />
               )}
-              {status === "loading" ? "Importando…" : "Cargar Excel"}
+              <span className="hidden sm:inline">{status === "loading" ? "Importando…" : "Cargar Excel"}</span>
+              <span className="sm:hidden">{status === "loading" ? "..." : "Importar"}</span>
             </button>
 
             <input
@@ -107,34 +111,33 @@ export default function InventoryImportExport({ canImport = true }: { canImport?
         )}
       </div>
 
-      {/* Feedback */}
+      {/* Feedback de Importación */}
       {status !== "idle" && status !== "loading" && (
         <div
-          className={`flex gap-3 items-start rounded-xl px-4 py-3 text-sm border ${
+          className={`flex gap-3 items-start rounded-xl px-3 py-2 text-xs border fixed bottom-5 right-5 z-50 shadow-xl max-w-sm ${
             status === "success"
               ? "bg-green-50 border-green-200 text-green-800"
               : "bg-red-50 border-red-200 text-red-800"
           }`}
         >
           {status === "success" ? (
-            <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-600" />
+            <CheckCircle size={16} className="shrink-0 mt-0.5 text-green-600" />
           ) : (
-            <AlertTriangle size={18} className="shrink-0 mt-0.5 text-red-500" />
+            <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-500" />
           )}
           <div className="flex-1">
             <p className="font-semibold">{message}</p>
             {warnings.length > 0 && (
-              <ul className="mt-1 space-y-0.5 text-xs opacity-80 list-disc list-inside">
+              <ul className="mt-1 space-y-0.5 text-[11px] opacity-80 list-disc list-inside">
                 {warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             )}
           </div>
           <button onClick={dismiss} className="shrink-0 opacity-60 hover:opacity-100">
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
       )}
-
     </div>
   );
 }

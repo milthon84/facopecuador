@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { 
   Camera, 
   Upload, 
@@ -26,18 +26,31 @@ export interface PatientPhoto {
 
 interface FotosPacienteSectionProps {
   patientId: string;
-  initialPhotos: PatientPhoto[];
+  initialPhotos?: PatientPhoto[];
+  photos?: PatientPhoto[];
+  onPhotosChange?: (photos: PatientPhoto[]) => void;
   canModify?: boolean;
   compact?: boolean;
+  mode?: "full" | "add_only" | "view_only";
 }
 
 export default function FotosPacienteSection({
   patientId,
   initialPhotos = [],
+  photos: controlledPhotos,
+  onPhotosChange,
   canModify = true,
   compact = false,
+  mode = "full",
 }: FotosPacienteSectionProps) {
-  const [photos, setPhotos] = useState<PatientPhoto[]>(initialPhotos);
+  const [internalPhotos, setInternalPhotos] = useState<PatientPhoto[]>(controlledPhotos ?? initialPhotos);
+  const photos = controlledPhotos ?? internalPhotos;
+
+  useEffect(() => {
+    if (controlledPhotos) {
+      setInternalPhotos(controlledPhotos);
+    }
+  }, [controlledPhotos]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Upload Form State (Solo Asunto e Imagen)
@@ -124,7 +137,9 @@ export default function FotosPacienteSection({
       } else {
         setSuccessMsg("¡Foto guardada exitosamente!");
         if (res.photo) {
-          setPhotos((prev) => [res.photo, ...prev]);
+          const updated = [res.photo, ...photos];
+          setInternalPhotos(updated);
+          onPhotosChange?.(updated);
         }
         setTimeout(() => {
           setIsModalOpen(false);
@@ -149,7 +164,9 @@ export default function FotosPacienteSection({
       const res = await response.json();
 
       if (response.ok && res.success) {
-        setPhotos((prev) => prev.filter((p) => p.id !== photoToDelete.id));
+        const updated = photos.filter((p) => p.id !== photoToDelete.id);
+        setInternalPhotos(updated);
+        onPhotosChange?.(updated);
         setPhotoToDelete(null);
         if (activePhoto?.id === photoToDelete.id) {
           setActivePhoto(null);
@@ -179,10 +196,13 @@ export default function FotosPacienteSection({
 
   // ── MODO COMPACTO (Ahorra espacio en la vista de procedimiento) ─────────
   if (compact) {
+    const showThumbnails = mode !== "add_only" && photos.length > 0;
+    const showAddButton = canModify && mode !== "view_only";
+
     return (
       <div className="flex items-center gap-2 shrink-0">
-        {/* Tiras de miniaturas muy pequeñas si hay fotos creadas */}
-        {photos.length > 0 && (
+        {/* Tiras de miniaturas muy pequeñas si hay fotos creadas y el modo lo permite */}
+        {showThumbnails && (
           <div className="flex items-center gap-1.5">
             {photos.map((photo) => (
               <div 
@@ -200,16 +220,36 @@ export default function FotosPacienteSection({
           </div>
         )}
 
-        {canModify && (
+        {showAddButton && (
           <button
             type="button"
             onClick={handleOpenModal}
             className="inline-flex items-center gap-1.5 bg-gold-50 hover:bg-gold-100 text-gold-800 font-bold text-xs px-3 py-1.5 rounded-xl border border-gold-200 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0"
           >
             <Camera size={14} className="text-gold-600" />
-            <span>{photos.length === 0 ? "Fotos / Imágenes" : `Fotos (${photos.length})`}</span>
-            <PlusCircle size={13} className="text-gold-600" />
+            <span>{mode === "add_only" ? "+ Añadir Foto(s)" : (photos.length === 0 ? "Fotos / Imágenes" : `Fotos (${photos.length})`)}</span>
+            {mode !== "add_only" && <PlusCircle size={13} className="text-gold-600" />}
           </button>
+        )}
+
+        {/* Blocking Overlay de Procesamiento en Fotos */}
+        {(isUploading || isDeleting) && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs transition-all duration-300">
+            <div className="bg-white border border-lilac-100 rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl flex flex-col items-center text-center animate-in fade-in duration-200">
+              <div className="relative mb-5">
+                <div className="h-16 w-16 rounded-full border-4 border-lilac-50 border-t-gold animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center text-lilac-600">
+                  <Camera size={24} className="animate-pulse" />
+                </div>
+              </div>
+              <h3 className="text-xl font-bold text-ink-900 mb-1.5">
+                {isDeleting ? "Eliminando Imagen..." : "Procesando Fotografías..."}
+              </h3>
+              <p className="text-xs text-ink-600 leading-relaxed">
+                Estamos actualizando la información del paciente. La pantalla permanecerá bloqueada hasta completar la actualización.
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Modal: Subir Nueva Foto */}

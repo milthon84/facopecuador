@@ -357,14 +357,15 @@ export async function voidMonthlyClosingJournalEntry(entryId: string) {
 export async function isMonthClosed(dateStr: string): Promise<boolean> {
   if (!dateStr) return false;
   const period = dateStr.slice(0, 7); // "YYYY-MM"
+  const year = dateStr.slice(0, 4);   // "YYYY"
   const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("monthly_closures")
-    .select("status")
-    .eq("period", period)
-    .single();
 
-  return data?.status === "closed";
+  const [{ data: monthly }, { data: annual }] = await Promise.all([
+    supabase.from("monthly_closures").select("status").eq("period", period).maybeSingle(),
+    supabase.from("annual_closures").select("status").eq("year", year).maybeSingle(),
+  ]);
+
+  return monthly?.status === "closed" || annual?.status === "closed";
 }
 
 export async function assertMonthOpen(dateStr: string): Promise<void> {

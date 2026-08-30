@@ -51,13 +51,17 @@ async function saveExpense(formData: FormData) {
     payment_reference = `Tarj: ${card_type} | Lote: ${card_lote} | Baucher: ${card_voucher}`;
   }
 
-  const { data: expense, error: expenseError } = await supabase.from("expenses").insert({
+  const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
+  let description = (formData.get("description") as string)?.trim() || null;
+
+  const insertPayload: Record<string, any> = {
     supplier_name,
     supplier_ruc:      (formData.get("supplier_ruc") as string)?.trim() || null,
     document_number:   (formData.get("document_number") as string)?.trim() || null,
+    authorization_number,
     expense_date,
     category,
-    description:       (formData.get("description") as string)?.trim() || null,
+    description,
     subtotal_0:        subtotal0,
     subtotal_15:       subtotal15,
     iva_amount:        ivaAmount,
@@ -67,7 +71,23 @@ async function saveExpense(formData: FormData) {
     payment_reference: payment_reference || null,
     created_by_id:     user?.id ?? null,
     created_by_email:  user?.email ?? null,
-  }).select().single();
+  };
+
+  let { data: expense, error: expenseError } = await supabase
+    .from("expenses")
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (expenseError && (expenseError.message.includes("authorization_number") || expenseError.code === "PGRST204")) {
+    delete insertPayload.authorization_number;
+    if (authorization_number) {
+      insertPayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
+    }
+    const fallback = await supabase.from("expenses").insert(insertPayload).select().single();
+    expense = fallback.data;
+    expenseError = fallback.error;
+  }
 
   if (expenseError || !expense) throw new Error(expenseError?.message ?? "Error al guardar la compra");
 
@@ -115,14 +135,34 @@ export default async function NuevoGastoPage() {
   const today    = new Date().toISOString().split("T")[0];
   const supabase = createAdminClient();
 
-  const { data: allAccounts } = await supabase
-    .from("bank_accounts")
-    .select("id, bank_name, account_number, account_type, notes")
-    .eq("is_active", true)
-    .order("bank_name");
+  const [{ data: allAccounts }, { data: pastExpenses }] = await Promise.all([
+    supabase
+      .from("bank_accounts")
+      .select("id, bank_name, account_number, account_type, notes")
+      .eq("is_active", true)
+      .order("bank_name"),
+    supabase
+      .from("expenses")
+      .select("supplier_ruc, supplier_name")
+      .not("supplier_ruc", "is", null)
+      .not("supplier_name", "is", null)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const bankAccounts = (allAccounts || []).filter(a => a.account_type !== "caja");
   const cajaAccounts = (allAccounts || []).filter(a => a.account_type === "caja");
+
+  const knownSuppliersMap: Record<string, string> = {};
+  const knownSuppliersList: { ruc: string; name: string }[] = [];
+
+  (pastExpenses || []).forEach((exp: any) => {
+    const ruc = exp.supplier_ruc?.trim();
+    const name = exp.supplier_name?.trim();
+    if (ruc && name && !knownSuppliersMap[ruc]) {
+      knownSuppliersMap[ruc] = name;
+      knownSuppliersList.push({ ruc, name });
+    }
+  });
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -139,6 +179,7 @@ export default async function NuevoGastoPage() {
           today={today}
           bankAccounts={bankAccounts}
           cajaAccounts={cajaAccounts}
+          knownSuppliersList={knownSuppliersList}
           saveExpense={saveExpense}
         />
       </div>

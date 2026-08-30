@@ -10,20 +10,45 @@ const CATEGORIES = [
 
 type Account = { id: string; bank_name: string; account_number: string | null; account_type: string; notes?: string | null };
 
+type SupplierItem = { ruc: string; name: string };
+
 interface Props {
   today: string;
   bankAccounts: Account[];
   cajaAccounts: Account[];
+  knownSuppliersList?: SupplierItem[];
+  initialData?: any;
   saveExpense: (formData: FormData) => Promise<void>;
 }
 
-export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, saveExpense }: Props) {
-  const [method, setMethod] = useState("efectivo");
-  const [docType, setDocType] = useState("factura"); // "factura" | "nota_venta" | "sin_documento"
-  const [subtotal, setSubtotal] = useState<number | string>(0);
-  const [ivaAmount, setIvaAmount] = useState<number | string>(0);
+export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, knownSuppliersList = [], initialData, saveExpense }: Props) {
+  const isEditing = Boolean(initialData?.id);
+  const [method, setMethod] = useState(initialData?.payment_method || "efectivo");
+  const [docType, setDocType] = useState(
+    initialData
+      ? (initialData.document_number ? "factura" : "sin_documento")
+      : "factura"
+  );
+  const [subtotal, setSubtotal] = useState<number | string>(
+    initialData ? (Number(initialData.subtotal_0 || 0) + Number(initialData.subtotal_15 || 0)) : 0
+  );
+  const [ivaAmount, setIvaAmount] = useState<number | string>(initialData?.iva_amount ?? 0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [supplierRuc, setSupplierRuc] = useState(initialData?.supplier_ruc || "");
+  const [supplierName, setSupplierName] = useState(initialData?.supplier_name || "");
+
+  function handleRucChange(val: string) {
+    setSupplierRuc(val);
+    const cleanRuc = val.trim();
+    if (cleanRuc) {
+      const match = knownSuppliersList.find((s) => s.ruc === cleanRuc);
+      if (match) {
+        setSupplierName(match.name);
+      }
+    }
+  }
 
   const numSubtotal = Number(subtotal) || 0;
   const numIva = Number(ivaAmount) || 0;
@@ -59,6 +84,7 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-3">
+      {isEditing && <input type="hidden" name="id" value={initialData.id} />}
       {errorMsg && (
         <div className="bg-red-50 border border-red-200 text-red-800 text-xs p-3 rounded-xl font-medium">
           ⚠️ {errorMsg}
@@ -83,21 +109,42 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
         </select>
       </div>
 
-      {/* Proveedor / Beneficiario + RUC */}
+      {/* RUC / Cédula (PRIMERO) + Proveedor / Beneficiario */}
       <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-ink-700">
+            {isSinDocumento ? "RUC / Cédula (opcional)" : "RUC / Cédula *"}
+          </label>
+          <input
+            name="supplier_ruc"
+            maxLength={13}
+            value={supplierRuc}
+            onChange={(e) => handleRucChange(e.target.value)}
+            list="suppliers-list"
+            placeholder="0000000000001"
+            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
+          />
+          <datalist id="suppliers-list">
+            {knownSuppliersList.map((s) => (
+              <option key={s.ruc} value={s.ruc}>
+                {s.name}
+              </option>
+            ))}
+          </datalist>
+        </div>
+
         <div className="space-y-1">
           <label className="text-xs font-semibold text-ink-700">
             {isSinDocumento ? "Concepto / Beneficiario *" : "Proveedor / Beneficiario *"}
           </label>
-          <input name="supplier_name" required placeholder={isSinDocumento ? "Ej. Taxi, Almuerzo, Caja Chica" : "Nombre del proveedor"}
-            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-ink-700">
-            {isSinDocumento ? "RUC / Cédula (opcional)" : "RUC / Cédula"}
-          </label>
-          <input name="supplier_ruc" maxLength={13} placeholder="0000000000001"
-            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
+          <input
+            name="supplier_name"
+            required
+            value={supplierName}
+            onChange={(e) => setSupplierName(e.target.value)}
+            placeholder={isSinDocumento ? "Ej. Taxi, Almuerzo, Caja Chica" : "Nombre del proveedor"}
+            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+          />
         </div>
       </div>
 
@@ -109,20 +156,49 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
               <label className="text-xs font-semibold text-ink-700">
                 N° {docType === "factura" ? "Factura" : "Nota de Venta"} (opcional)
               </label>
-              <input name="document_number" placeholder={docType === "factura" ? "001-001-000000001" : "001-001-000001"}
-                className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
+              <input
+                name="document_number"
+                defaultValue={initialData?.document_number || ""}
+                placeholder={docType === "factura" ? "001-001-000000001" : "001-001-000001"}
+                className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-ink-700">Fecha *</label>
-              <input type="date" name="expense_date" required defaultValue={today}
-                className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white" />
+              <input
+                type="date"
+                name="expense_date"
+                required
+                defaultValue={initialData?.expense_date || today}
+                className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+              />
             </div>
+
+            {docType === "factura" && (
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs font-semibold text-ink-700">
+                  N° de Autorización / Clave de Acceso SRI (opcional)
+                </label>
+                <input
+                  name="authorization_number"
+                  maxLength={49}
+                  defaultValue={initialData?.authorization_number || ""}
+                  placeholder="Ej: 3008202601179234567800120010010000000011234567819 (10 a 49 dígitos)"
+                  className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-xs"
+                />
+              </div>
+            )}
           </>
         ) : (
           <div className="col-span-2 space-y-1">
             <label className="text-xs font-semibold text-ink-700">Fecha *</label>
-            <input type="date" name="expense_date" required defaultValue={today}
-              className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white" />
+            <input
+              type="date"
+              name="expense_date"
+              required
+              defaultValue={initialData?.expense_date || today}
+              className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+            />
             {/* Input oculto para document_number */}
             <input type="hidden" name="document_number" value="" />
           </div>
@@ -133,15 +209,27 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <label className="text-xs font-semibold text-ink-700">Categoría *</label>
-          <select name="category" required
-            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          <select
+            name="category"
+            required
+            defaultValue={initialData?.category || CATEGORIES[0]}
+            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-semibold text-ink-700">Descripción</label>
-          <input name="description" placeholder="Detalle del gasto"
-            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white" />
+          <input
+            name="description"
+            defaultValue={initialData?.description || ""}
+            placeholder="Detalle del gasto"
+            className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+          />
         </div>
       </div>
 
@@ -228,7 +316,6 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
             { value: "efectivo",        label: "💵 Efectivo" },
             { value: "transferencia",   label: "🏦 Transferencia" },
             { value: "tarjeta_credito", label: "💳 Tarjeta" },
-            { value: "credito",         label: "📋 Crédito" },
           ].map(m => (
             <button key={m.value} type="button"
               onClick={() => setMethod(m.value)}
@@ -249,8 +336,12 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
         {needsAccount && (
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
-            <select name="bank_account_id" required
-              className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
+            <select
+              name="bank_account_id"
+              required
+              defaultValue={initialData?.bank_account_id || ""}
+              className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+            >
               <option value="">— Seleccionar —</option>
               {accountOptions.map(a => (
                 <option key={a.id} value={a.id}>
@@ -276,6 +367,7 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
             </label>
             <input type="text" name="payment_reference"
               required
+              defaultValue={initialData?.payment_reference || ""}
               placeholder="TRF-001234"
               className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
           </div>
@@ -316,12 +408,6 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
           </div>
         )}
 
-        {/* Crédito info */}
-        {method === "credito" && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            Se registrará en <strong>Cuentas por Pagar</strong> hasta que se realice el pago.
-          </p>
-        )}
       </div>
 
       <div className="flex justify-end pt-1">
@@ -330,7 +416,7 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, sav
           disabled={loading}
           className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl transition-colors font-semibold text-sm shadow-md shadow-lilac-200 disabled:opacity-50"
         >
-          <Save size={16} /> {loading ? "Guardando..." : "Guardar Gasto"}
+          <Save size={16} /> {loading ? "Guardando..." : (isEditing ? "Guardar Cambios" : "Guardar Gasto")}
         </button>
       </div>
     </form>

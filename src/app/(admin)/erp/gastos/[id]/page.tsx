@@ -1,9 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2, Key, Edit, Lock } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen } from "@/lib/accounting";
+import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,8 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
   if (!rawExpense) notFound();
   const expense = rawExpense as any;
 
+  const isClosed = await isMonthClosed(expense.expense_date);
+
   const dateStr = new Date(expense.expense_date + "T12:00:00").toLocaleDateString("es-EC", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
@@ -64,6 +66,16 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           <span className="text-xs font-bold bg-red-100 text-red-700 border border-red-200 px-2.5 py-1 rounded-full">Anulado</span>
         )}
       </div>
+
+      {isClosed && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl p-4 mb-4 text-xs flex items-center gap-3 shadow-xs">
+          <Lock size={18} className="text-amber-600 shrink-0" />
+          <div>
+            <span className="font-bold text-amber-950 block">Período Contable Cerrado ({expense.expense_date.slice(0, 7)})</span>
+            Este gasto pertenece a un mes cuyo período contable ha sido CERRADO. No es posible modificarlo ni anularlo.
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
 
@@ -87,6 +99,14 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
                   <FileText size={10} /> N° Comprobante
                 </span>
                 <p className="text-sm font-mono text-ink-900 mt-0.5">{expense.document_number}</p>
+              </div>
+            )}
+            {expense.authorization_number && (
+              <div className="col-span-2">
+                <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+                  <Key size={10} /> N° Autorización / Clave de Acceso SRI
+                </span>
+                <p className="text-sm font-mono text-ink-900 mt-0.5 break-all">{expense.authorization_number}</p>
               </div>
             )}
             <div>
@@ -169,17 +189,25 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* Anular (solo visible con permiso de modificación) */}
-        {canEdit && expense.status !== "void" && (
-          <form action={voidExpense}>
-            <input type="hidden" name="id" value={expense.id} />
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 text-sm text-red-600 border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-xl transition-colors font-medium"
+        {/* Acciones de modificación y anulación (bloqueadas si el mes está cerrado) */}
+        {!isClosed && canEdit && expense.status !== "void" && (
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/erp/gastos/${expense.id}/editar`}
+              className="flex-1 flex items-center justify-center gap-2 text-sm bg-lilac-600 hover:bg-lilac-700 text-white px-4 py-2.5 rounded-xl transition-colors font-semibold shadow-sm"
             >
-              <Trash2 size={15} /> Anular gasto
-            </button>
-          </form>
+              <Edit size={15} /> Editar Gasto
+            </Link>
+            <form action={voidExpense} className="flex-1">
+              <input type="hidden" name="id" value={expense.id} />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 text-sm text-red-600 border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-xl transition-colors font-medium"
+              >
+                <Trash2 size={15} /> Anular gasto
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </div>

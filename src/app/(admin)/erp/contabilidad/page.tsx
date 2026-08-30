@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2 } from "lucide-react";
+import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +107,7 @@ export default async function ContabilidadPage({
   ];
 
   const quickLinks = [
+    { href: "/erp/contabilidad/caja-chica-liquidaciones",       label: "Liquidación y Rendición de Caja Chica", icon: <ShieldCheck size={14} className="text-purple-600" />, desc: "Auditoría de comprobantes, restitución de fondo fijo y legalización" },
     { href: "/erp/contabilidad/cierre-anual",                  label: "Cierre Anual Fiscal de Empresas",icon: <Building2 size={14} className="text-amber-600" />,          desc: "Ejercicio fiscal, 15% trabajadores, 25% impuesto a la renta y NIIF" },
     { href: `/erp/contabilidad/cierre?period=${period}`,      label: "Cierre Mensual Contable",        icon: <Lock size={14} className="text-lilac-600" />,           desc: "Consolidación de mes, asientos de cierre y bitácora de auditoría" },
     { href: `/erp/contabilidad/ats?period=${period}`,         label: "ATS — Anexo Transaccional",      icon: <FileSpreadsheet size={14} className="text-lilac-600" />,  desc: "Compras y ventas para SRI" },

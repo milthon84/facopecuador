@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { Wallet, Plus, TrendingDown, RefreshCw, ArrowRight, X } from "lucide-react";
+import { assertPermission, assertWritePermission, hasWritePermission, getUserRole } from "@/lib/auth-action";
+import { Wallet, Plus, TrendingDown, RefreshCw, ArrowRight, X, FileCheck, ShieldCheck, CheckCircle2, Lock } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +50,6 @@ async function replenishCajaChica(formData: FormData) {
   const amount  = Number(formData.get("amount"));
   const date    = formData.get("date") as string;
 
-  // Consultar si la cuenta origen es de tipo caja (Caja General)
   const { data: sourceAcc } = await supabase
     .from("bank_accounts")
     .select("account_type")
@@ -87,6 +86,8 @@ export default async function CajaChicaPage({
 }: { searchParams: Promise<{ action?: string }> }) {
   await assertPermission("/erp/caja-chica");
   const canEdit = await hasWritePermission("/erp/caja-chica");
+  const userRole = await getUserRole();
+  const isContadorOrAdmin = userRole === "admin" || userRole === "contador";
 
   const searchParams = await searchParamsPromise;
   const supabase = createAdminClient();

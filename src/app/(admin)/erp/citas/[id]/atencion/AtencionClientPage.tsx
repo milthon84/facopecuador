@@ -48,6 +48,15 @@ interface AtencionClientPageProps {
 export default function AtencionClientPage({ appointment, patient, initialConsultation, pastConsultations = [], patientPhotos = [] }: AtencionClientPageProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"ficha" | "odontogram" | "evolucion">("ficha");
+  const [photos, setPhotos] = useState<any[]>(patientPhotos);
+  const [initialPhotoIds] = useState<Set<string>>(() => new Set(patientPhotos.map((p: any) => p.id)));
+
+  useEffect(() => {
+    setPhotos(patientPhotos);
+  }, [patientPhotos]);
+
+  const currentSessionPhotos = photos.filter((p: any) => !initialPhotoIds.has(p.id));
+  const previousPhotos = photos.filter((p: any) => initialPhotoIds.has(p.id));
 
   // Collapsed sections by default
   const [medicalHistoryExpanded, setMedicalHistoryExpanded] = useState(false);
@@ -319,9 +328,20 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
 
   const renderPastConsultations = () => (
     <div className="card p-6 bg-white border border-lilac-100 shadow-sm rounded-2xl">
-      <h2 className="text-sm font-bold text-ink-950 flex items-center gap-2 mb-4 border-b border-lilac-50 pb-2">
-        <Activity size={16} className="text-lilac-700 animate-pulse" /> Evoluciones Anteriores ({pastConsultations.length})
-      </h2>
+      <div className="flex items-center justify-between gap-3 mb-4 border-b border-lilac-50 pb-2.5">
+        <h2 className="text-sm font-bold text-ink-950 flex items-center gap-2">
+          <Activity size={16} className="text-lilac-700 animate-pulse" /> Evoluciones Anteriores ({pastConsultations.length})
+        </h2>
+        
+        {/* Fotos e Imágenes Históricas (Consultas anteriores o ficha del paciente) */}
+        <FotosPacienteSection
+          patientId={patient.id}
+          photos={previousPhotos}
+          canModify={false}
+          compact={true}
+          mode="view_only"
+        />
+      </div>
       
       {pastConsultations.length === 0 ? (
         <div className="text-xs text-ink-500 italic py-4 text-center">
@@ -973,12 +993,16 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
                   <FileText className="text-lilac-600" size={18} /> Registro Clínico de la Cita
                 </h2>
                 
-                {/* Fotos e Imágenes del Procedimiento (Ultra-compacto en cabecera) */}
+                {/* Fotos e Imágenes de la Consulta Activa (Fotos subidas en esta sesión) */}
                 <FotosPacienteSection
                   patientId={patient.id}
-                  initialPhotos={patientPhotos}
+                  photos={currentSessionPhotos}
+                  onPhotosChange={(updatedCurrent) => {
+                    setPhotos([...updatedCurrent, ...previousPhotos]);
+                  }}
                   canModify={true}
                   compact={true}
+                  mode="full"
                 />
               </div>
               

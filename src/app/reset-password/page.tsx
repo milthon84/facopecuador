@@ -143,14 +143,16 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      // 2. Fallback: Intentar con cliente si la Server Action devolvió algún detalle
+      // 2. Fallback: Intentar con cliente si la Server Action no se completó
       const { error: updateErr } = await supabase.auth.updateUser({
         password: password,
         data: { require_password_change: false },
       });
 
       if (updateErr) {
-        throw new Error(serverRes.error || updateErr.message);
+        setError(translateAuthError(serverRes.error || updateErr.message));
+        setLoading(false);
+        return;
       }
 
       setSuccess(true);

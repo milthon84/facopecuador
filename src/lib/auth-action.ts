@@ -115,3 +115,10 @@ export async function assertPermission(requiredPath: string) {
 
   return user;
 }
+
+export async function getUserRole(): Promise<UserRole> {
+  const session = createClient();
+  const { data: { user } } = await session.auth.getUser();
+  if (!user) return "recepcionista";
+  return ((user.app_metadata?.role as string) ?? "recepcionista") as UserRole;
+}

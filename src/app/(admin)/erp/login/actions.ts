@@ -34,6 +34,24 @@ export async function requestPasswordResetAction(
   }
 }
 
+function getUserIdFromToken(token: string): string | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payloadJson = Buffer.from(parts[1], "base64").toString("utf-8");
+      const payload = JSON.parse(payloadJson);
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        console.error("Token de recuperación caducado por exp:", payload.exp);
+        return null;
+      }
+      return payload.sub || null;
+    }
+  } catch (err) {
+    console.error("Error al decodificar token de recuperación:", err);
+  }
+  return null;
+}
+
 export async function updatePasswordServerAction(
   accessToken: string | null,
   newPassword: string
@@ -50,6 +68,8 @@ export async function updatePasswordServerAction(
       const { data: { user }, error: userErr } = await supabase.auth.getUser(accessToken);
       if (user && !userErr) {
         targetUserId = user.id;
+      } else {
+        targetUserId = getUserIdFromToken(accessToken);
       }
     }
 

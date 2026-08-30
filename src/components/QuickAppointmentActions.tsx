@@ -37,6 +37,7 @@ export default function QuickAppointmentActions({ appointmentId }: Props) {
     }
 
     setLoading(true);
+    let isRefreshing = false;
     try {
       const res = await fetch("/api/admin/appointments", {
         method: "PATCH",
@@ -51,12 +52,15 @@ export default function QuickAppointmentActions({ appointmentId }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al actualizar la cita");
 
+      isRefreshing = true;
       router.refresh();
       setShowModal(false);
     } catch (err: any) {
       alert(err.message);
     } finally {
-      setLoading(false);
+      if (!isRefreshing) {
+        setLoading(false);
+      }
     }
   }
 
@@ -196,6 +200,24 @@ export default function QuickAppointmentActions({ appointmentId }: Props) {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocking Overlay de Procesamiento */}
+      {loading && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs transition-all duration-300">
+          <div className="bg-white border border-lilac-100 rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl flex flex-col items-center text-center animate-in fade-in duration-200">
+            <div className="relative mb-5">
+              <div className="h-16 w-16 rounded-full border-4 border-lilac-50 border-t-gold animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center text-lilac-600">
+                <Loader2 size={24} className="animate-spin" />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-ink-900 mb-1.5">Procesando y Actualizando</h3>
+            <p className="text-xs text-ink-600 leading-relaxed">
+              Guardando cambios y actualizando la vista del sistema. Por favor espera...
+            </p>
           </div>
         </div>
       )}
