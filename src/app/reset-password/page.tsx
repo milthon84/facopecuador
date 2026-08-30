@@ -20,33 +20,78 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient();
 
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash || "";
-      const search = window.location.search || "";
-      if (hash.includes("type=recovery") || hash.includes("access_token=") || search.includes("type=recovery") || search.includes("code=")) {
-        setIsRecoverySession(true);
-      }
-    }
+    async function initSession() {
+      if (typeof window !== "undefined") {
+        const hash = window.location.hash || "";
+        const search = window.location.search || "";
 
-    // 1. Escuchar evento de recuperación de contraseña de Supabase
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || session) {
-        setIsRecoverySession(true);
-      }
-      setCheckingSession(false);
-    });
+        // A. Si los tokens vienen en el hash de la URL (#access_token=...&refresh_token=...)
+        if (hash.startsWith("#") && hash.includes("access_token=")) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
 
-    // 2. Verificar si ya hay una sesión activa por el token en la URL
-    supabase.auth.getSession().then(({ data: { session } }) => {
+          if (accessToken && refreshToken) {
+            try {
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+              if (!error && data?.session) {
+                setIsRecoverySession(true);
+                setCheckingSession(false);
+                return;
+              }
+            } catch (err) {
+              console.error("Error al establecer sesión desde el hash:", err);
+            }
+          }
+        }
+
+        // B. Si viene un código PKCE (?code=...)
+        if (search.includes("code=")) {
+          const params = new URLSearchParams(search);
+          const code = params.get("code");
+          if (code) {
+            try {
+              const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+              if (!error && data?.session) {
+                setIsRecoverySession(true);
+                setCheckingSession(false);
+                return;
+              }
+            } catch (err) {
+              console.error("Error al intercambiar código PKCE:", err);
+            }
+          }
+        }
+
+        if (hash.includes("type=recovery") || search.includes("type=recovery")) {
+          setIsRecoverySession(true);
+        }
+      }
+
+      // C. Listener de Supabase Auth
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "PASSWORD_RECOVERY" || session) {
+          setIsRecoverySession(true);
+        }
+        setCheckingSession(false);
+      });
+
+      // D. Sesión existente
+      const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setIsRecoverySession(true);
       }
       setCheckingSession(false);
-    });
 
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
+      return () => {
+        authListener?.subscription.unsubscribe();
+      };
+    }
+
+    initSession();
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
@@ -67,6 +112,20 @@ export default function ResetPasswordPage() {
     const supabase = createClient();
 
     try {
+      // Garantizar que la sesión esté activa extrayendo los tokens del hash antes de actualizar la clave
+      if (typeof window !== "undefined" && window.location.hash.includes("access_token=")) {
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+      }
+
       const { error: updateErr } = await supabase.auth.updateUser({
         password: password,
         data: { require_password_change: false },
