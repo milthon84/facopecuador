@@ -168,41 +168,44 @@ export async function publishToMeta({
         } else {
           const creationId = containerData.id;
 
-          // B. Publicar el contenedor de item multimedia
-          // Nota: El procesamiento de videos en Instagram es asíncrono y toma tiempo.
+          // B. Polling universal de estado del contenedor (tanto para imágenes como para videos)
           let publishData: any = null;
           let success = false;
+          let isReady = false;
+          for (let attempt = 1; attempt <= 12; attempt++) {
+            try {
+              const statusRes = await fetch(
+                `https://graph.facebook.com/v20.0/${creationId}?fields=status_code,status&access_token=${pageAccessToken}`
+              );
+              const statusData = await statusRes.json();
+              const statusCode = statusData.status_code;
 
-          // Polling para videos (Reels)
-          if (videoUrl) {
-            let isReady = false;
-            for (let attempt = 1; attempt <= 10; attempt++) {
-              try {
-                const statusRes = await fetch(
-                  `https://graph.facebook.com/v20.0/${creationId}?fields=status_code&access_token=${pageAccessToken}`
-                );
-                const statusData = await statusRes.json();
-                if (statusData.status_code === "FINISHED") {
-                  isReady = true;
-                  break;
-                } else if (statusData.status_code === "ERROR") {
-                  errors.push("Instagram falló al procesar el video.");
-                  break;
-                }
-                console.log(`El video de Instagram se está procesando (intento ${attempt}/10). Esperando 3s...`);
-                await delay(3000);
-              } catch (pollErr: any) {
-                console.error("Error al consultar el estado del video en Instagram:", pollErr);
+              if (statusCode === "FINISHED") {
+                isReady = true;
+                break;
+              } else if (statusCode === "ERROR") {
+                console.error("Meta API Instagram status ERROR:", statusData);
+                errors.push("Instagram no pudo procesar la imagen/video. Verifica que el archivo sea accesible públicamente.");
+                break;
+              } else if (statusCode === "EXPIRED") {
+                errors.push("El recurso multimedia en Instagram expiró.");
+                break;
               }
-            }
 
-            if (!isReady && errors.length === 0) {
-              errors.push("El video está tardando demasiado en procesarse en Instagram. Se guardó en la web pero la publicación en Instagram podría tardar.");
+              console.log(`Instagram procesando recurso multimedia (${statusCode || "IN_PROGRESS"}) (intento ${attempt}/12). Esperando 2.5s...`);
+              await delay(2500);
+            } catch (pollErr: any) {
+              console.error("Error al consultar estado de contenedor en Instagram:", pollErr);
             }
           }
 
-          if (errors.length === 0 || !videoUrl) {
-            for (let attempt = 1; attempt <= 4; attempt++) {
+          if (!isReady && errors.length === 0) {
+            errors.push("El recurso en Instagram tardó demasiado tiempo en estar disponible.");
+          }
+
+          // C. Publicar en Instagram únicamente cuando el estado esté en FINISHED
+          if (isReady) {
+            for (let attempt = 1; attempt <= 5; attempt++) {
               const publishRes = await fetch(
                 `https://graph.facebook.com/v20.0/${instagramAccountId}/media_publish`,
                 {
@@ -221,11 +224,11 @@ export async function publishToMeta({
                 const code = publishData.error.code;
                 const msg = publishData.error.message || "";
                 const isProcessing =
-                  code === 22070 || msg.toLowerCase().includes("processing");
+                  code === 22070 || msg.toLowerCase().includes("processing") || msg.toLowerCase().includes("not available");
 
-                if (isProcessing && attempt < 4) {
+                if (isProcessing && attempt < 5) {
                   console.log(
-                    `El recurso multimedia de Instagram se está procesando aún. Reintentando en 3s (intento ${attempt}/4)...`
+                    `El recurso de Instagram se está procesando aún. Reintentando en 3s (intento ${attempt}/5)...`
                   );
                   await delay(3000);
                   continue;
