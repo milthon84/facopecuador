@@ -62,34 +62,37 @@ export async function publishToMeta({
       try {
         let res;
         if (videoUrl) {
-          // Publicar con video en la página
+          // Publicar con video en la página como publicación orgánica pública
           res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/videos`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               file_url: videoUrl,
               description: postText,
+              published: true,
               access_token: pageAccessToken,
             }),
           });
         } else if (imageUrl) {
-          // Publicar con imagen como foto en la página
+          // Publicar con imagen como foto orgánica en el muro público de la página
           res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/photos`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url: imageUrl,
               caption: postText,
+              published: true,
               access_token: pageAccessToken,
             }),
           });
         } else {
-          // Publicar feed de texto simple
+          // Publicar feed de texto simple orgánico en el muro
           res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/feed`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: postText,
+              published: true,
               access_token: pageAccessToken,
             }),
           });
