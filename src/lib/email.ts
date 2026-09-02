@@ -732,6 +732,7 @@ export interface QuotationEmailData {
   subtotal: number;
   discount: number;
   total: number;
+  paymentMethod?: string;
   notes?: string | null;
 }
 
@@ -742,30 +743,60 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
   }
   if (!d.patientEmail) return false;
 
+  const subtotalVal = Number(d.subtotal) || 0;
+  const discountVal = Number(d.discount) || 0;
+  const totalVal = Number(d.total) || 0;
+  const hasDiscount = discountVal > 0;
   const safeItems = Array.isArray(d.items) ? d.items : [];
-  const itemsHtml = safeItems.map(item => `
+
+  const itemsHtml = safeItems.map(item => {
+    const qty = Number(item.quantity || 1);
+    const uPrice = Number(item.unitPrice || 0);
+    const grossTotal = qty * uPrice;
+    const itemDisc = hasDiscount && subtotalVal > 0 ? Math.round((grossTotal * (discountVal / subtotalVal)) * 100) / 100 : 0;
+    const netTotal = grossTotal - itemDisc;
+    const itemPct = hasDiscount && grossTotal > 0 ? Math.round((itemDisc / grossTotal) * 100) : 0;
+
+    return `
     <tr style="border-bottom: 1px solid #f0eaf8;">
       <td style="padding: 10px 8px; font-size: 13px; color: #604390; font-weight: bold; font-family: sans-serif;">
-        ${item.tooth ? `Diente ${item.tooth}` : "General"}
+        ${item.tooth ? `Diente ${item.tooth}` : "—"}
       </td>
       <td style="padding: 10px 8px; font-size: 13px; color: #333333; font-family: sans-serif;">
         ${item.treatment}
       </td>
       <td style="padding: 10px 8px; font-size: 13px; color: #555555; text-align: center; font-family: sans-serif;">
-        ${item.quantity}
+        ${qty}
       </td>
       <td style="padding: 10px 8px; font-size: 13px; color: #555555; text-align: right; font-family: sans-serif;">
-        $${(Number(item.unitPrice) || 0).toFixed(2)}
+        $${uPrice.toFixed(2)}
       </td>
+      ${hasDiscount ? `
+      <td style="padding: 10px 8px; font-size: 13px; color: #dc2626; font-weight: 600; text-align: right; font-family: sans-serif;">
+        -$${itemDisc.toFixed(2)} (${itemPct}%)
+      </td>
+      ` : ""}
       <td style="padding: 10px 8px; font-size: 13px; color: #1a1a1a; font-weight: bold; text-align: right; font-family: sans-serif;">
-        $${(Number(item.subtotal) || 0).toFixed(2)}
+        $${netTotal.toFixed(2)}
       </td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
-  const subtotalVal = Number(d.subtotal) || 0;
-  const discountVal = Number(d.discount) || 0;
-  const totalVal = Number(d.total) || 0;
+  const payText = d.paymentMethod === "tarjeta"
+    ? "💳 Forma de pago: Tarjeta de Crédito / Débito"
+    : "💵 Forma de pago: Al Contado / Transferencia";
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://facop.com.ec").replace(/\/+$/, "");
+  const bookingUrl = `${siteUrl}/cita-clinica`;
+
+  const rawPhone = process.env.NEXT_PUBLIC_CLINIC_PHONE || "0998214857";
+  const digits = rawPhone.replace(/[\s\-().+]/g, "");
+  let ecPhone = digits;
+  if (digits.startsWith("0")) ecPhone = "593" + digits.slice(1);
+  else if (digits.startsWith("9")) ecPhone = "593" + digits;
+  const whatsappUrl = `https://wa.me/${ecPhone}`;
+  const displayPhone = process.env.NEXT_PUBLIC_CLINIC_PHONE || "099 821 4857";
 
   const body = `
     <h2 style="color:#7E5DB4; margin:0 0 8px; font-size:22px; font-weight:700; font-family:sans-serif;">Presupuesto de Tratamiento Odontológico 📋</h2>
@@ -778,6 +809,7 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
         <td style="background:#f5f1fb; border-left:4px solid #7E5DB4; padding:14px 20px; border-radius:0 8px 8px 0; font-family:sans-serif;">
           <div style="font-size:11px; font-weight:700; color:#604390; letter-spacing:0.8px; margin-bottom:4px; text-transform:uppercase;">N° de Cotización: ${d.quotationNumber}</div>
           <div style="font-size:14px; font-weight:700; color:#1a1a1a;">Fecha de emisión: ${d.dateStr}</div>
+          <div style="font-size:13px; color:#15803d; font-weight:700; margin-top:4px;">${payText}</div>
           <div style="font-size:12px; color:#7E5DB4; font-weight:600; margin-top:2px;">⏳ Válido por 30 días</div>
         </td>
       </tr>
@@ -788,10 +820,11 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
       <thead>
         <tr style="background:#f5f1fb; border-bottom:1.5px solid #e1d6f2;">
           <th style="padding:10px 8px; text-align:left; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Pieza</th>
-          <th style="padding:10px 8px; text-align:left; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Tratamiento</th>
+          <th style="padding:10px 8px; text-align:left; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Procedimiento</th>
           <th style="padding:10px 8px; text-align:center; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Cant.</th>
-          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">P. Unit</th>
-          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Subtotal</th>
+          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">PVP Unit</th>
+          ${hasDiscount ? `<th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#dc2626; text-transform:uppercase; font-family:sans-serif;">Descuento</th>` : ""}
+          <th style="padding:10px 8px; text-align:right; font-size:11px; font-weight:bold; color:#604390; text-transform:uppercase; font-family:sans-serif;">Total Ítem</th>
         </tr>
       </thead>
       <tbody>
@@ -816,7 +849,7 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
             </tr>
             ` : ""}
             <tr style="border-top:1.5px solid #e1d6f2;">
-              <td style="font-size:15px; font-weight:bold; color:#604390; padding:8px 0 0;">Total Estimado:</td>
+              <td style="font-size:15px; font-weight:bold; color:#604390; padding:8px 0 0;">Total:</td>
               <td style="font-size:17px; font-weight:bold; color:#604390; text-align:right; padding:8px 0 0;">$${totalVal.toFixed(2)} USD</td>
             </tr>
           </table>
@@ -836,7 +869,31 @@ export async function sendQuotationEmail(d: QuotationEmailData): Promise<boolean
     </table>
     ` : ""}
 
-    <p style="font-size:14px; color:#7E5DB4; text-align:center; font-weight:600; margin:0; font-family:sans-serif;">Si deseas agendar tus citas de tratamiento o solicitar facilidades de pago, responde a este correo o escríbenos a nuestro WhatsApp. 😊</p>
+    <!-- Reservar Cita Directa -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+      <tr>
+        <td style="background:#f5f1fb; border:1px solid #e1d6f2; border-radius:12px; padding:20px; text-align:center; font-family:sans-serif;">
+          <div style="font-size:16px; font-weight:700; color:#604390; margin-bottom:6px;">¿Deseas agendar tu cita de tratamiento? 📅</div>
+          <p style="font-size:13px; color:#555555; margin:0 0 16px; line-height:1.5;">Reserva tu horario directamente en nuestro sistema en línea de forma rápida y sencilla.</p>
+          <a href="${bookingUrl}" target="_blank" style="display:inline-block; background:#7E5DB4; color:#ffffff; font-size:14px; font-weight:700; padding:12px 26px; border-radius:10px; text-decoration:none; box-shadow:0 3px 10px rgba(126,93,180,0.25);">
+            🗓️ Reservar Cita Directa →
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Número de WhatsApp y Contacto al Final -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px;">
+      <tr>
+        <td style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:18px 20px; text-align:center; font-family:sans-serif;">
+          <div style="font-size:14px; font-weight:700; color:#166534; margin-bottom:4px;">💬 ¿Tienes preguntas o prefieres coordinar por WhatsApp?</div>
+          <p style="font-size:13px; color:#15803d; margin:0 0 12px; line-height:1.4;">Escríbenos directamente o haz clic en el botón a continuación:</p>
+          <a href="${whatsappUrl}" target="_blank" style="display:inline-block; background:#25D366; color:#ffffff; font-size:13px; font-weight:700; padding:10px 22px; border-radius:8px; text-decoration:none; box-shadow:0 2px 8px rgba(37,211,102,0.25);">
+            📱 WhatsApp: ${displayPhone}
+          </a>
+        </td>
+      </tr>
+    </table>
   `;
 
   try {

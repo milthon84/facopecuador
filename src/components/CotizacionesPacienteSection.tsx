@@ -72,7 +72,9 @@ export default function CotizacionesPacienteSection({
       q.quotation_number,
       q.items,
       q.total,
-      q.notes
+      q.notes,
+      q.discount,
+      Number(q.discount || 0) > 0 ? "efectivo" : "tarjeta"
     );
     if (url) {
       window.open(url, "_blank");

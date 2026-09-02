@@ -178,10 +178,22 @@ export default function CourseBillingTable({ billingItems, canEdit }: Props) {
                         ${Number(bi.curso_modulos.cost).toFixed(2)}
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        {bi.billing_status === "invoiced" && bi.invoices && bi.invoices.sri_status !== "cancelled" ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                        {bi.billing_status === "invoiced" && bi.invoices && bi.invoices.sri_status !== "cancelled" && bi.invoices.sri_status !== "rejected" && bi.invoices.sri_status !== "error" ? (
+                          <Link
+                            href={`/erp/facturacion/${bi.invoices.id}`}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 hover:border-green-300 transition-colors px-2.5 py-1 rounded-full cursor-pointer"
+                            title="Ver detalles de la factura"
+                          >
                             <CheckCircle2 size={10} /> Facturado (#{bi.invoices.invoice_number})
-                          </span>
+                          </Link>
+                        ) : bi.invoices && (bi.invoices.sri_status === "rejected" || bi.invoices.sri_status === "error") ? (
+                          <Link
+                            href={`/erp/facturacion/${bi.invoices.id}`}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors px-2.5 py-1 rounded-full cursor-pointer"
+                            title="Ver motivo de rechazo SRI"
+                          >
+                            <AlertCircle size={10} /> Rechazada SRI (#{bi.invoices.invoice_number})
+                          </Link>
                         ) : bi.billing_status === "free" ? (
                           <span className="text-[10px] font-bold text-ink-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
                             Beca
@@ -193,7 +205,7 @@ export default function CourseBillingTable({ billingItems, canEdit }: Props) {
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right shrink-0">
-                        {bi.billing_status === "pending" ? (
+                        {bi.billing_status === "pending" || (bi.invoices && (bi.invoices.sri_status === "rejected" || bi.invoices.sri_status === "error")) ? (
                           canEdit ? (
                             <Link
                               href={individualInvoiceLink}
@@ -206,10 +218,11 @@ export default function CourseBillingTable({ billingItems, canEdit }: Props) {
                           )
                         ) : bi.invoice_id ? (
                           <Link
-                            href={`/erp/facturacion`}
-                            className="inline-flex items-center gap-0.5 text-xs text-lilac-600 hover:text-lilac-800 font-semibold"
+                            href={`/erp/facturacion/${bi.invoice_id}`}
+                            className="inline-flex items-center gap-0.5 text-xs text-lilac-700 hover:text-lilac-900 font-bold"
+                            title="Ver detalles de la factura"
                           >
-                            <FileText size={12} /> SRI
+                            <FileText size={12} /> Ver Factura
                           </Link>
                         ) : (
                           <span className="text-ink-400 text-xs">-</span>

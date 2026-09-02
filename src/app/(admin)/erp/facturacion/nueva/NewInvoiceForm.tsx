@@ -52,7 +52,8 @@ export default function NewInvoiceForm({
   initialPatient,
   services = [],
   bankAccounts = [],
-  cardSurchargePercent = 5.0,
+  cashDiscountPercent = 6.0,
+  cardSurchargePercent,
   appointmentId = null,
   initialClientName = "",
   initialClientDocument = "",
@@ -70,6 +71,7 @@ export default function NewInvoiceForm({
   initialPatient: Patient | null;
   services?: Service[];
   bankAccounts?: BankAccount[];
+  cashDiscountPercent?: number;
   cardSurchargePercent?: number;
   appointmentId?: string | null;
   initialClientName?: string;
@@ -217,14 +219,32 @@ export default function NewInvoiceForm({
     }
   }
 
+  const discountRate = cashDiscountPercent ?? cardSurchargePercent ?? 6.0;
+  const isCashOrTransfer = paymentMethod === "efectivo" || paymentMethod === "transferencia";
+
+  const calcAutoDiscount = (q: number, pu: number) => {
+    if (!isCashOrTransfer || discountRate <= 0) return 0;
+    return Math.round((q * pu) * (discountRate / 100) * 100) / 100;
+  };
+
+  // Re-calcular los descuentos automáticamente al cambiar la forma de pago
+  useEffect(() => {
+    setItems(prev => prev.map(item => ({
+      ...item,
+      discount: isCashOrTransfer ? Math.round((item.quantity * item.unit_price) * (discountRate / 100) * 100) / 100 : 0
+    })));
+  }, [paymentMethod, discountRate]);
+
   function addFromCatalog(s: Service) {
+    const price = Number(s.price);
+    const autoDisc = calcAutoDiscount(1, price);
     setItems(prev => [...prev, {
       id:          Math.random().toString(),
       description: s.name,
       quantity:    1,
-      unit_price:  Number(s.price),
-      discount:    0,
-      iva_code:    s.iva_code === "4" ? "4" : "0", // usa el IVA del catálogo del servicio
+      unit_price:  price,
+      discount:    autoDisc,
+      iva_code:    s.iva_code === "4" ? "4" : "0",
     }]);
     setShowCatalog(false);
   }
@@ -235,14 +255,19 @@ export default function NewInvoiceForm({
 
   const removeItem = (id: string) => {
     setItems(items.filter(i => i.id !== id));
-    // Limpiar error de ítems al eliminar
     setFormErrors(p => { const n = { ...p }; delete n.items; return n; });
   };
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: any) => {
-    const updated = items.map(i => i.id === id ? { ...i, [field]: value } : i);
+    const updated = items.map(i => {
+      if (i.id !== id) return i;
+      const updatedItem = { ...i, [field]: value };
+      if (isCashOrTransfer && (field === "quantity" || field === "unit_price")) {
+        updatedItem.discount = Math.round((updatedItem.quantity * updatedItem.unit_price) * (discountRate / 100) * 100) / 100;
+      }
+      return updatedItem;
+    });
     setItems(updated);
-    // Limpiar error de ítems si ya hay al menos uno válido
     if (updated.some(i => i.description.trim() && i.unit_price > 0)) {
       setFormErrors(p => { const n = { ...p }; delete n.items; return n; });
     }
@@ -252,9 +277,7 @@ export default function NewInvoiceForm({
   const subtotal0      = items.filter(i => i.iva_code === "0").reduce((acc, i) => acc + ((i.quantity * i.unit_price) - i.discount), 0);
   const totalDescuento = items.reduce((acc, i) => acc + i.discount, 0);
   const ivaAmount      = subtotal15 * 0.15;
-  const isCard         = paymentMethod === "tarjeta_credito";
-  const cardSurchargeAmount = isCard ? (subtotal15 + subtotal0) * (cardSurchargePercent / 100) : 0;
-  const totalFactura   = subtotal15 + subtotal0 + cardSurchargeAmount + ivaAmount;
+  const totalFactura   = subtotal15 + subtotal0 + ivaAmount;
 
   const requiresBankConfirmation = paymentMethod !== "efectivo";
 
@@ -315,7 +338,7 @@ export default function NewInvoiceForm({
     try {
       // Subir comprobante si existe
       let comprobanteUrl: string | undefined;
-      if (comprobanteFile && requiresBankConfirmation) {
+      if (comprobanteFile) {
         try {
           const supabase = createClient();
           const ext = comprobanteFile.name.split(".").pop();
@@ -327,7 +350,9 @@ export default function NewInvoiceForm({
             const { data: { publicUrl } } = supabase.storage.from("payment-proofs").getPublicUrl(path);
             comprobanteUrl = publicUrl;
           }
-        } catch { /* si falla el upload, continúa sin URL */ }
+        } catch (uErr) {
+          console.warn("Error al subir comprobante en creación:", uErr);
+        }
       }
 
       const res = await fetch("/api/factura", {
@@ -344,10 +369,12 @@ export default function NewInvoiceForm({
           items,
           payment_method:    paymentMethod,
           bank_account_id:   bankAccountId || undefined,
-          payment_reference: paymentMethod === "tarjeta_credito" ? cardVoucher : (paymentReference || comprobanteUrl || undefined),
+          payment_reference: comprobanteUrl || paymentReference || (paymentMethod === "tarjeta_credito" ? cardVoucher : undefined),
           card_type:         paymentMethod === "tarjeta_credito" ? cardType : undefined,
           card_lote:         paymentMethod === "tarjeta_credito" ? cardLote : undefined,
           card_voucher:      paymentMethod === "tarjeta_credito" ? cardVoucher : undefined,
+          comprobante_url:   comprobanteUrl,
+          image_url:         comprobanteUrl,
           forma_pago:        PAYMENT_METHODS.find(m => m.value === paymentMethod)?.sriCode ?? "01",
           module_enrollment_ids: moduleEnrollmentIds.length > 0 ? moduleEnrollmentIds : undefined,
           course_enrollment_id: initialCourseEnrollmentId || undefined,
@@ -356,6 +383,25 @@ export default function NewInvoiceForm({
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Error al procesar la factura");
+      
+      const createdInvoiceId = result.invoice_id;
+
+      // Subir comprobante mediante la API del servidor usando admin client
+      if (comprobanteFile && createdInvoiceId) {
+        try {
+          const photoFormData = new FormData();
+          photoFormData.append("invoiceId", createdInvoiceId);
+          photoFormData.append("title", `Comprobante (${comprobanteFile.name})`);
+          photoFormData.append("imageFile", comprobanteFile);
+
+          await fetch("/api/admin/invoice-photos", {
+            method: "POST",
+            body: photoFormData,
+          });
+        } catch (photoUploadErr) {
+          console.warn("Error al subir foto de comprobante en servidor:", photoUploadErr);
+        }
+      }
       
       setAlertModal({
         show: true,
@@ -521,8 +567,14 @@ export default function NewInvoiceForm({
         </div>
 
         {/* ── Método de Pago ──────────────────────────────── */}
-        <div className={`border rounded-2xl shadow-sm p-4 sm:p-5 ${requiresBankConfirmation ? "bg-amber-50 border-amber-200" : "bg-white border-lilac-100"}`}>
-          <h3 className="font-semibold text-sm text-ink-700 flex items-center gap-2 mb-3 border-b border-lilac-50 pb-2">
+        <div className={`border rounded-2xl shadow-sm p-4 sm:p-5 transition-colors ${
+          paymentMethod === "transferencia"
+            ? "bg-blue-50/30 border-blue-200"
+            : paymentMethod === "tarjeta_credito"
+            ? "bg-purple-50/30 border-purple-200"
+            : "bg-green-50/20 border-green-200"
+        }`}>
+          <h3 className="font-semibold text-sm text-ink-700 flex items-center gap-2 mb-3 border-b border-lilac-100/60 pb-2">
             <span className="text-lilac-600">💳</span>
             Forma de Pago
           </h3>
@@ -531,19 +583,30 @@ export default function NewInvoiceForm({
           <div className="mb-4">
             <label className="text-xs font-semibold text-ink-700 block mb-1">Método *</label>
             <div className="flex flex-wrap gap-2">
-              {PAYMENT_METHODS.map(m => (
-                <button key={m.value} type="button"
-                  onClick={() => { setPaymentMethod(m.value); setBankAccountId(""); setPaymentReference(""); }}
-                  className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-                    paymentMethod === m.value
-                      ? m.value === "efectivo"
-                        ? "bg-green-600 text-white border-green-600 shadow-sm"
-                        : "bg-amber-500 text-white border-amber-500 shadow-sm"
-                      : "bg-white text-ink-700 border-lilac-200 hover:border-lilac-400"
-                  }`}>
-                  {m.value === "efectivo" ? "💵 " : "🏦 "}{m.label}
-                </button>
-              ))}
+              {PAYMENT_METHODS.map(m => {
+                const isSelected = paymentMethod === m.value;
+                let activeClass = "bg-green-600 text-white border-green-600 shadow-sm";
+                let icon = "💵 ";
+
+                if (m.value === "transferencia") {
+                  activeClass = "bg-blue-600 text-white border-blue-600 shadow-sm";
+                  icon = "🏦 ";
+                } else if (m.value === "tarjeta_credito") {
+                  activeClass = "bg-purple-600 text-white border-purple-600 shadow-sm";
+                  icon = "💳 ";
+                }
+
+                return (
+                  <button key={m.value} type="button"
+                    onClick={() => { setPaymentMethod(m.value); setBankAccountId(""); setPaymentReference(""); }}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all flex items-center gap-1.5 ${
+                      isSelected ? activeClass : "bg-white text-ink-700 border-lilac-200 hover:border-lilac-400"
+                    }`}>
+                    <span>{icon}</span>
+                    <span>{m.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -552,7 +615,7 @@ export default function NewInvoiceForm({
             <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
               <CheckCircle2 size={16} className="text-green-600 shrink-0" />
               <p className="text-sm text-green-800">
-                <strong>Pago en efectivo</strong> — la factura se emite y queda cobrada inmediatamente.
+                <strong>Pago en efectivo</strong> — Descuento al contado del {discountRate}% aplicado automáticamente. La factura se emite y queda cobrada inmediatamente.
               </p>
             </div>
           )}
@@ -565,7 +628,7 @@ export default function NewInvoiceForm({
                   <label className="text-xs font-semibold text-ink-700">Cuenta *</label>
                   <select value={bankAccountId}
                     onChange={e => { setBankAccountId(e.target.value); setFormErrors(p => ({ ...p, bankAccountId: "" })); }}
-                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none ${formErrors.bankAccountId ? "border-red-400" : "border-amber-300"}`}>
+                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none ${formErrors.bankAccountId ? "border-red-400" : "border-blue-300"}`}>
                     <option value="">— Cuenta destino —</option>
                     {bankAccounts.filter(b => b.account_type !== "caja").map(b => (
                       <option key={b.id} value={b.id}>
@@ -581,7 +644,7 @@ export default function NewInvoiceForm({
                   <input type="text" value={paymentReference}
                     onChange={e => { setPaymentReference(e.target.value); setFormErrors(p => ({ ...p, paymentReference: "" })); }}
                     placeholder="TRF-001234 (Opcional)"
-                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none font-mono ${formErrors.paymentReference ? "border-red-400" : "border-amber-300"}`} />
+                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none font-mono ${formErrors.paymentReference ? "border-red-400" : "border-blue-300"}`} />
                   {formErrors.paymentReference && <p className="text-xs text-red-500">{formErrors.paymentReference}</p>}
                 </div>
               </div>
@@ -597,7 +660,7 @@ export default function NewInvoiceForm({
                       onChange={e => setComprobanteFile(e.target.files?.[0] ?? null)} />
                     <button type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className={`flex-1 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-xs transition-colors ${comprobanteFile ? "border-green-400 bg-green-50 text-green-700" : "border-amber-300 bg-white text-ink-500 hover:bg-amber-50"}`}>
+                      className={`flex-1 flex items-center gap-1.5 border rounded-xl px-3 py-2 text-xs transition-colors ${comprobanteFile ? "border-green-400 bg-green-50 text-green-700" : "border-blue-300 bg-white text-ink-500 hover:bg-blue-50"}`}>
                       <Paperclip size={12} />
                       {comprobanteFile ? comprobanteFile.name.slice(0, 18) + "…" : "Adjuntar archivo"}
                     </button>
@@ -622,7 +685,7 @@ export default function NewInvoiceForm({
                   <input type="text" value={cardType} list="tarjetas-ec"
                     onChange={e => { setCardType(e.target.value); setFormErrors(p => ({ ...p, cardType: "" })); }}
                     placeholder="Ej. Visa, Mastercard..."
-                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none ${formErrors.cardType ? "border-red-400" : "border-amber-300"}`} />
+                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:outline-none ${formErrors.cardType ? "border-red-400" : "border-purple-300"}`} />
                   <datalist id="tarjetas-ec">
                     <option value="Visa" />
                     <option value="Mastercard" />
@@ -642,7 +705,7 @@ export default function NewInvoiceForm({
                   <input type="text" value={cardLote}
                     onChange={e => { setCardLote(e.target.value); setFormErrors(p => ({ ...p, cardLote: "" })); }}
                     placeholder="0012"
-                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none font-mono ${formErrors.cardLote ? "border-red-400" : "border-amber-300"}`} />
+                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:outline-none font-mono ${formErrors.cardLote ? "border-red-400" : "border-purple-300"}`} />
                   {formErrors.cardLote && <p className="text-xs text-red-500">{formErrors.cardLote}</p>}
                 </div>
 
@@ -651,7 +714,7 @@ export default function NewInvoiceForm({
                   <input type="text" value={cardVoucher}
                     onChange={e => { setCardVoucher(e.target.value); setFormErrors(p => ({ ...p, cardVoucher: "" })); }}
                     placeholder="000123"
-                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 focus:outline-none font-mono ${formErrors.cardVoucher ? "border-red-400" : "border-amber-300"}`} />
+                    className={`w-full bg-white border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:outline-none font-mono ${formErrors.cardVoucher ? "border-red-400" : "border-purple-300"}`} />
                   {formErrors.cardVoucher && <p className="text-xs text-red-500">{formErrors.cardVoucher}</p>}
                 </div>
 
@@ -732,7 +795,12 @@ export default function NewInvoiceForm({
                             {s.description && <p className="text-xs text-ink-400">{s.description}</p>}
                           </div>
                           <div className="text-right shrink-0 ml-4">
-                            <p className="text-sm font-bold text-lilac-700">${Number(s.price).toFixed(2)}</p>
+                            <p className="text-xs font-bold text-lilac-700">PVP: ${Number(s.price).toFixed(2)}</p>
+                            {discountRate > 0 && (
+                              <p className="text-[11px] font-semibold text-green-700">
+                                Efectivo: ${(Number(s.price) * (1 - discountRate / 100)).toFixed(2)}
+                              </p>
+                            )}
                             <p className="text-[10px] text-ink-400">IVA {s.iva_code === "4" ? "15%" : "0%"}</p>
                           </div>
                         </button>
@@ -829,17 +897,12 @@ export default function NewInvoiceForm({
               </div>
               {totalDescuento > 0 && (
                 <div className="flex justify-between text-ink-600">
-                  <span>Descuento</span><span className="text-red-600">-${totalDescuento.toFixed(2)}</span>
+                  <span>Descuento {isCashOrTransfer ? `(${discountRate}%)` : ""}</span><span className="text-green-700 font-medium">-${totalDescuento.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-ink-600 border-b border-lilac-200 pb-1.5">
                 <span>IVA 15%</span><span>${ivaAmount.toFixed(2)}</span>
               </div>
-              {isCard && cardSurchargeAmount > 0 && (
-                <div className="flex justify-between text-ink-600">
-                  <span>Recargo Tarjeta ({cardSurchargePercent}%)</span><span>${cardSurchargeAmount.toFixed(2)}</span>
-                </div>
-              )}
               <div className="flex justify-between text-base font-bold text-ink-900 pt-0.5 border-t border-lilac-200 mt-1">
                 <span>TOTAL</span><span className="text-lilac-700">${totalFactura.toFixed(2)}</span>
               </div>

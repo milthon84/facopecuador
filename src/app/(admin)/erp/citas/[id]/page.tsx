@@ -32,10 +32,9 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("invoices")
-      .select("id, invoice_number")
+      .select("id, invoice_number, sri_status, created_at")
       .eq("xml_url", id)
-      .neq("sri_status", "cancelled")
-      .limit(1)
+      .order("created_at", { ascending: false })
   ]);
 
   const appt = apptRes.data;
@@ -63,10 +62,23 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
     : { data: [] };
 
   const consultation = consultationRes.data;
-  const invoice = invoiceRes.data;
+  const allInvoices = invoiceRes.data || [];
+  
+  const validInvoice = allInvoices.find(
+    (inv: any) => inv.sri_status === "authorized" || inv.sri_status === "submitted" || inv.sri_status === "draft"
+  );
+  const rejectedInvoice = allInvoices.find(
+    (inv: any) => inv.sri_status === "rejected" || inv.sri_status === "error"
+  );
 
-  const isBilled = !!(invoice && invoice.length > 0);
-  const invoiceNumber = invoice && invoice.length > 0 ? invoice[0].invoice_number : null;
+  const isBilled = !!validInvoice;
+  const invoiceNumber = validInvoice ? validInvoice.invoice_number : null;
+  const invoiceId = validInvoice ? validInvoice.id : null;
+  const rejectedInvoiceData = !validInvoice && rejectedInvoice ? {
+    id: rejectedInvoice.id,
+    invoice_number: rejectedInvoice.invoice_number,
+    sri_status: rejectedInvoice.sri_status
+  } : null;
 
   return (
     <div className="max-w-3xl">
@@ -136,6 +148,8 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
           appointment={JSON.parse(JSON.stringify(appt))} 
           isBilled={isBilled} 
           invoiceNumber={invoiceNumber} 
+          invoiceId={invoiceId}
+          rejectedInvoice={rejectedInvoiceData}
           canModifyCalendar={canModifyCalendar}
           canModifyBilling={canModifyBilling}
         />

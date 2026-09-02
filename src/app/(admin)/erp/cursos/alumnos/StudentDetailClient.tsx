@@ -385,13 +385,34 @@ export default function StudentDetailClient({
                                         item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
                                       );
                                       const isFullCourse = enroll.payment_type === "full_course";
-                                      const isModuleInvoiced = (isFullCourse || mi.billing_status === "invoiced") && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled";
+                                      const isModuleInvoiced = (isFullCourse || mi.billing_status === "invoiced") && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected" && mi.invoices?.sri_status !== "error";
+                                      const isRejected = mi.invoices && (mi.invoices.sri_status === "rejected" || mi.invoices.sri_status === "error");
+                                      const targetInvId = mi.invoices?.id || (isFullCourse ? (enroll.invoices?.id || enroll.invoice_id) : null);
+                                      const targetInvNum = mi.invoices?.invoice_number || (isFullCourse ? enroll.invoices?.invoice_number : null);
 
                                       if (isModuleInvoiced) {
-                                        return (
+                                        return targetInvId ? (
+                                          <Link
+                                            href={`/erp/facturacion/${targetInvId}`}
+                                            className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 hover:border-green-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
+                                            title="Ver detalles de la factura"
+                                          >
+                                            <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
+                                          </Link>
+                                        ) : (
                                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
-                                            <CheckCircle2 size={11} /> {isFullCourse ? "Pagado (Curso Completo)" : `Facturado (${mi.invoices?.invoice_number ? `#${mi.invoices.invoice_number}` : "OK"})`}
+                                            <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
                                           </span>
+                                        );
+                                      } else if (isRejected) {
+                                        return (
+                                          <Link
+                                            href={`/erp/facturacion/${mi.invoices.id}`}
+                                            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
+                                            title="Ver motivo de rechazo SRI"
+                                          >
+                                            <AlertCircle size={11} /> Factura Rechazada SRI (#{mi.invoices?.invoice_number || "ERR"})
+                                          </Link>
                                         );
                                       } else if (mi.billing_status === "free") {
                                         return (
@@ -558,7 +579,13 @@ export default function StudentDetailClient({
                         return (
                           <tr key={inv.id} className="hover:bg-lilac-50/10">
                             <td className="px-5 py-3 font-mono font-bold text-ink-950">
-                              {inv.invoice_number}
+                              <Link
+                                href={`/erp/facturacion/${inv.id}`}
+                                className="text-lilac-700 hover:text-lilac-900 hover:underline"
+                                title="Ver detalles de la factura"
+                              >
+                                {inv.invoice_number}
+                              </Link>
                             </td>
                             <td className="px-5 py-3 text-ink-700">
                               {inv.issue_date ? formatDateES(inv.issue_date) : "-"}
@@ -580,8 +607,9 @@ export default function StudentDetailClient({
                             </td>
                             <td className="px-5 py-3 text-right">
                               <Link
-                                href={`/erp/facturacion/facturas?search=${inv.invoice_number}`}
+                                href={`/erp/facturacion/${inv.id}`}
                                 className="inline-flex items-center gap-1 text-lilac-700 hover:text-lilac-900 font-bold text-xs"
+                                title="Ver detalles de la factura"
                               >
                                 <span>Ver Factura</span>
                                 <ExternalLink size={12} />

@@ -127,7 +127,7 @@ async function saveExpense(formData: FormData) {
     console.error("Asiento contable no generado:", err);
   }
 
-  redirect("/erp/gastos");
+  return { success: true };
 }
 
 export default async function NuevoGastoPage() {

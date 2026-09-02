@@ -71,11 +71,14 @@ export default async function ServiciosPage({
   const canEdit = await hasWritePermission("/erp/servicios");
 
   const supabase = createAdminClient();
-  const { data: services } = await supabase
-    .from("services")
-    .select("*")
-    .order("category")
-    .order("name");
+  const [{ data: services }, { data: sriConfig }] = await Promise.all([
+    supabase.from("services").select("*").order("category").order("name"),
+    supabase.from("sri_configs").select("*").maybeSingle(),
+  ]);
+
+  const cashDiscountPercent = sriConfig
+    ? Number(sriConfig.cash_discount_percent ?? sriConfig.card_surcharge_percent ?? 6.0)
+    : 6.0;
 
   type Service = {
     id: string;
@@ -213,9 +216,16 @@ export default async function ServiciosPage({
                             }`}>
                               IVA {s.iva_code === "4" ? "15%" : "0%"}
                             </span>
-                            <span className="text-sm font-bold text-lilac-700 w-16 text-right shrink-0">
-                              ${Number(s.price).toFixed(2)}
-                            </span>
+                            <div className="text-right shrink-0 min-w-[90px]">
+                              <p className="text-xs font-bold text-lilac-700" title="Tarifa Completa / Tarjeta">
+                                PVP: ${Number(s.price).toFixed(2)}
+                              </p>
+                              {cashDiscountPercent > 0 && (
+                                <p className="text-[11px] font-semibold text-green-700" title={`Descuento al Contado / Transferencia (${cashDiscountPercent}%)`}>
+                                  Efectivo: ${(Number(s.price) * (1 - cashDiscountPercent / 100)).toFixed(2)}
+                                </p>
+                              )}
+                            </div>
                             {canEdit && (
                               <div className="flex gap-1 shrink-0">
                                 <Link

@@ -83,7 +83,7 @@ async function updateExpense(formData: FormData) {
     await supabase.from("expenses").update(updatePayload).eq("id", id);
   }
 
-  redirect(`/erp/gastos/${id}`);
+  return { success: true, url: `/erp/gastos/${id}` };
 }
 
 export default async function EditarGastoPage({ params }: { params: Promise<{ id: string }> }) {

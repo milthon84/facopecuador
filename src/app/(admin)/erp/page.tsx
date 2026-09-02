@@ -42,6 +42,7 @@ import {
 import SendReminderButton from "@/components/SendReminderButton";
 import QuickAppointmentActions from "@/components/QuickAppointmentActions";
 import BillingPendingButton from "@/components/BillingPendingButton";
+import InvoiceLinkBadge from "@/components/InvoiceLinkBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -128,15 +129,24 @@ export default async function AdminDashboard({
   const { data: matchedInvoices } = apptIds.length > 0
     ? await supabase
         .from("invoices")
-        .select("xml_url, invoice_number")
+        .select("id, xml_url, invoice_number, sri_status")
         .in("xml_url", apptIds)
-        .neq("sri_status", "cancelled")
     : { data: [] };
   
-  const billedApptInvoices = new Map<string, string>();
+  const billedApptInvoices = new Map<string, { id: string; invoice_number: string; sri_status: string }>();
   matchedInvoices?.forEach((inv) => {
     if (inv.xml_url && inv.invoice_number) {
-      billedApptInvoices.set(inv.xml_url, inv.invoice_number);
+      const existing = billedApptInvoices.get(inv.xml_url);
+      const isCurrentValid = inv.sri_status === "authorized" || inv.sri_status === "submitted" || inv.sri_status === "draft";
+      const isExistingValid = existing && (existing.sri_status === "authorized" || existing.sri_status === "submitted" || existing.sri_status === "draft");
+
+      if (!existing || (!isExistingValid && isCurrentValid)) {
+        billedApptInvoices.set(inv.xml_url, {
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          sri_status: inv.sri_status,
+        });
+      }
     }
   });
   const scheduled = appts.filter((a) => a.status === "scheduled");
@@ -292,8 +302,9 @@ export default async function AdminDashboard({
                 ? appt.dental_consultation.length > 0
                 : !!appt.dental_consultation;
 
-              const invoiceNumber = billedApptInvoices.get(appt.id);
-              const isBilled = !!invoiceNumber;
+              const invInfo = billedApptInvoices.get(appt.id);
+              const isValidBilled = !!(invInfo && (invInfo.sri_status === "authorized" || invInfo.sri_status === "submitted" || invInfo.sri_status === "draft"));
+              const isRejected = !!(invInfo && (invInfo.sri_status === "rejected" || invInfo.sri_status === "error"));
 
               return (
                 <li key={appt.id}>
@@ -356,11 +367,23 @@ export default async function AdminDashboard({
                         />
                       )}
                       {(appt.status === "scheduled" || appt.status === "attended") && (
-                        isBilled ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm whitespace-nowrap" title={`Factura No. ${invoiceNumber}`}>
-                            <CheckCircle2 size={12} className="text-green-600" />
-                            <span>Facturado ({invoiceNumber})</span>
-                          </span>
+                        isValidBilled ? (
+                          <InvoiceLinkBadge
+                            invoiceId={invInfo.id}
+                            invoiceNumber={invInfo.invoice_number}
+                            sriStatus={invInfo.sri_status}
+                          />
+                        ) : isRejected ? (
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            <InvoiceLinkBadge
+                              invoiceId={invInfo.id}
+                              invoiceNumber={invInfo.invoice_number}
+                              sriStatus={invInfo.sri_status}
+                            />
+                            {canModifyBilling && (
+                              <BillingPendingButton patientId={p?.id} appointmentId={appt.id} />
+                            )}
+                          </div>
                         ) : (
                           canModifyBilling ? (
                             <BillingPendingButton patientId={p?.id} appointmentId={appt.id} />

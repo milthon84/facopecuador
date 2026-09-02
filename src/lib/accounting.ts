@@ -9,22 +9,22 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Mapeo: categoría de gasto → cuenta contable ────────────────────────────
 const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: string }> = {
-  "Insumos dentales":    { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
-  "Equipos":             { code: "5.2.02.06", name: "Equipos y Herramientas" },
-  "Arriendo":            { code: "5.2.02.01", name: "Arriendo de Local" },
-  "Servicios básicos":   { code: "5.2.02.02", name: "Servicios Básicos" },
-  "Salarios":            { code: "5.2.01.01", name: "Sueldos y Salarios" },
-  "Suministros oficina": { code: "5.2.02.03", name: "Suministros de Oficina" },
-  "Mantenimiento":       { code: "5.1.01.02", name: "Mantenimiento de Equipos" },
-  "Publicidad":          { code: "5.2.02.04", name: "Publicidad y Marketing" },
-  "Otros":               { code: "5.2.02.99", name: "Otros Gastos" },
+  "Insumos dentales":    { code: "5.1.01", name: "Insumos y Materiales Clínicos" },
+  "Equipos":             { code: "5.2.04", name: "Mantenimiento Equipos e Instalaciones" },
+  "Arriendo":            { code: "5.2.02", name: "Arriendo del Local / Consultorio" },
+  "Servicios básicos":   { code: "5.2.03", name: "Servicios Básicos (Luz, Agua, Internet)" },
+  "Salarios":            { code: "5.2.01", name: "Sueldos, Salarios y Beneficios" },
+  "Suministros oficina": { code: "5.2.05", name: "Suministros Oficina y Aseo" },
+  "Mantenimiento":       { code: "5.2.04", name: "Mantenimiento Equipos e Instalaciones" },
+  "Publicidad":          { code: "5.2.06", name: "Publicidad, Marketing y Comisiones" },
+  "Otros":               { code: "5.2.09", name: "Impuestos, Tasas y Otros Gastos" },
 };
 
 // ── Mapeo: forma de pago del gasto → cuenta de contrapartida ──────────────
 function paymentAccount(method: string): { code: string; name: string } {
   if (method === "credito") return { code: "2.1.01.01", name: "Cuentas por Pagar Proveedores" };
-  if (method === "transferencia") return { code: "1.1.01.02", name: "Bancos" };
-  return { code: "1.1.01.02", name: "Bancos" }; // efectivo y tarjeta → bancos
+  if (method === "transferencia") return { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+  return { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" }; // efectivo y tarjeta → bancos
 }
 
 // ── Tipo para una línea del asiento ───────────────────────────────────────
@@ -107,14 +107,14 @@ export async function createInvoiceJournalEntry(params: {
   const lines: JournalLine[] = [
     {
       account_code: "1.1.02.01",
-      account_name: "Cuentas por Cobrar Clientes",
+      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
       debit:  r2(params.total),
       credit: 0,
       description: params.client_name,
     },
     {
-      account_code: "4.1.01.01",
-      account_name: "Servicios Odontológicos",
+      account_code: "4.1.01",
+      account_name: "Servicios de Prevención e Higiene", // Generic default fallback for invoice
       debit:  0,
       credit: subtotalTotal,
     },
@@ -122,7 +122,7 @@ export async function createInvoiceJournalEntry(params: {
 
   if (params.iva_amount > 0) {
     lines.push({
-      account_code: "2.1.02.01",
+      account_code: "2.1.03.01",
       account_name: "IVA en Ventas por Pagar",
       debit:  0,
       credit: r2(params.iva_amount),
@@ -205,12 +205,10 @@ export async function createExpenseJournalEntry(params: {
 
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────
 const ASSET_ACCOUNTS: Record<string, { asset: string; assetName: string; dep: string; depName: string; depExp: string; depExpName: string }> = {
-  "Inmuebles":                  { asset: "1.2.01.01", assetName: "Edificios e Inmuebles",      dep: "1.2.02.01", depName: "Dep. Acum. Edificios",      depExp: "5.2.03.01", depExpName: "Gasto Dep. Edificios" },
-  "Equipos odontológicos":      { asset: "1.2.01.02", assetName: "Equipos Odontológicos",      dep: "1.2.02.02", depName: "Dep. Acum. Equipos Odont.", depExp: "5.2.03.02", depExpName: "Gasto Dep. Equipos Odont." },
-  "Equipos de computación":     { asset: "1.2.01.03", assetName: "Equipos de Computación",    dep: "1.2.02.03", depName: "Dep. Acum. Computación",    depExp: "5.2.03.03", depExpName: "Gasto Dep. Computación" },
-  "Muebles y enseres":          { asset: "1.2.01.04", assetName: "Muebles y Enseres",          dep: "1.2.02.04", depName: "Dep. Acum. Muebles",        depExp: "5.2.03.04", depExpName: "Gasto Dep. Muebles" },
-  "Vehículos":                  { asset: "1.2.01.05", assetName: "Vehículos",                  dep: "1.2.02.05", depName: "Dep. Acum. Vehículos",      depExp: "5.2.03.05", depExpName: "Gasto Dep. Vehículos" },
-  "Otros equipos y maquinaria": { asset: "1.2.01.09", assetName: "Otros Activos Fijos",        dep: "1.2.02.09", depName: "Dep. Acum. Otros Activos",  depExp: "5.2.03.09", depExpName: "Gasto Dep. Otros Activos" },
+  "Equipos odontológicos":      { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
+  "Muebles y enseres":          { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08", depExpName: "Depreciaciones" },
+  "Equipos de computación":     { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08", depExpName: "Depreciaciones" },
+  "Otros equipos y maquinaria": { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
 };
 
 function assetAccounts(category: string) {
@@ -230,8 +228,8 @@ export async function createAssetPurchaseJournalEntry(params: {
 }) {
   const accts = assetAccounts(params.category);
   const creditAcct = params.on_credit
-    ? { code: "2.1.01.02", name: "Cuentas por Pagar (Activos)" }
-    : { code: "1.1.01.02", name: "Bancos" };
+    ? { code: "2.1.01.01", name: "Cuentas por Pagar Proveedores" }
+    : { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
 
   return insertJournalEntry({
     entry_date:     params.purchase_date,
@@ -301,8 +299,8 @@ export async function createMonthlyClosingJournalEntry(params: {
   // 2. Si hay pérdida, debitar a Utilidad/Pérdida del Ejercicio
   if (params.net_profit < 0) {
     lines.push({
-      account_code: "3.2.02",
-      account_name: "Utilidad / Pérdida del Ejercicio",
+      account_code: "3.3.02",
+      account_name: "Utilidad o Pérdida del Ejercicio",
       debit:  r2(Math.abs(params.net_profit)),
       credit: 0,
       description: `Pérdida del Período ${params.period}`,
@@ -325,8 +323,8 @@ export async function createMonthlyClosingJournalEntry(params: {
   // 4. Si hay utilidad, me acreditar a Utilidad/Pérdida del Ejercicio
   if (params.net_profit > 0) {
     lines.push({
-      account_code: "3.2.02",
-      account_name: "Utilidad / Pérdida del Ejercicio",
+      account_code: "3.3.02",
+      account_name: "Utilidad o Pérdida del Ejercicio",
       debit:  0,
       credit: r2(params.net_profit),
       description: `Utilidad del Período ${params.period}`,
@@ -435,8 +433,8 @@ export async function createAnnualClosingJournalEntry(params: {
   if (params.gross_profit > 0) {
     if (params.employee_profit_sharing > 0) {
       lines.push({
-        account_code: "2.1.03.03",
-        account_name: "15% Participación Trabajadores por Pagar",
+        account_code: "2.1.02.03",
+        account_name: "15% Participación Trabajadores",
         debit:  0,
         credit: r2(params.employee_profit_sharing),
         description: `15% Utilidad Trabajadores ${params.year}`,
@@ -445,8 +443,8 @@ export async function createAnnualClosingJournalEntry(params: {
 
     if (params.income_tax > 0) {
       lines.push({
-        account_code: "2.1.02.04",
-        account_name: "25% Impuesto a la Renta por Pagar",
+        account_code: "2.1.03.03",
+        account_name: "Impuesto a la Renta por Pagar",
         debit:  0,
         credit: r2(params.income_tax),
         description: `Impuesto a la Renta SRI ${params.year}`,
@@ -455,8 +453,8 @@ export async function createAnnualClosingJournalEntry(params: {
 
     if (params.net_profit > 0) {
       lines.push({
-        account_code: "3.2.02",
-        account_name: "Utilidad / Pérdida del Ejercicio",
+        account_code: "3.3.02",
+        account_name: "Utilidad o Pérdida del Ejercicio",
         debit:  0,
         credit: r2(params.net_profit),
         description: `Utilidad Neta del Ejercicio ${params.year}`,

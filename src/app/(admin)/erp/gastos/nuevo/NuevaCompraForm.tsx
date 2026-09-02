@@ -74,8 +74,14 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, kno
     setLoading(true);
     try {
       const formData = new FormData(e.currentTarget);
-      await saveExpense(formData);
+      const res = await saveExpense(formData) as { success?: boolean; error?: string; url?: string };
+      if (res?.success) {
+        window.location.href = res.url || "/erp/gastos";
+      } else if (res?.error) {
+        setErrorMsg(res.error);
+      }
     } catch (err: any) {
+      if (err?.message?.includes("NEXT_REDIRECT")) return;
       setErrorMsg(err.message || "Error al guardar el gasto.");
     } finally {
       setLoading(false);

@@ -12,6 +12,7 @@ export async function createPatientQuotationAction(data: {
   subtotal: number;
   discount: number;
   total: number;
+  paymentMethod?: string;
   notes?: string;
   sendEmail?: boolean;
 }) {
@@ -44,6 +45,7 @@ export async function createPatientQuotationAction(data: {
         subtotal: data.subtotal,
         discount: data.discount,
         total: data.total,
+        paymentMethod: data.paymentMethod,
         notes: data.notes
       });
       if (emailSuccess) {
@@ -79,7 +81,9 @@ export async function createPatientQuotationAction(data: {
       quotationNumber,
       data.items,
       data.total,
-      data.notes
+      data.notes,
+      data.discount,
+      data.paymentMethod
     );
 
     revalidatePath(`/erp/pacientes/${data.patientId}`);
@@ -115,6 +119,9 @@ export async function sendQuotationEmailAction(quotationId: string) {
       return { success: false, error: "El paciente no tiene un correo electrónico registrado." };
     }
 
+    const hasDiscount = Number(quote.discount || 0) > 0;
+    const paymentMethod = hasDiscount ? "efectivo" : "tarjeta";
+
     const success = await sendQuotationEmail({
       patientName: patient.full_name,
       patientEmail: patient.email,
@@ -124,6 +131,7 @@ export async function sendQuotationEmailAction(quotationId: string) {
       subtotal: quote.subtotal,
       discount: quote.discount,
       total: quote.total,
+      paymentMethod,
       notes: quote.notes
     });
 

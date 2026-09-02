@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, X, AlertTriangle, CheckCircle2, AlertCircle, Copy, Loader2 } from "lucide-react";
+import { Trash2, X, AlertTriangle, CheckCircle2, AlertCircle, Copy, Loader2, ExternalLink } from "lucide-react";
 
 interface Props {
   invoiceId: string;
   invoiceNumber: string | null;
   sriStatus: string;
   clientDocument: string;
-  issueDate: string; // "YYYY-MM-DD"
+  issueDate?: string | null; // "YYYY-MM-DD" o ISO string
   sriAccessKey: string;
 }
 
@@ -34,8 +34,16 @@ export default function AnularFacturaButton({
 
   // Calcular fecha límite (día 9 del mes siguiente)
   const getDeadlineInfo = () => {
-    if (!issueDate) return { passed: false, dateStr: "" };
-    const [year, month, day] = issueDate.split("-").map(Number);
+    const rawDate = issueDate || new Date().toISOString().split("T")[0];
+    const cleanDate = rawDate.includes("T") ? rawDate.split("T")[0] : rawDate;
+    const parts = cleanDate.split("-").map(Number);
+    
+    if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1])) {
+      return { passed: false, dateStr: "Día 9 del mes siguiente" };
+    }
+    
+    const year = parts[0];
+    const month = parts[1]; // 1-indexed (ej: 9 para septiembre)
     const limitDate = new Date(year, month, 9, 23, 59, 59, 999);
     const now = new Date();
     
@@ -43,7 +51,8 @@ export default function AnularFacturaButton({
       "enero", "febrero", "marzo", "abril", "mayo", "junio",
       "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
     ];
-    const dateStr = `9 de ${months[month]} de ${year}`;
+    const monthName = months[(month % 12)];
+    const dateStr = `9 de ${monthName} de ${year}`;
     
     return {
       passed: now > limitDate,
@@ -185,22 +194,24 @@ export default function AnularFacturaButton({
                     {/* Clave de Acceso para el portal */}
                     <div className="bg-lilac-50/50 border border-lilac-100 rounded-2xl p-3.5 space-y-2">
                       <span className="text-[10px] font-bold text-ink-500 uppercase tracking-wider block">
-                        Clave de Acceso para SRI (Copiar)
+                        Clave de Acceso para SRI (49 dígitos)
                       </span>
                       <div className="flex items-center gap-2">
-                        <code className="text-xs font-mono bg-white border border-lilac-200 rounded-xl px-3 py-2 break-all flex-1 text-ink-800">
+                        <code className="text-xs font-mono bg-white border border-lilac-200 rounded-xl px-3 py-2 break-all flex-1 text-ink-800 font-bold">
                           {sriAccessKey}
                         </code>
                         <button
+                          type="button"
                           onClick={handleCopy}
-                          className={`p-2 rounded-xl border text-xs font-semibold flex items-center justify-center transition-colors shrink-0 ${
+                          className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 ${
                             copied
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : "bg-white text-lilac-700 border-lilac-200 hover:bg-lilac-50"
+                              ? "bg-green-600 text-white border-green-600"
+                              : "bg-lilac-600 text-white border-lilac-600 hover:bg-lilac-700 shadow-sm"
                           }`}
                           title="Copiar clave de acceso"
                         >
-                          {copied ? <CheckCircle2 size={15} /> : <Copy size={15} />}
+                          {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                          {copied ? "¡Copiado!" : "Copiar Clave"}
                         </button>
                       </div>
                     </div>

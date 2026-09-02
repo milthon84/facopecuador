@@ -521,7 +521,7 @@ export default async function ClasesPage({
             // Cargar alumnos inscritos (excluyendo explícitamente los retirados)
             const enrolledDocs = await supabase
               .from("curso_inscripciones")
-              .select("id, status, created_at, payment_type, alumnos(*)")
+              .select("id, status, created_at, payment_type, invoice_id, invoices(id, invoice_number), alumnos(*)")
               .eq("course_id", courseId)
               .neq("status", "dropped");
 
@@ -572,7 +572,7 @@ export default async function ClasesPage({
               attendanceMap.set(r.student_id, { status: r.status, notes: r.notes });
             });
 
-            const billingMap = new Map<string, { billingStatus: string; invoiceNumber?: string; inscriptionId: string }>();
+            const billingMap = new Map<string, { billingStatus: string; invoiceNumber?: string; invoiceId?: string; inscriptionId: string }>();
             moduleBillingList.forEach((mb: any) => {
               const items = mb.invoices?.invoice_items || [];
               const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
@@ -583,6 +583,7 @@ export default async function ClasesPage({
               billingMap.set(mb.enrollment_id, {
                 billingStatus: realBillingStatus,
                 invoiceNumber: mb.invoices?.invoice_number,
+                invoiceId: mb.invoices?.id || mb.invoice_id,
                 inscriptionId: mb.id,
               });
             });
@@ -729,7 +730,9 @@ export default async function ClasesPage({
 
                             if (enrollment.payment_type === "full_course") {
                               effectiveBillingStatus = "invoiced_full";
+                              fullCourseInvoiceNumber = enrollment.invoices?.invoice_number || null;
                             }
+                            const fullCourseInvoiceId = enrollment.invoices?.id || enrollment.invoice_id || null;
 
                             const prefName = encodeURIComponent(student.full_name);
                             const prefDoc = encodeURIComponent(student.document_number);
@@ -756,12 +759,29 @@ export default async function ClasesPage({
                                   <div className="pt-0.5 flex items-center gap-1.5">
                                     <span className="text-[10px] font-semibold text-ink-600">Pago Módulo:</span>
                                     {(effectiveBillingStatus === "invoiced" || effectiveBillingStatus === "invoiced_full") ? (
-                                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.2 rounded-md">
-                                        <CheckCircle2 size={10} />
-                                        {effectiveBillingStatus === "invoiced_full"
-                                          ? `Pagado - Curso Completo${fullCourseInvoiceNumber ? ` (#${fullCourseInvoiceNumber})` : ""}`
-                                          : `Facturado${billingInfo.invoiceNumber ? ` (#${billingInfo.invoiceNumber})` : ""}`}
-                                      </span>
+                                      (() => {
+                                        const invId = effectiveBillingStatus === "invoiced_full" ? fullCourseInvoiceId : billingInfo.invoiceId;
+                                        const invNum = effectiveBillingStatus === "invoiced_full" ? fullCourseInvoiceNumber : billingInfo.invoiceNumber;
+                                        const invText = effectiveBillingStatus === "invoiced_full"
+                                          ? `Pagado - Curso Completo${invNum ? ` (#${invNum})` : ""}`
+                                          : `Facturado${invNum ? ` (#${invNum})` : ""}`;
+
+                                        return invId ? (
+                                          <Link
+                                            href={`/erp/facturacion/${invId}`}
+                                            className="inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 hover:border-green-300 transition-colors px-2 py-0.5 rounded-md cursor-pointer"
+                                            title="Ver detalles de la factura"
+                                          >
+                                            <CheckCircle2 size={10} />
+                                            <span className="hover:underline">{invText}</span>
+                                          </Link>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md">
+                                            <CheckCircle2 size={10} />
+                                            {invText}
+                                          </span>
+                                        );
+                                      })()
                                     ) : effectiveBillingStatus === "free" ? (
                                       <span className="text-[9px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.2 rounded-md">
                                         Pagado SF

@@ -37,9 +37,13 @@ export default async function NewInvoicePage({
     supabase.from("sri_configs").select("*").maybeSingle(),
   ]);
 
-  let cardSurchargePercent = 5.0;
-  if (sriConfig && "card_surcharge_percent" in sriConfig && sriConfig.card_surcharge_percent != null) {
-    cardSurchargePercent = Number(sriConfig.card_surcharge_percent);
+  let cashDiscountPercent = 6.0;
+  if (sriConfig) {
+    if ("cash_discount_percent" in sriConfig && sriConfig.cash_discount_percent != null) {
+      cashDiscountPercent = Number(sriConfig.cash_discount_percent);
+    } else if ("card_surcharge_percent" in sriConfig && sriConfig.card_surcharge_percent != null) {
+      cashDiscountPercent = Number(sriConfig.card_surcharge_percent);
+    }
   }
 
   return (
@@ -48,7 +52,7 @@ export default async function NewInvoicePage({
       initialPatient={preselectedResult.data ?? null}
       services={services ?? []}
       bankAccounts={bankAccounts ?? []}
-      cardSurchargePercent={cardSurchargePercent}
+      cashDiscountPercent={cashDiscountPercent}
       appointmentId={searchParams.appointment_id ?? null}
       initialClientName={searchParams.client_name}
       initialClientDocument={searchParams.client_document}

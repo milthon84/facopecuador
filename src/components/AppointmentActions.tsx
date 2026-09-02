@@ -9,6 +9,8 @@ interface Props {
   appointment: any;
   isBilled?: boolean;
   invoiceNumber?: string | null;
+  invoiceId?: string | null;
+  rejectedInvoice?: { id: string; invoice_number: string; sri_status: string } | null;
   canModifyCalendar?: boolean;
   canModifyBilling?: boolean;
 }
@@ -17,6 +19,8 @@ export default function AppointmentActions({
   appointment,
   isBilled = false,
   invoiceNumber = null,
+  invoiceId = null,
+  rejectedInvoice = null,
   canModifyCalendar = true,
   canModifyBilling = true,
 }: Props) {
@@ -38,6 +42,14 @@ export default function AppointmentActions({
   const patient = Array.isArray(appointment.patient) ? appointment.patient[0] : appointment.patient;
 
   async function updateStatus(status: string, extra: Record<string, any> = {}) {
+    if (isBilled && (status === "cancelled" || status === "no_show")) {
+      setErrorModal({
+        show: true,
+        message: `Esta cita ya cuenta con una factura autorizada/registrada ${invoiceNumber ? `(№ ${invoiceNumber})` : ""}. Para modificar o cancelar esta cita, primero debes anular la factura correspondiente.`,
+      });
+      return;
+    }
+
     setLoading(true);
     setActiveStatus(status);
     let isRedirecting = false;
@@ -116,19 +128,43 @@ export default function AppointmentActions({
       <div className="flex flex-wrap items-center gap-2">
         {/* Estado de Facturación / Botón Facturar */}
         {isBilled ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
-            <CheckCircle2 size={13} className="text-green-600" />
-            <span>Facturado {invoiceNumber ? `— № ${invoiceNumber}` : ""}</span>
-          </div>
-        ) : (
-          canModifyBilling && (
+          invoiceId ? (
             <Link
-              href={`/erp/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
-              className="inline-flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
+              href={`/erp/facturacion/${invoiceId}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 hover:border-green-300 transition-colors shadow-sm w-fit whitespace-nowrap"
+              title="Ver detalles de la factura"
             >
-              <Receipt size={14} /> Facturar Cita
+              <CheckCircle2 size={13} className="text-green-600" />
+              <span>Facturado {invoiceNumber ? `— № ${invoiceNumber}` : ""}</span>
             </Link>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
+              <CheckCircle2 size={13} className="text-green-600" />
+              <span>Facturado {invoiceNumber ? `— № ${invoiceNumber}` : ""}</span>
+            </div>
           )
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            {rejectedInvoice && (
+              <Link
+                href={`/erp/facturacion/${rejectedInvoice.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-300 transition-colors shadow-sm w-fit whitespace-nowrap"
+                title="Ver observaciones y error de la factura rechazada por el SRI"
+              >
+                <XCircle size={13} className="text-red-600" />
+                <span>Factura Rechazada SRI (№ {rejectedInvoice.invoice_number})</span>
+              </Link>
+            )}
+
+            {canModifyBilling && (
+              <Link
+                href={`/erp/facturacion/nueva?patient_id=${patient?.id}&appointment_id=${appointment.id}`}
+                className="inline-flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-all shadow-sm"
+              >
+                <Receipt size={14} /> Facturar Cita
+              </Link>
+            )}
+          </div>
         )}
 
         {/* Acciones de Cita Agendada */}

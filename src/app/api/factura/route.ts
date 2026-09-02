@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       patient_id, appointment_id, client_name, client_document, client_email, client_phone, client_address, items,
       payment_method = "efectivo", bank_account_id, payment_reference,
       card_type, card_lote, card_voucher,
+      comprobante_url, image_url,
       module_enrollment_ids,
       course_enrollment_id,
       full_course_payment,
@@ -64,26 +65,6 @@ export async function POST(req: Request) {
 
     // 3. Calcular totales con redondeo para evitar errores de punto flotante
     let invoiceItems = [...items];
-    if (payment_method === "tarjeta_credito") {
-      const surchargePercent = Number(config.card_surcharge_percent ?? 5.0);
-      if (surchargePercent > 0) {
-        const tempSub15 = items.filter((i: any) => i.iva_code === "4").reduce((acc: number, i: any) => acc + ((Number(i.quantity) * Number(i.unit_price)) - Number(i.discount || 0)), 0);
-        const tempSub0  = items.filter((i: any) => i.iva_code === "0").reduce((acc: number, i: any) => acc + ((Number(i.quantity) * Number(i.unit_price)) - Number(i.discount || 0)), 0);
-        const surchargeAmount = round2((tempSub15 + tempSub0) * (surchargePercent / 100));
-
-        if (surchargeAmount > 0) {
-          invoiceItems.push({
-            code: "COM-TARJETA",
-            description: `Recargo por Pago con Tarjeta (${surchargePercent}%)`,
-            quantity: 1,
-            unit_price: surchargeAmount,
-            discount: 0,
-            iva_code: "0",
-            category: "Otros",
-          });
-        }
-      }
-    }
 
     let subtotal15 = 0;
     let subtotal0 = 0;
@@ -282,7 +263,7 @@ export async function POST(req: Request) {
       sri_environment: config.ambiente,
       payment_method:    payment_method    || null,
       bank_account_id:   bank_account_id   || null,
-      payment_reference: payment_reference || null,
+      payment_reference: payment_reference || comprobante_url || image_url || null,
       card_type:         card_type         || null,
       card_lote:         card_lote         || null,
       card_voucher:      card_voucher      || null,
@@ -290,6 +271,20 @@ export async function POST(req: Request) {
     }).select().single();
 
     if (invoiceError) throw invoiceError;
+
+    // Registrar en invoice_photos si existe un comprobante
+    const finalProofUrl = comprobante_url || image_url;
+    if (finalProofUrl) {
+      try {
+        await supabase.from("invoice_photos").insert({
+          invoice_id: invoice.id,
+          title: "Comprobante de Pago",
+          image_url: finalProofUrl,
+        });
+      } catch (photoErr) {
+        console.warn("No se pudo registrar foto en invoice_photos:", photoErr);
+      }
+    }
 
     // 10. Guardar Ítems
     const itemsToInsert = detalles.map((d) => ({
