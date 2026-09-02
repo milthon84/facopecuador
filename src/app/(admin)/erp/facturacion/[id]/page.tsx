@@ -386,6 +386,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   isLocked={isInvoiceLocked}
                   variant="inline"
                 />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Ítems ──────────────────────────────────────────────── */}
