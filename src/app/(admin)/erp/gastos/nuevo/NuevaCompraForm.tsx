@@ -18,7 +18,7 @@ interface Props {
   cajaAccounts: Account[];
   knownSuppliersList?: SupplierItem[];
   initialData?: any;
-  saveExpense: (formData: FormData) => Promise<void>;
+  saveExpense: (formData: FormData) => Promise<void | { success?: boolean; error?: string; url?: string }>;
 }
 
 export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, knownSuppliersList = [], initialData, saveExpense }: Props) {
