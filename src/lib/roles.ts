@@ -147,14 +147,14 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "General",       path: "/erp/contabilidad",        label: "Contabilidad", hasEdit: true },
 
   // Sistema
-  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Config. SRI", hasEdit: true },
+  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Configuración", hasEdit: true },
   { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
   // Publicidad
   { section: "Publicidad",    path: "/erp/publicidad",          label: "Publicidad y Anuncios", hasEdit: true },
   { section: "Publicidad",    path: "/erp/sitio-web",           label: "Página Web / CMS", hasEdit: true },
 
   // Sistema
-  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Config. SRI", hasEdit: true },
+  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Configuración", hasEdit: true },
   { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
   { section: "Sistema",       path: "/erp/roles",               label: "Roles", hasEdit: true },
   { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría", hasEdit: false },
@@ -215,7 +215,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/sitio-web",           label: "Página Web / CMS",      icon: "Globe",           section: "Publicidad",    roles: ["admin"] },
 
   // Sistema
-  { href: "/erp/facturacion/config",  label: "Config. SRI",         icon: "FileKey",          section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/facturacion/config",  label: "Configuración",       icon: "Settings",         section: "Sistema",       roles: ["admin"] },
   { href: "/erp/usuarios",            label: "Usuarios",            icon: "UserCog",          section: "Sistema",       roles: ["admin"] },
   { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
   { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },
