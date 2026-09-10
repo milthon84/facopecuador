@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { 
   Camera, 
   Upload, 
@@ -211,7 +212,7 @@ export default function FotosPacienteSection({
                 className="relative group w-8 h-8 rounded-lg overflow-hidden border border-lilac-200 cursor-pointer shrink-0 shadow-xs hover:border-gold-500 transition-colors"
                 title={photo.title}
               >
-                <img src={photo.image_url} alt={photo.title} className="w-full h-full object-cover" />
+                <Image src={photo.image_url} alt={photo.title} fill className="object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white">
                   <Eye size={11} />
                 </div>
@@ -296,11 +297,11 @@ export default function FotosPacienteSection({
               className="group relative bg-ink-950 rounded-xl border border-lilac-100 overflow-hidden aspect-square cursor-pointer shadow-2xs hover:border-gold-500 transition-all"
               title={photo.title}
             >
-              <img
+              <Image
                 src={photo.image_url}
                 alt={photo.title}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                loading="lazy"
+                fill
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
               />
 
               {/* Superposición elegante en Hover con título y eliminar */}
@@ -514,11 +515,12 @@ export default function FotosPacienteSection({
           </div>
 
           {/* Image display */}
-          <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-black/40 min-h-[250px]">
-            <img
+          <div className="relative p-4 flex-1 overflow-auto flex items-center justify-center bg-black/40 min-h-[50vh]">
+            <Image
               src={activePhoto.image_url}
               alt={activePhoto.title}
-              className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl shadow-lg"
+              fill
+              className="object-contain rounded-xl shadow-lg p-4"
             />
           </div>
         </div>

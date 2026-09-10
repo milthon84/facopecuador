@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Stethoscope, ArrowRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 
@@ -197,10 +198,11 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
               />
             </div>
           ) : nextPost.image_url ? (
-            <img
+            <Image
               src={nextPost.image_url}
               alt={nextPost.title}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-amber-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
@@ -253,10 +255,11 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
           </div>
         ) : activePost.image_url ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
-            <img
+            <Image
               src={activePost.image_url}
               alt={activePost.title}
-              className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
+              fill
+              className="object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>
         ) : (

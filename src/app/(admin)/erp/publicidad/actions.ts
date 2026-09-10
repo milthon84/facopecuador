@@ -74,6 +74,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
           .from("web-assets")
           .upload(fileName, buffer, {
             contentType: imageFile.type || "image/jpeg",
+            cacheControl: "31536000",
             upsert: true,
           });
 
@@ -106,6 +107,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
           .from("web-assets")
           .upload(fileName, buffer, {
             contentType: videoFile.type || "video/mp4",
+            cacheControl: "31536000",
             upsert: true,
           });
 

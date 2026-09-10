@@ -46,6 +46,7 @@ export async function POST(req: Request) {
       .from("invoice-photos")
       .upload(fileName, buffer, {
         contentType: imageFile.type,
+        cacheControl: "31536000",
         upsert: true,
       });
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   CalendarDays,
@@ -114,20 +115,22 @@ export default async function HomePage() {
       {/* ── IMÁGENES PURAS DE ORTODONCIA DEGRADADAS EN BORDES LATERALES ── */}
       {/* EXTREMO IZQUIERDO: BRACKETS PURAS SIN TEXTO */}
       <div className="fixed left-0 top-0 bottom-0 w-[22vw] max-w-[320px] pointer-events-none z-0 hidden xl:block overflow-hidden">
-        <img
+        <Image
           src="/images/ortho-bg-left.jpg"
           alt=""
-          className="w-full h-full object-cover opacity-[0.16] mix-blend-multiply filter contrast-105"
+          fill
+          className="object-cover opacity-[0.16] mix-blend-multiply filter contrast-105"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-slate-900/10 via-transparent to-[#F8FAFC]" />
       </div>
 
       {/* EXTREMO DERECHO: SONRISA PURA SIN TEXTO */}
       <div className="fixed right-0 top-0 bottom-0 w-[22vw] max-w-[320px] pointer-events-none z-0 hidden xl:block overflow-hidden">
-        <img
+        <Image
           src="/images/ortho-bg-right.jpg"
           alt=""
-          className="w-full h-full object-cover opacity-[0.16] mix-blend-multiply filter contrast-105"
+          fill
+          className="object-cover opacity-[0.16] mix-blend-multiply filter contrast-105"
         />
         <div className="absolute inset-0 bg-gradient-to-l from-slate-900/10 via-transparent to-[#F8FAFC]" />
       </div>
@@ -140,8 +143,8 @@ export default async function HomePage() {
       {/* ── MENÚ DE NAVEGACIÓN PRINCIPAL (HEADER FIJO 100% CRISTALINO) ── */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200/90 shadow-sm transition-all">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <img src="/logo.png" alt={clinicName} className="h-11 sm:h-13 w-auto object-contain transition-transform group-hover:scale-105" />
+          <Link href="/" className="flex items-center gap-3 group relative w-[180px] h-[52px]">
+            <Image src="/logo.png" alt={clinicName} fill className="object-contain transition-transform group-hover:scale-105" />
           </Link>
           
           <nav className="hidden md:flex items-center gap-9 text-sm font-semibold text-slate-700">

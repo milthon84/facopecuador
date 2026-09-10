@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Calendar, FileText, Phone, CalendarDays } from "lucide-react";
@@ -54,8 +55,8 @@ export default async function NoticiaDetailPage({ params }: Props) {
       {/* Cabecera */}
       <header className="sticky top-0 z-40 w-full border-b border-lilac-100 bg-white/80 backdrop-blur-md">
         <div className="px-6 py-4 flex items-center justify-between max-w-4xl mx-auto">
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt={clinicName} className="h-10 w-auto object-contain" />
+          <Link href="/" className="flex items-center gap-2 relative w-[160px] h-[40px]">
+            <Image src="/logo.png" alt={clinicName} fill className="object-contain" />
           </Link>
           <Link href="/" className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-gold-600 hover:text-gold-800 transition">
             <ArrowLeft size={16} /> Volver al Inicio
@@ -87,11 +88,12 @@ export default async function NoticiaDetailPage({ params }: Props) {
             />
           </div>
         ) : post.image_url ? (
-          <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8">
-            <img 
+          <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8 w-full h-[450px]">
+            <Image 
               src={post.image_url} 
               alt={post.title} 
-              className="w-full h-auto max-h-[450px] object-cover"
+              fill
+              className="object-cover"
             />
           </div>
         ) : (

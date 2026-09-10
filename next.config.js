@@ -14,6 +14,15 @@ const nextConfig = {
     },
   },
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+      },
+    ],
+  },
+
   webpack: (config) => {
     config.infrastructureLogging = { level: "error" };
     return config;
