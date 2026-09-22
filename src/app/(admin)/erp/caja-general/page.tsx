@@ -1,96 +1,30 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { redirect } from "next/navigation";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { Banknote, TrendingUp, TrendingDown, ArrowRight, X } from "lucide-react";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import { Banknote, TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
+import TransferirCajaGeneralModal from "@/components/TransferirCajaGeneralModal";
 
 export const dynamic = "force-dynamic";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-// ── Transferir desde Caja General ────────────────────────────────────────
-
-async function transferFromCajaGeneral(formData: FormData) {
-  "use server";
-  await assertWritePermission("/erp/caja-general");
-
-  const supabase   = createAdminClient();
-  const caja_id    = formData.get("caja_id") as string;
-  const destino_id = formData.get("destino_id") as string;
-  const amount     = Number(formData.get("amount"));
-  const date       = formData.get("date") as string;
-  const reference  = (formData.get("reference") as string)?.trim() || null;
-  const notes      = (formData.get("notes") as string)?.trim();
-
-  if (amount <= 0) throw new Error("Monto inválido");
-
-  // Consultar información del destino para armar el nombre real de la cuenta
-  const { data: destAccount } = await supabase
-    .from("bank_accounts")
-    .select("bank_name, account_number, account_type")
-    .eq("id", destino_id)
-    .maybeSingle();
-
-  let destino_nombre = "cuenta destino";
-  if (destAccount) {
-    if (destAccount.account_type === "caja") {
-      destino_nombre = `Caja Chica — ${destAccount.bank_name}`;
-    } else {
-      destino_nombre = `${destAccount.bank_name}${destAccount.account_number ? ` · ${destAccount.account_number}` : ""}`;
-    }
-  }
-
-  const descEgreso  = notes ? `Transferencia a ${destino_nombre} — ${notes}` : `Transferencia a ${destino_nombre}`;
-  const descIngreso = notes ? `Transferencia desde Caja General — ${notes}` : `Transferencia desde Caja General`;
-
-  // Egreso de Caja General
-  await supabase.from("bank_transactions").insert({
-    account_id:     caja_id,
-    type:           "egreso",
-    amount,
-    date,
-    description:    descEgreso,
-    reference,
-    payment_method: "efectivo",
-    status:         "confirmado",
-    origin:         "automatico",
-  });
-
-  // Ingreso en la cuenta destino (banco o caja chica)
-  await supabase.from("bank_transactions").insert({
-    account_id:     destino_id,
-    type:           "ingreso",
-    amount,
-    date,
-    description:    descIngreso,
-    reference,
-    payment_method: "efectivo",
-    status:         "confirmado",
-    origin:         "automatico",
-  });
-
-  redirect("/erp/caja-general");
-}
-
-// ── Page ──────────────────────────────────────────────────────────────────
-
 type Tx = {
-  id: string; type: "ingreso" | "egreso"; amount: number;
-  date: string; description: string; reference: string | null;
-  status: string; invoice_id: string | null;
+  id: string;
+  type: "ingreso" | "egreso";
+  amount: number;
+  date: string;
+  description: string;
+  reference: string | null;
+  status: string;
+  invoice_id: string | null;
   invoices: { invoice_number: string } | null;
 };
 
-export default async function CajaGeneralPage({
-  searchParams: searchParamsPromise,
-}: { searchParams: Promise<{ action?: string }> }) {
+export default async function CajaGeneralPage() {
   await assertPermission("/erp/caja-general");
   const canEdit = await hasWritePermission("/erp/caja-general");
 
-  const searchParams = await searchParamsPromise;
-  const supabase    = createAdminClient();
-  const showForm    = canEdit && searchParams.action === "transferir";
-  const today       = new Date().toISOString().split("T")[0];
+  const supabase = createAdminClient();
 
   // Buscar la Caja General
   const { data: allCajas } = await supabase
@@ -137,12 +71,12 @@ export default async function CajaGeneralPage({
     ...(bancos || []).map(b => ({
       id: b.id,
       label: `${b.bank_name}${b.account_number ? ` · ${b.account_number}` : ""}`,
-      tipo: "banco",
+      type: "banco",
     })),
     ...otrasCajas.map(c => ({
       id: c.id,
       label: `Caja Chica — ${c.bank_name}`,
-      tipo: "caja_chica",
+      type: "caja_chica",
     })),
   ];
 
@@ -160,9 +94,9 @@ export default async function CajaGeneralPage({
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto space-y-5">
       {/* Header + saldo */}
-      <div className={`rounded-2xl p-5 mb-4 border shadow-sm ${balance > 0 ? "bg-green-50 border-green-100" : "bg-gray-50 border-gray-200"}`}>
+      <div className={`rounded-2xl p-5 border shadow-sm ${balance > 0 ? "bg-green-50 border-green-100" : "bg-gray-50 border-gray-200"}`}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -175,87 +109,19 @@ export default async function CajaGeneralPage({
             <p className="text-xs text-ink-400 mt-1">Recibe automáticamente cobros en efectivo</p>
           </div>
 
-          {/* Botón transferir */}
+          {/* Botón transferir con Modal */}
           {canEdit && (
-            <Link
-              href={showForm ? "/erp/caja-general" : "/erp/caja-general?action=transferir"}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-colors shrink-0 ${
-                showForm
-                  ? "bg-white border border-gray-200 text-ink-600 hover:bg-gray-50"
-                  : "bg-green-600 hover:bg-green-700 text-white shadow-md"
-              }`}>
-              {showForm ? <><X size={15} /> Cancelar</> : <><ArrowRight size={15} /> Transferir</>}
-            </Link>
+            <TransferirCajaGeneralModal
+              cajaId={cajaGeneral.id}
+              maxBalance={balance}
+              destinos={destinos}
+            />
           )}
         </div>
       </div>
 
-      {/* Formulario de transferencia */}
-      {showForm && (
-        <div className="bg-white border border-green-200 rounded-2xl shadow-sm p-5 mb-5">
-          <h2 className="font-semibold text-ink-900 mb-1 flex items-center gap-2 text-sm">
-            <ArrowRight size={15} className="text-green-600" />
-            Transferir dinero de Caja General
-          </h2>
-          <p className="text-xs text-ink-400 mb-4">
-            Mueve el efectivo a una cuenta bancaria o a la Caja Chica.
-          </p>
-          <form action={transferFromCajaGeneral} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <input type="hidden" name="caja_id" value={cajaGeneral.id} />
-
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-ink-700">Destino *</label>
-              <select name="destino_id" required
-                onChange={undefined}
-                className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
-                <option value="">— Seleccionar destino —</option>
-                {destinos.map(d => (
-                  <option key={d.id} value={d.id}>{d.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-ink-700">Monto *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs">$</span>
-                <input type="number" name="amount" required min="0.01" step="0.01"
-                  max={balance}
-                  className="w-full border border-green-200 rounded-xl pl-7 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white font-mono" />
-              </div>
-              <p className="text-[11px] text-ink-400">Disponible: ${balance.toFixed(2)}</p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-ink-700">Fecha *</label>
-              <input type="date" name="date" required defaultValue={today}
-                className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white" />
-            </div>
-
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-ink-700">N° Referencia / Comprobante</label>
-              <input type="text" name="reference" placeholder="Comprobante de depósito, cheque..."
-                className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white font-mono" />
-            </div>
-
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs font-semibold text-ink-700">Notas (opcional)</label>
-              <textarea name="notes" placeholder="Notas adicionales sobre la transferencia..." rows={2}
-                className="w-full border border-green-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white" />
-            </div>
-
-            <div className="sm:col-span-2 flex justify-end">
-              <button type="submit"
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-md">
-                <ArrowRight size={16} /> Confirmar transferencia
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {/* Resumen */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="grid grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-3">
           <TrendingUp size={16} className="text-green-600 shrink-0" />
           <div>

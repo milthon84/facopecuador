@@ -194,26 +194,25 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
           `}
           style={{ zIndex: 10 }}
         >
-          {nextPost.video_url ? (
-            <div className="w-full h-full bg-slate-950 relative">
-              <video
-                src={nextPost.video_url}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-                poster={nextPost.image_url || undefined}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : nextPost.image_url ? (
+          {nextPost.image_url ? (
             <Image
               src={nextPost.image_url}
               alt={nextPost.title}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              quality={80}
               className="object-cover"
             />
+          ) : nextPost.video_url ? (
+            <div className="w-full h-full bg-slate-950 relative">
+              <video
+                src={nextPost.video_url}
+                muted
+                playsInline
+                preload="none"
+                className="w-full h-full object-cover"
+              />
+            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
               <Building2 size={36} className="text-purple-400/80 mb-2" />
@@ -256,7 +255,7 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
               autoPlay
               muted
               playsInline
-              preload="auto"
+              preload="metadata"
               poster={activePost.image_url || undefined}
               onEnded={() => next()}
               onError={() => next()}
@@ -269,6 +268,8 @@ export default function CoworkingCarousel({ posts = [] }: Props) {
               src={activePost.image_url}
               alt={activePost.title}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              quality={80}
               className="object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>

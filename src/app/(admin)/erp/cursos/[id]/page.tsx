@@ -17,6 +17,7 @@ import EditCourseModal from "@/components/EditCourseModal";
 import EnrollStudentModal from "@/components/EnrollStudentModal";
 import PagoInscripcionModal from "@/components/PagoInscripcionModal";
 import TeacherMultiSelect from "@/components/TeacherMultiSelect";
+import CreateModuleModal from "@/components/CreateModuleModal";
 
 import CourseStatusSelector from "@/components/CourseStatusSelector";
 
@@ -62,81 +63,6 @@ async function saveGeneralInfo(formData: FormData) {
     .eq("id", id);
 
   revalidatePath(`/erp/cursos/${id}`);
-}
-
-async function addModule(formData: FormData) {
-  "use server";
-  const courseId = formData.get("courseId") as string;
-  await assertWritePermission("/erp/cursos");
-
-  const name = (formData.get("name") as string)?.trim();
-  const cost = Number(formData.get("cost"));
-  const description = (formData.get("description") as string)?.trim();
-  const date = (formData.get("date") as string) || null;
-  const teacherIds = formData.getAll("teacherIds") as string[];
-
-  if (!courseId || !name || isNaN(cost)) return;
-
-  const supabase = createAdminClient();
-  const { data: existingMods } = await supabase
-    .from("curso_modulos")
-    .select("number")
-    .eq("course_id", courseId)
-    .order("number", { ascending: false })
-    .limit(1);
-
-  const nextNumber = existingMods && existingMods.length > 0 ? (existingMods[0].number || 0) + 1 : 1;
-
-  const { data: insertedMod, error } = await supabase
-    .from("curso_modulos")
-    .insert({
-      course_id: courseId,
-      number: nextNumber,
-      name,
-      cost,
-      description: description || null,
-      start_date: date,
-      end_date: date,
-    })
-    .select("id")
-    .single();
-
-  if (!error && insertedMod && teacherIds.length > 0) {
-    try {
-      const modTeachers = teacherIds.map((tId) => ({
-        module_id: insertedMod.id,
-        teacher_id: tId,
-      }));
-      await supabase.from("modulo_profesores").insert(modTeachers);
-    } catch (e: any) {
-      console.error("[addModule] Error al guardar profesores:", e.message);
-    }
-  }
-
-  // Crear curso_modulo_inscripciones para todos los alumnos ya inscritos en el curso
-  // Los que pagaron curso completo → invoiced; los que pagaron solo inscripción → pending
-  if (!error && insertedMod) {
-    try {
-      const { data: enrollments } = await supabase
-        .from("curso_inscripciones")
-        .select("id, payment_type")
-        .eq("course_id", courseId)
-        .eq("status", "enrolled");
-
-      if (enrollments && enrollments.length > 0) {
-        const moduleInscriptions = enrollments.map((enr: any) => ({
-          enrollment_id: enr.id,
-          module_id: insertedMod.id,
-          billing_status: enr.payment_type === "full_course" ? "invoiced" : "pending",
-        }));
-        await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
-      }
-    } catch (e: any) {
-      console.error("[addModule] Error al crear inscripciones de módulo:", e.message);
-    }
-  }
-
-  revalidatePath(`/erp/cursos/${courseId}`);
 }
 
 async function deleteModule(formData: FormData) {
@@ -256,39 +182,54 @@ export default async function CursoDetallePage({
   };
 
   const tabs = [
-    { id: "modulos", label: "Módulos", icon: <BookOpen size={16} /> },
-    { id: "alumnos", label: "Alumnos Matriculados", icon: <Users size={16} /> },
+    { id: "modulos", label: `Módulos (${modules.length})`, icon: <BookOpen size={16} /> },
+    { id: "alumnos", label: `Alumnos Matriculados (${students.length})`, icon: <Users size={16} /> },
   ];
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
-      <Link href="/erp/cursos" className="inline-flex items-center gap-1 text-sm text-ink-600 hover:text-ink-900 mb-4 transition-colors">
-        <ArrowLeft size={16} /> Volver a Cursos
+      <Link href="/erp/cursos" className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-600 hover:text-lilac-700 mb-4 transition-colors">
+        <ArrowLeft size={15} /> Volver al Catálogo de Cursos
       </Link>
 
-      {/* Info Banner */}
-      <div className="card p-6 bg-white border border-lilac-100 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          {course.image_url && (
+      {/* Info Banner Mejorado */}
+      <div className="bg-white border border-lilac-100 rounded-3xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-start sm:items-center gap-4.5">
+          {course.image_url ? (
             <img 
               src={course.image_url} 
               alt={course.name} 
-              className="w-16 h-16 object-cover rounded-2xl border border-lilac-150 shadow-sm shrink-0" 
+              className="w-18 h-18 sm:w-20 sm:h-20 object-cover rounded-2xl border border-lilac-200 shadow-xs shrink-0" 
             />
+          ) : (
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-700 flex items-center justify-center shrink-0 shadow-2xs">
+              <GraduationCap size={32} />
+            </div>
           )}
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold text-ink-900">{course.name}</h1>
-            <p className="text-xs text-ink-500">
-              Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}
-            </p>
-            <div className="flex items-center gap-1 font-bold text-lilac-800 text-base md:text-lg pt-0.5">
-              <DollarSign size={16} className="text-lilac-600 shrink-0" />
-              <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">{course.name}</h1>
+            
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-600">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Calendar size={14} className="text-lilac-600 shrink-0" />
+                Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}
+              </span>
+
+              <span className="flex items-center gap-1.5 font-medium">
+                <Users size={14} className="text-lilac-600 shrink-0" />
+                {students.length} {course.max_students ? `/ ${course.max_students}` : ""} matriculados
+              </span>
+
+              <div className="flex items-center gap-1 font-bold text-lilac-800 text-sm sm:text-base">
+                <DollarSign size={15} className="text-lilac-600 shrink-0" />
+                <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
+                <span className="text-[10px] font-normal text-ink-400">USD</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-lilac-100">
           <CourseStatusSelector
             courseId={id}
             currentStatus={course.status}
@@ -296,8 +237,9 @@ export default async function CursoDetallePage({
           />
 
           {canEdit && (
-            <div className="border-l border-lilac-100 pl-3">
+            <div className="flex items-center gap-2">
               <EditCourseModal course={course} />
+              <CopyCourseButton courseId={id} courseName={course.name} />
             </div>
           )}
         </div>
@@ -309,10 +251,10 @@ export default async function CursoDetallePage({
           <Link
             key={t.id}
             href={`/erp/cursos/${id}?tab=${t.id}`}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all border-b-2 whitespace-nowrap -mb-px ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-b-2 whitespace-nowrap -mb-px ${
               activeTab === t.id
-                ? "border-lilac-600 text-lilac-700 bg-lilac-50/40"
-                : "border-transparent text-ink-600 hover:text-ink-900 hover:bg-lilac-50/10"
+                ? "border-lilac-600 text-lilac-700 bg-lilac-50/50 shadow-2xs"
+                : "border-transparent text-ink-600 hover:text-ink-900 hover:bg-lilac-50/20"
             }`}
           >
             {t.icon}
@@ -324,157 +266,146 @@ export default async function CursoDetallePage({
       {/* Tab Contents */}
       <div>
         {activeTab === "modulos" && (
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Listado de Módulos */}
-            <div className="md:col-span-2 space-y-4">
-              <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-ink-800">Módulos del programa</span>
-                  <span className="text-xs text-ink-400 bg-lilac-50 px-2.5 py-0.5 rounded-full font-bold">
+          <div className="space-y-6">
+            {/* Encabezado superior de módulos con botón Nuevo Módulo */}
+            <div className="bg-white border border-lilac-100 rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-lg font-bold text-ink-950">Módulos del Programa</h2>
+                  <span className="text-xs text-lilac-700 bg-lilac-50 border border-lilac-200/80 px-2.5 py-0.5 rounded-full font-bold">
                     {modules.length} {modules.length === 1 ? "módulo" : "módulos"}
                   </span>
                 </div>
-
-                {modules.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-ink-500 italic">No hay módulos configurados para este curso.</div>
-                ) : (
-                  <div className="divide-y divide-lilac-50">
-                    {modules.map((m: any) => {
-                      const mTeachers = m.modulo_profesores || [];
-                      const mTeacherIds = mTeachers.map((mt: any) => mt.teacher_id);
-
-                      return (
-                        <div key={m.id} className="p-5 flex justify-between items-start gap-4 hover:bg-lilac-50/10 transition-colors">
-                          <div className="space-y-2 flex-1">
-                            <h3 className="font-bold text-ink-950 text-sm">{m.name}</h3>
-                            {m.description && (
-                              <p className="text-xs text-ink-600 leading-relaxed">{m.description}</p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-500 pt-0.5">
-                              {m.start_date && (
-                                <span className="flex items-center gap-1 font-medium text-lilac-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/50">
-                                  <Calendar size={12} className="text-lilac-600" /> Fecha: {formatDateES(m.start_date)}
-                                </span>
-                              )}
-
-                              <span className="text-xs font-bold text-lilac-700 bg-lilac-50 px-2.5 py-0.5 rounded-lg border border-lilac-100">
-                                ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
-                              </span>
-
-                              <div className="flex flex-wrap items-center gap-1">
-                                <span className="font-semibold text-ink-700 flex items-center gap-1">
-                                  <UserCheck size={12} className="text-lilac-600" /> Docente(s):
-                                </span>
-                                {mTeachers.length === 0 ? (
-                                  <span className="text-ink-400 italic">Sin asignar</span>
-                                ) : (
-                                  mTeachers.map((mt: any) => (
-                                    <span key={mt.teacher_id} className="bg-lilac-50 text-lilac-900 border border-lilac-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                      {mt.profesores?.full_name}
-                                    </span>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                            <AttendanceListModal
-                              moduleId={m.id}
-                              moduleName={m.name}
-                              moduleNumber={m.number}
-                            />
-
-                            {canEdit && (
-                              <div className="flex items-center gap-1">
-                                <EditModuleModal
-                                  module={m}
-                                  allTeachers={allTeachers}
-                                  assignedTeacherIds={mTeacherIds}
-                                />
-                                <ConfirmDeleteButton
-                                  action={deleteModule}
-                                  idName="moduleId"
-                                  idValue={m.id}
-                                  extraFields={{ courseId: id }}
-                                  confirmMessage="¿Estás seguro de que deseas eliminar este módulo?"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <p className="text-xs text-ink-500 mt-1">
+                  Estructura académica, cronograma de sesiones y docentes asignados a cada módulo.
+                </p>
               </div>
-            </div>
 
-            {/* Crear Módulo */}
-            <div className="md:col-span-1">
-              {canEdit ? (
-                <div className="card p-5 bg-white border border-lilac-100 shadow-sm">
-                  <h2 className="text-sm font-bold text-ink-950 mb-4 flex items-center gap-1.5 pb-2 border-b border-lilac-50">
-                    <Plus size={15} className="text-lilac-600" /> Añadir Módulo
-                  </h2>
-                  <form action={addModule} className="space-y-4">
-                    <input type="hidden" name="courseId" value={id} />
-                    <div>
-                      <label className="label text-ink-800">Nombre del módulo *</label>
-                      <input
-                        name="name"
-                        required
-                        placeholder="Ej: Módulo I: Diagnóstico inicial"
-                        className="input"
-                      />
-                    </div>
-                    <div>
-                      <label className="label text-ink-800">Descripción</label>
-                      <textarea
-                        name="description"
-                        rows={2}
-                        placeholder="Breve descripción..."
-                        className="input resize-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="label text-ink-800 text-[11px] font-semibold">Fecha del módulo (Día de clases)</label>
-                      <input name="date" type="date" className="input text-xs" />
-                    </div>
-                    <div>
-                      <label className="label text-ink-800">Costo ($) *</label>
-                      <input
-                        name="cost"
-                        type="number"
-                        step="0.01"
-                        required
-                        min="0"
-                        placeholder="Ej: 200.00"
-                        className="input"
-                      />
-                    </div>
-
-                    {allTeachers.length > 0 && (
-                      <div>
-                        <label className="label text-ink-800 font-bold mb-1 block">Seleccionar Profesor(es)</label>
-                        <TeacherMultiSelect
-                          teachers={allTeachers}
-                          placeholder="Seleccionar profesor(es)..."
-                        />
-                      </div>
-                    )}
-
-                    <button type="submit" className="w-full btn-primary text-xs py-2.5 mt-2 shadow-sm">
-                      Agregar Módulo
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <div className="card p-5 bg-lilac-50/50 border border-lilac-100 text-center text-xs text-ink-500 italic">
-                  No tienes permisos para agregar módulos.
-                </div>
+              {canEdit && (
+                <CreateModuleModal
+                  courseId={id}
+                  allTeachers={allTeachers}
+                  buttonText="Nuevo Módulo"
+                />
               )}
             </div>
+
+            {/* Listado de Módulos */}
+            {modules.length === 0 ? (
+              <div className="bg-white border border-dashed border-lilac-200 rounded-3xl p-12 text-center shadow-xs">
+                <div className="w-14 h-14 rounded-2xl bg-lilac-50 text-lilac-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                  <BookOpen size={28} />
+                </div>
+                <h3 className="text-base font-bold text-ink-900 mb-1">No hay módulos configurados</h3>
+                <p className="text-xs text-ink-500 max-w-md mx-auto mb-6">
+                  Organiza el plan de estudios agregando los módulos con sus respectivas fechas de clases, costos y docentes asignados.
+                </p>
+                {canEdit && (
+                  <CreateModuleModal
+                    courseId={id}
+                    allTeachers={allTeachers}
+                    buttonText="Añadir Primer Módulo"
+                    variant="empty_state"
+                  />
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {modules.map((m: any) => {
+                  const mTeachers = m.modulo_profesores || [];
+                  const mTeacherIds = mTeachers.map((mt: any) => mt.teacher_id);
+                  const moduleNum = String(m.number || 1).padStart(2, "0");
+
+                  return (
+                    <div
+                      key={m.id}
+                      className="bg-white border border-lilac-100 hover:border-lilac-300 rounded-2xl p-5 shadow-2xs hover:shadow-sm transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 group"
+                    >
+                      <div className="flex items-start gap-4 flex-1">
+                        {/* Indicador de Número de Módulo */}
+                        <div className="w-11 h-11 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-800 flex flex-col items-center justify-center shrink-0 shadow-2xs group-hover:bg-lilac-600 group-hover:text-white transition-colors">
+                          <span className="text-[9px] font-bold uppercase tracking-wider leading-none">Mód</span>
+                          <span className="text-sm font-black leading-tight">{moduleNum}</span>
+                        </div>
+
+                        {/* Detalles */}
+                        <div className="space-y-2 flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <h3 className="font-bold text-ink-950 text-base leading-snug">{m.name}</h3>
+                            <span className="inline-flex items-center gap-0.5 text-xs font-bold text-lilac-800 bg-lilac-50 border border-lilac-200 px-2.5 py-0.5 rounded-lg">
+                              ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+
+                          {m.description && (
+                            <p className="text-xs text-ink-600 leading-relaxed max-w-3xl">
+                              {m.description}
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                            {m.start_date ? (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-ink-700 bg-lilac-50/60 px-2.5 py-1 rounded-lg border border-lilac-100/60">
+                                <Calendar size={13} className="text-lilac-600 shrink-0" />
+                                <span>Clase: <strong>{formatDateES(m.start_date)}</strong></span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-ink-400 text-[11px] italic">
+                                <Calendar size={12} className="text-ink-300 shrink-0" /> Fecha por definir
+                              </span>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-ink-600 flex items-center gap-1 text-xs">
+                                <UserCheck size={13} className="text-lilac-600 shrink-0" /> Docentes:
+                              </span>
+                              {mTeachers.length === 0 ? (
+                                <span className="text-ink-400 text-xs italic">Sin asignar</span>
+                              ) : (
+                                mTeachers.map((mt: any) => (
+                                  <span
+                                    key={mt.teacher_id}
+                                    className="bg-lilac-50 text-lilac-900 border border-lilac-200/80 px-2.5 py-0.5 rounded-lg font-bold text-[11px] inline-flex items-center gap-1"
+                                  >
+                                    {mt.profesores?.full_name}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Acciones */}
+                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center pt-2 md:pt-0 border-t md:border-t-0 border-lilac-50 w-full md:w-auto justify-end">
+                        <AttendanceListModal
+                          moduleId={m.id}
+                          moduleName={m.name}
+                          moduleNumber={m.number}
+                        />
+
+                        {canEdit && (
+                          <div className="flex items-center gap-1.5 pl-1">
+                            <EditModuleModal
+                              module={m}
+                              allTeachers={allTeachers}
+                              assignedTeacherIds={mTeacherIds}
+                            />
+                            <ConfirmDeleteButton
+                              action={deleteModule}
+                              idName="moduleId"
+                              idValue={m.id}
+                              extraFields={{ courseId: id }}
+                              confirmMessage="¿Estás seguro de que deseas eliminar este módulo del programa?"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -5,6 +5,8 @@ import { Shield, Plus, Lock, Trash2, Save, ShieldCheck } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { ALL_RESOURCES, RESOURCE_SECTIONS, getWritePathForResource } from "@/lib/roles";
 
+import NuevoRolModal from "@/components/NuevoRolModal";
+
 export const dynamic = "force-dynamic";
 
 const COLOR_OPTIONS = [
@@ -187,18 +189,20 @@ export default async function RolesPage() {
   const customRoles = (roles || []).filter((r: SystemRole) => !r.is_system).length;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-900 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-black text-ink-950 flex items-center gap-2.5 tracking-tight">
             <Shield className="text-lilac-600" />
             Gestión de Roles
           </h1>
-          <p className="text-sm text-ink-600">
+          <p className="text-xs text-ink-500 font-medium">
             Configura permisos de acceso y crea roles personalizados.
           </p>
         </div>
+
+        <NuevoRolModal />
       </div>
 
       {/* Stats */}
@@ -421,55 +425,6 @@ export default async function RolesPage() {
             </div>
           );
         })}
-      </div>
-
-      {/* Crear nuevo rol */}
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-6">
-        <h2 className="font-semibold text-ink-900 mb-1 flex items-center gap-2">
-          <Plus size={18} className="text-lilac-600" />
-          Crear nuevo rol
-        </h2>
-        <p className="text-sm text-ink-500 mb-5">
-          Define un rol con accesos personalizados. Después de crearlo, configura sus permisos arriba.
-        </p>
-        <form action={createRole} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1 sm:col-span-2">
-            <label className="text-sm font-semibold text-ink-700">Nombre visible *</label>
-            <input
-              name="label"
-              required
-              placeholder="Ej. Enfermera"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-ink-700">Color</label>
-            <select
-              name="color"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            >
-              {COLOR_OPTIONS.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1 sm:col-span-3">
-            <label className="text-sm font-semibold text-ink-700">Descripción</label>
-            <input
-              name="description"
-              placeholder="Ej. Personal de enfermería"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
-          </div>
-          <div className="sm:col-span-3 flex justify-end pt-2">
-            <button
-              type="submit"
-              className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-md shadow-lilac-200"
-            >
-              <Plus size={16} /> Crear rol
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

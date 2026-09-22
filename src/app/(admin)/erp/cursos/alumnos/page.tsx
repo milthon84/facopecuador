@@ -8,6 +8,7 @@ import { updateExpiredCourses } from "@/lib/courses";
 import { parseDbError } from "@/lib/db-error-parser";
 import NuevoAlumnoModal from "@/components/NuevoAlumnoModal";
 import StudentDetailClient from "./StudentDetailClient";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +16,24 @@ async function uploadStudentPhoto(file: File): Promise<string | null> {
   if (!file || file.size === 0) return null;
   try {
     const supabase = createAdminClient();
-    const fileExt = file.name.split(".").pop();
-    const fileName = `student_photo_${Date.now()}.${fileExt}`;
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const originalBuffer = Buffer.from(arrayBuffer);
+
+    const { buffer: webpBuffer, contentType, extension } = await optimizeImageForWeb(originalBuffer, {
+      maxWidth: 600,
+      maxHeight: 600,
+      quality: 80,
+      format: "webp",
+    });
+
+    const fileName = `student_photo_${Date.now()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from("course-banners")
-      .upload(fileName, buffer, {
-        contentType: file.type,
+      .upload(fileName, webpBuffer, {
+        contentType,
+        cacheControl: "31536000",
+        upsert: true,
       });
 
     if (!uploadError) {

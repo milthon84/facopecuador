@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Landmark, Plus, TrendingDown, DollarSign, Package } from "lucide-react";
+import { Landmark, TrendingDown, DollarSign, Package, Plus } from "lucide-react";
 import Link from "next/link";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import NuevoActivoModal from "@/components/NuevoActivoModal";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +54,18 @@ export default async function ActivosPage() {
   await assertPermission("/erp/activos");
   const canEdit = await hasWritePermission("/erp/activos");
   const supabase = createAdminClient();
-  const { data: assets } = await supabase
-    .from("fixed_assets")
-    .select("id,name,category,purchase_date,purchase_value,salvage_value,useful_life_years,status,disposal_value")
-    .order("purchase_date", { ascending: false });
+
+  const [{ data: assets }, { data: bankAccounts }] = await Promise.all([
+    supabase
+      .from("fixed_assets")
+      .select("id,name,category,purchase_date,purchase_value,salvage_value,useful_life_years,status,disposal_value")
+      .order("purchase_date", { ascending: false }),
+    supabase
+      .from("bank_accounts")
+      .select("id, bank_name, account_number")
+      .eq("is_active", true)
+      .order("bank_name"),
+  ]);
 
   const list = (assets as FixedAsset[]) || [];
   const active = list.filter(a => a.status === "active");
@@ -76,10 +85,7 @@ export default async function ActivosPage() {
           <p className="text-sm text-ink-600">Registro, depreciación y gestión de bienes de capital.</p>
         </div>
         {canEdit && (
-          <Link href="/erp/activos/nuevo"
-            className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-colors shadow-md shadow-lilac-200 shrink-0">
-            <Plus size={16} /> Registrar activo
-          </Link>
+          <NuevoActivoModal bankAccounts={bankAccounts || []} />
         )}
       </div>
 

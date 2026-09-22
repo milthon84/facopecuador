@@ -1,29 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
-import { Tag, Trash2, Plus } from "lucide-react";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
+import { Tag } from "lucide-react";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import NuevaCategoriaModal from "@/components/NuevaCategoriaModal";
+import EditarCategoriaModal from "@/components/EditarCategoriaModal";
+import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
+import { deleteCategoryAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-
-async function addCategory(formData: FormData) {
-  "use server";
-  await assertWritePermission("/erp/categorias");
-  const name   = (formData.get("name") as string)?.trim();
-  const prefix = (formData.get("prefix") as string)?.trim().toUpperCase().slice(0, 4);
-  if (!name || !prefix) return;
-  const supabase = createAdminClient();
-  await supabase.from("inventory_categories").insert({ name, prefix });
-  revalidatePath("/erp/categorias");
-}
-
-async function deleteCategory(formData: FormData) {
-  "use server";
-  await assertWritePermission("/erp/categorias");
-  const id = formData.get("id") as string;
-  const supabase = createAdminClient();
-  await supabase.from("inventory_categories").delete().eq("id", id);
-  revalidatePath("/erp/categorias");
-}
 
 export default async function CategoriasPage() {
   await assertPermission("/erp/categorias");
@@ -37,80 +20,64 @@ export default async function CategoriasPage() {
     .order("name");
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <Tag size={20} className="text-lilac-600" />
-        <div>
-          <h1 className="text-xl font-bold text-ink-900">Categorías de Insumos</h1>
-          <p className="text-sm text-ink-500">Gestiona las categorías para clasificar el inventario.</p>
+    <div className="max-w-2xl mx-auto pb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-700 flex items-center justify-center shrink-0">
+            <Tag size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">Categorías de Insumos</h1>
+            <p className="text-xs text-ink-500 font-medium">Clasificación y códigos de prefijos para inventario.</p>
+          </div>
         </div>
+
+        {canEdit && <NuevaCategoriaModal />}
       </div>
 
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-semibold text-ink-700">Categorías registradas</span>
-          <span className="text-xs text-ink-400 bg-lilac-50 px-2 py-0.5 rounded-full">
-            {categories?.length ?? 0} categorías
+      <div className="bg-white border border-lilac-100 rounded-3xl shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-lilac-50">
+          <span className="text-xs font-bold text-ink-700 uppercase tracking-wider">Categorías registradas</span>
+          <span className="text-xs text-lilac-700 bg-lilac-50 border border-lilac-200/80 px-2.5 py-0.5 rounded-full font-bold">
+            {categories?.length ?? 0} {categories?.length === 1 ? "categoría" : "categorías"}
           </span>
         </div>
 
-        <div className="space-y-1.5 mb-5">
+        <div className="space-y-2">
           {(categories || []).length === 0 && (
-            <p className="text-sm text-ink-400 text-center py-6">Sin categorías registradas.</p>
+            <div className="text-center py-10">
+              <Tag size={32} className="mx-auto text-lilac-300 mb-2" />
+              <p className="text-sm font-semibold text-ink-800">Sin categorías registradas</p>
+              <p className="text-xs text-ink-500 mt-1">Crea tu primera categoría con el botón superior.</p>
+            </div>
           )}
+
           {(categories || []).map((cat) => (
-            <div key={cat.id} className="flex items-center gap-3 px-3 py-2.5 bg-lilac-50 rounded-xl">
-              <span className="text-[11px] font-bold text-lilac-700 bg-lilac-200 px-2 py-0.5 rounded-md font-mono w-12 text-center">
-                {cat.prefix}
-              </span>
-              <span className="text-sm text-ink-800 flex-1">{cat.name}</span>
+            <div
+              key={cat.id}
+              className="flex items-center justify-between gap-3 px-4 py-3 bg-lilac-50/40 hover:bg-lilac-50/80 border border-lilac-100 rounded-2xl transition-colors group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-[11px] font-mono font-bold text-lilac-800 bg-lilac-100 border border-lilac-200 px-2.5 py-1 rounded-xl w-14 text-center shrink-0 shadow-2xs">
+                  {cat.prefix}
+                </span>
+                <span className="text-sm font-bold text-ink-900 truncate">{cat.name}</span>
+              </div>
+
               {canEdit && (
-                <form action={deleteCategory}>
-                  <input type="hidden" name="id" value={cat.id} />
-                  <button
-                    type="submit"
-                    title="Eliminar"
-                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </form>
+                <div className="flex items-center gap-1 shrink-0">
+                  <EditarCategoriaModal category={{ id: cat.id, name: cat.name, prefix: cat.prefix }} />
+                  <ConfirmDeleteButton
+                    action={deleteCategoryAction}
+                    idName="id"
+                    idValue={cat.id}
+                    confirmMessage={`¿Estás seguro de eliminar la categoría "${cat.name}"?`}
+                  />
+                </div>
               )}
             </div>
           ))}
         </div>
-
-        {canEdit && (
-          <>
-            <form action={addCategory} className="flex gap-2">
-              <input
-                type="text"
-                name="name"
-                required
-                placeholder="Nueva categoría"
-                className="flex-1 text-sm border border-lilac-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
-              />
-              <input
-                type="text"
-                name="prefix"
-                required
-                maxLength={4}
-                placeholder="SKU"
-                title="Prefijo de 2-4 letras para el código (ej: CON)"
-                className="w-16 text-sm border border-lilac-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white uppercase font-mono text-center"
-              />
-              <button
-                type="submit"
-                className="flex items-center gap-1.5 bg-lilac-600 text-white text-sm px-4 py-2 rounded-xl hover:bg-lilac-700 transition font-medium"
-              >
-                <Plus size={15} /> Agregar
-              </button>
-            </form>
-            <p className="text-xs text-ink-400 mt-2">
-              El prefijo genera códigos SKU automáticos (ej: <strong>CON</strong> → <strong>CON-001</strong>).
-            </p>
-          </>
-        )}
       </div>
     </div>
   );

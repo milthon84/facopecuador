@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   X, 
   Plus, 
@@ -14,7 +15,8 @@ import {
   Banknote, 
   CheckCircle2, 
   Info,
-  Search
+  Search,
+  Loader2
 } from "lucide-react";
 import { createPatientQuotationAction, getPatientOdontogramStateAction } from "@/app/(admin)/erp/pacientes/actions";
 import { QuotationItem } from "@/lib/email";
@@ -110,6 +112,28 @@ export default function NuevaCotizacionModal({
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [mounted, setMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && !loading) {
+          onClose();
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    }
+  }, [isOpen, loading, onClose]);
+
   useEffect(() => {
     if (isOpen) {
       const supabase = createClient();
@@ -122,7 +146,7 @@ export default function NuevaCotizacionModal({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
   const discount = paymentMethod === "efectivo" ? Math.round(subtotal * (cashDiscountPercent / 100) * 100) / 100 : 0;
@@ -273,10 +297,28 @@ export default function NuevaCotizacionModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[999] bg-ink-950/70 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto">
-      <div className="bg-white border border-lilac-100 rounded-3xl shadow-2xl w-full max-w-4xl my-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto animate-in fade-in duration-150"
+      onClick={() => !loading && onClose()}
+    >
+      <div
+        className="bg-white border border-lilac-100 rounded-3xl shadow-2xl w-full max-w-4xl my-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Loading overlay */}
+        {loading && (
+          <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-xs flex flex-col items-center justify-center gap-3 p-6 text-center animate-in fade-in duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-lilac-100 text-lilac-700 flex items-center justify-center shadow-inner">
+              <Loader2 size={26} className="animate-spin text-lilac-600" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-ink-900">Procesando cotización...</h4>
+              <p className="text-xs text-ink-500 mt-1">Guardando datos y generando documento.</p>
+            </div>
+          </div>
+        )}
+
         {/* Header Elegante */}
         <div className="px-5 py-3.5 bg-gradient-to-r from-lilac-900 via-lilac-800 to-ink-950 text-white flex items-center justify-between border-b border-lilac-700/50 shadow-sm">
           <div className="flex items-center gap-3">
@@ -295,7 +337,8 @@ export default function NuevaCotizacionModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-lilac-200 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer"
+            disabled={loading}
+            className="p-1.5 text-lilac-200 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer disabled:opacity-50"
           >
             <X size={18} />
           </button>
@@ -641,6 +684,7 @@ export default function NuevaCotizacionModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

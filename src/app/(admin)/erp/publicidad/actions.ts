@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { revalidatePath } from "next/cache";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
 
 // Helper para crear un slug amigable a partir del título
 function slugify(text: string): string {
@@ -62,31 +63,66 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
     const slug = slugify(title);
     const supabase = createAdminClient();
 
+    const publishFacebook = formData.get("publish_to_facebook") === "true";
+    const publishInstagram = formData.get("publish_to_instagram") === "true";
+    const publishTikTok = formData.get("publish_to_tiktok") === "true";
+
+    const isExpiredOrDraft = status === "draft" || (expiresAtInput && new Date(`${expiresAtInput}T23:59:59`).getTime() < Date.now());
+
+    let metaHighResImageUrl: string | null = null;
+    let tempMetaStoragePath: string | null = null;
+
     // Procesar archivo de imagen si fue seleccionado
     if (imageFile && imageFile.size > 0) {
       try {
-        const fileExt = imageFile.name.split(".").pop();
-        const fileName = `${Date.now()}_img.${fileExt}`;
+        const fileExt = imageFile.name.split(".").pop() || "jpg";
         const arrayBuffer = await imageFile.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
+        const originalBuffer = Buffer.from(arrayBuffer);
 
+        // 1. Si se va a publicar en Facebook o Instagram, subir temporalmente en alta resolución
+        if ((publishFacebook || publishInstagram) && status === "published" && !isExpiredOrDraft) {
+          tempMetaStoragePath = `temp-meta/${Date.now()}_original.${fileExt}`;
+          const { error: tempUploadError } = await supabase.storage
+            .from("web-assets")
+            .upload(tempMetaStoragePath, originalBuffer, {
+              contentType: imageFile.type || "image/jpeg",
+              upsert: true,
+            });
+
+          if (!tempUploadError) {
+            const { data } = supabase.storage.from("web-assets").getPublicUrl(tempMetaStoragePath);
+            metaHighResImageUrl = data.publicUrl;
+          } else {
+            console.warn("No se pudo subir temporal de alta resolución para Meta:", tempUploadError.message);
+          }
+        }
+
+        // 2. Comprimir y optimizar para la web con sharp (WebP 80%, máx 1280px)
+        const { buffer: webpBuffer, contentType, extension } = await optimizeImageForWeb(originalBuffer, {
+          maxWidth: 1280,
+          maxHeight: 1280,
+          quality: 80,
+          format: "webp",
+        });
+
+        const webFileName = `${Date.now()}_web.${extension}`;
         const { error: uploadError } = await supabase.storage
           .from("web-assets")
-          .upload(fileName, buffer, {
-            contentType: imageFile.type || "image/jpeg",
+          .upload(webFileName, webpBuffer, {
+            contentType,
             cacheControl: "31536000",
             upsert: true,
           });
 
         if (!uploadError) {
-          const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
+          const { data } = supabase.storage.from("web-assets").getPublicUrl(webFileName);
           imageUrl = data.publicUrl;
         } else {
-          console.error("Error al subir archivo de imagen:", uploadError.message);
+          console.error("Error al subir archivo de imagen optimizado:", uploadError.message);
           return { success: false, error: `Error al subir la imagen de portada: ${uploadError.message}` };
         }
       } catch (err: any) {
-        console.error("Excepción al subir archivo de imagen:", err);
+        console.error("Excepción al procesar imagen:", err);
         return { success: false, error: `Excepción al procesar la imagen: ${err?.message || err}` };
       }
     }
@@ -127,10 +163,6 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       }
     }
 
-    const publishFacebook = formData.get("publish_to_facebook") === "true";
-    const publishInstagram = formData.get("publish_to_instagram") === "true";
-    const publishTikTok = formData.get("publish_to_tiktok") === "true";
-
     let facebookPostId: string | null = null;
     let instagramPostId: string | null = null;
     let publishWarning: string | null = null;
@@ -147,8 +179,6 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
         instagramPostId = existingPost.instagram_post_id;
       }
     }
-
-    const isExpiredOrDraft = status === "draft" || (expiresAtInput && new Date(`${expiresAtInput}T23:59:59`).getTime() < Date.now());
 
     // SI EL USUARIO DESMARCÓ FACEBOOK / INSTAGRAM, O EL ANUNCIO EXPIRÓ / PASÓ A BORRADOR:
     const unpublishFacebook = id && facebookPostId && (!publishFacebook || isExpiredOrDraft);
@@ -182,10 +212,12 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
       if (shouldPublishFacebook || shouldPublishInstagram) {
         try {
           const { publishToMeta } = await import("@/lib/meta");
+          // Para Meta usamos la URL de alta resolución si está disponible, o la imagen web
+          const metaImageToUse = metaHighResImageUrl || imageUrl;
           const publishResult = await publishToMeta({
             title,
             content,
-            imageUrl,
+            imageUrl: metaImageToUse,
             videoUrl,
             publishFacebook: shouldPublishFacebook,
             publishInstagram: shouldPublishInstagram,
@@ -204,6 +236,15 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
         } catch (err: any) {
           console.error("Error al publicar en Meta:", err);
           publishWarning = (publishWarning ? publishWarning + ". " : "") + `No se pudo conectar con Meta: ${err.message || err}`;
+        } finally {
+          // Limpiar el archivo temporal de alta resolución de Supabase Storage para no consumir espacio ni egress
+          if (tempMetaStoragePath) {
+            try {
+              await supabase.storage.from("web-assets").remove([tempMetaStoragePath]);
+            } catch (cleanupErr) {
+              console.warn("No se pudo eliminar el archivo temporal de alta resolución:", cleanupErr);
+            }
+          }
         }
       }
 
@@ -268,6 +309,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
     }
 
     revalidatePath("/");
+    revalidatePath("/noticias");
     revalidatePath("/erp/publicidad");
     return { success: true, publishWarning: publishWarning || undefined };
   } catch (err: any) {
@@ -313,6 +355,7 @@ export async function deletePostAction(id: string): Promise<{ success: boolean; 
     }
 
     revalidatePath("/");
+    revalidatePath("/noticias");
     revalidatePath("/erp/publicidad");
     return { success: true };
   } catch (err: any) {
@@ -375,6 +418,7 @@ export async function togglePostStatusAction(id: string, currentStatus: string):
     }
 
     revalidatePath("/");
+    revalidatePath("/noticias");
     revalidatePath("/erp/publicidad");
     return { success: true, newStatus };
   } catch (err: any) {

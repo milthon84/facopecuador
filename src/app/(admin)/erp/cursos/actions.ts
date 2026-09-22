@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { revalidatePath } from "next/cache";
 import { parseDbError } from "@/lib/db-error-parser";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
 
 export async function copyCourseAction(courseId: string) {
   await assertWritePermission("/erp/cursos");
@@ -160,6 +161,93 @@ export async function updateModuleAction(payload: {
   return { success: true };
 }
 
+export async function createModuleAction(payload: {
+  courseId: string;
+  name: string;
+  cost: number;
+  description?: string | null;
+  date?: string | null;
+  teacherIds?: string[];
+}) {
+  await assertWritePermission("/erp/cursos");
+
+  const { courseId, name, cost, description, date, teacherIds } = payload;
+
+  if (!courseId || !name?.trim() || isNaN(cost) || cost < 0) {
+    throw new Error("Por favor completa los campos requeridos (nombre válido y costo mayor o igual a 0).");
+  }
+
+  const supabase = createAdminClient();
+
+  // Obtener siguiente número de módulo
+  const { data: existingMods } = await supabase
+    .from("curso_modulos")
+    .select("number")
+    .eq("course_id", courseId)
+    .order("number", { ascending: false })
+    .limit(1);
+
+  const nextNumber = existingMods && existingMods.length > 0 ? (existingMods[0].number || 0) + 1 : 1;
+
+  // Insertar módulo
+  const { data: insertedMod, error } = await supabase
+    .from("curso_modulos")
+    .insert({
+      course_id: courseId,
+      number: nextNumber,
+      name: name.trim(),
+      cost: Number(cost),
+      description: description?.trim() || null,
+      start_date: date || null,
+      end_date: date || null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !insertedMod) {
+    throw new Error(error?.message || "Error al crear el módulo.");
+  }
+
+  // Asignar profesores al módulo si fueron seleccionados
+  if (teacherIds && teacherIds.length > 0) {
+    try {
+      const modTeachers = teacherIds.map((tId) => ({
+        module_id: insertedMod.id,
+        teacher_id: tId,
+      }));
+      const { error: teachErr } = await supabase.from("modulo_profesores").insert(modTeachers);
+      if (teachErr) {
+        console.error("[createModuleAction] Error al asignar profesores:", teachErr.message);
+      }
+    } catch (e: any) {
+      console.error("[createModuleAction] Error al guardar profesores:", e.message);
+    }
+  }
+
+  // Crear inscripciones para los alumnos ya matriculados
+  try {
+    const { data: enrollments } = await supabase
+      .from("curso_inscripciones")
+      .select("id, payment_type")
+      .eq("course_id", courseId)
+      .eq("status", "enrolled");
+
+    if (enrollments && enrollments.length > 0) {
+      const moduleInscriptions = enrollments.map((enr: any) => ({
+        enrollment_id: enr.id,
+        module_id: insertedMod.id,
+        billing_status: enr.payment_type === "full_course" ? "invoiced" : "pending",
+      }));
+      await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
+    }
+  } catch (e: any) {
+    console.error("[createModuleAction] Error al crear inscripciones de módulo:", e.message);
+  }
+
+  revalidatePath(`/erp/cursos/${courseId}`);
+  return { success: true, moduleId: insertedMod.id };
+}
+
 
 
 export async function createCourseAction(formData: FormData) {
@@ -187,15 +275,24 @@ export async function createCourseAction(formData: FormData) {
 
   if (imageFile && imageFile.size > 0) {
     try {
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${Date.now()}.${fileExt}`;
       const arrayBuffer = await imageFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+      const originalBuffer = Buffer.from(arrayBuffer);
 
+      // Comprimir y convertir a WebP (máx 1280px, calidad 80%)
+      const { buffer: webpBuffer, contentType, extension } = await optimizeImageForWeb(originalBuffer, {
+        maxWidth: 1280,
+        maxHeight: 1280,
+        quality: 80,
+        format: "webp",
+      });
+
+      const fileName = `${Date.now()}_banner.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from("course-banners")
-        .upload(fileName, buffer, {
-          contentType: imageFile.type,
+        .upload(fileName, webpBuffer, {
+          contentType,
+          cacheControl: "31536000",
+          upsert: true,
         });
 
       if (!uploadError) {
@@ -228,6 +325,8 @@ export async function createCourseAction(formData: FormData) {
     throw new Error(parseDbError(error?.message) || "Error al crear el curso");
   }
 
+  revalidatePath("/");
+  revalidatePath("/cursos");
   revalidatePath("/erp/cursos");
   return { success: true, courseId: newCourse.id };
 }
@@ -272,6 +371,8 @@ export async function updateCourseAction(payload: {
     throw new Error(parseDbError(error.message) || "Error al actualizar el curso.");
   }
 
+  revalidatePath("/");
+  revalidatePath("/cursos");
   revalidatePath(`/erp/cursos/${id}`);
   revalidatePath("/erp/cursos");
   return { success: true };
@@ -292,6 +393,8 @@ export async function updateCourseStatusAction(courseId: string, status: string)
 
   if (error) throw new Error(parseDbError(error.message));
 
+  revalidatePath("/");
+  revalidatePath("/cursos");
   revalidatePath(`/erp/cursos/${courseId}`);
   revalidatePath("/erp/cursos");
   return { success: true };

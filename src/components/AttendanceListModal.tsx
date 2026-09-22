@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   ClipboardList, X, Printer, CheckCircle2, AlertCircle, 
   Loader2, UserCheck, DollarSign, Search, Calendar 
@@ -15,11 +16,30 @@ interface Props {
 
 export default function AttendanceListModal({ moduleId, moduleName, moduleNumber }: Props) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    }
+  }, [open]);
 
   async function handleOpen() {
     setOpen(true);
@@ -76,9 +96,15 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
         <span>Asistencia & Pagos</span>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-lilac-100 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      {open && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white border border-lilac-100 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-lilac-100 bg-lilac-50/40 flex items-center justify-between no-print">
@@ -274,7 +300,8 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* CSS para Impresión Limpia */}

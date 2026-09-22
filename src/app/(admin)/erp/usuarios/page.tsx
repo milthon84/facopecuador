@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { UserCog, Plus, ShieldCheck, Users, ToggleLeft, ToggleRight } from "lucide-react";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/roles";
 import type { UserRole } from "@/lib/roles";
+import NuevoUsuarioModal from "@/components/NuevoUsuarioModal";
 import EditUserModal from "@/components/EditUserModal";
-import { createUserAction, toggleUserStatusAction } from "./actions";
+import { toggleUserStatusAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -55,16 +56,18 @@ export default async function UsuariosPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-900 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-black text-ink-950 flex items-center gap-2.5 tracking-tight">
             <UserCog className="text-lilac-600" />
             Gestión de Usuarios
           </h1>
-          <p className="text-sm text-ink-600">Administra el acceso al sistema y los roles del equipo.</p>
+          <p className="text-xs text-ink-500 font-medium">Administra el acceso al sistema y los roles del equipo.</p>
         </div>
+
+        <NuevoUsuarioModal systemRoles={systemRoles} />
       </div>
 
       {/* Stats */}
@@ -157,64 +160,6 @@ export default async function UsuariosPage() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Formulario crear usuario */}
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-6">
-        <h2 className="font-semibold text-ink-900 mb-1 flex items-center gap-2">
-          <Plus size={18} className="text-lilac-600" />
-          Crear nuevo usuario
-        </h2>
-        <p className="text-sm text-ink-500 mb-5">El usuario podrá ingresar con el email y contraseña que definas aquí.</p>
-        <form action={createUserAction} autoComplete="off" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-ink-700">Nombre completo *</label>
-            <input
-              name="full_name" required
-              placeholder="Ej. María González"
-              autoComplete="off"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-ink-700">Email *</label>
-            <input
-              name="email" type="email" required
-              placeholder="correo@clinica.com"
-              autoComplete="off"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-ink-700">Contraseña *</label>
-            <input
-              name="password" type="password" required minLength={8}
-              placeholder="Mínimo 8 caracteres"
-              autoComplete="new-password"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-ink-700">Rol *</label>
-            <select
-              name="role" required
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            >
-              {systemRoles.map((r) => (
-                <option key={r.name} value={r.name}>{r.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2 flex justify-end pt-2">
-            <button
-              type="submit"
-              className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-md shadow-lilac-200"
-            >
-              <Plus size={16} />
-              Crear usuario
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

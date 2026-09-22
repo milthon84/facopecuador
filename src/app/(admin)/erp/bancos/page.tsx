@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { Building2, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
+import NuevaCuentaBancariaModal from "@/components/NuevaCuentaBancariaModal";
 
 export const dynamic = "force-dynamic";
 
@@ -93,22 +94,22 @@ export default async function BancosPage() {
 
   const totalBalance = Array.from(balanceMap.values()).reduce((s, v) => s + v, 0);
   const activeAccounts = (accounts as BankAccount[] || []).filter(a => a.is_active);
+  const cajaCount = (accounts as BankAccount[] || []).filter(a => a.account_type === "caja" && a.is_active).length;
+  const canAddCaja = cajaCount < 2;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto pb-10">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-ink-900 flex items-center gap-2">
-          <Building2 className="text-lilac-600" />
-          Cuentas Bancarias
-        </h1>
-        {canEdit && (
-          <Link
-            href="/erp/bancos/nueva"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-colors bg-lilac-600 hover:bg-lilac-700 text-white shadow-md shadow-lilac-200">
-            <Plus size={16} /> Agregar cuenta
-          </Link>
-        )}
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-ink-950 flex items-center gap-2.5 tracking-tight">
+            <Building2 className="text-lilac-600" />
+            Cuentas Bancarias
+          </h1>
+          <p className="text-xs text-ink-500 font-medium">Gestión de tesorería, cajas de efectivo y balances.</p>
+        </div>
+
+        {canEdit && <NuevaCuentaBancariaModal canAddCaja={canAddCaja} />}
       </div>
 
       {/* Stats */}

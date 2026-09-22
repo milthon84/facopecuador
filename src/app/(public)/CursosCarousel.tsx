@@ -242,26 +242,25 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
           `}
           style={{ zIndex: 10 }}
         >
-          {nextVideo ? (
-            <div className="w-full h-full bg-slate-950 relative">
-              <video
-                src={nextVideo}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-                poster={nextImage || undefined}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : nextImage ? (
+          {nextImage ? (
             <Image
               src={nextImage}
               alt={nextTitle}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              quality={80}
               className="object-cover"
             />
+          ) : nextVideo ? (
+            <div className="w-full h-full bg-slate-950 relative">
+              <video
+                src={nextVideo}
+                muted
+                playsInline
+                preload="none"
+                className="w-full h-full object-cover"
+              />
+            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
               <BookOpen size={36} className="text-purple-400/80 mb-2" />
@@ -304,7 +303,7 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
               autoPlay
               muted
               playsInline
-              preload="auto"
+              preload="metadata"
               poster={activeImage || undefined}
               onEnded={() => next()}
               onError={() => next()}
@@ -317,6 +316,8 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
               src={activeImage}
               alt={activeTitle}
               fill
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              quality={80}
               className="object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>

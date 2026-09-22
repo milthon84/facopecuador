@@ -16,9 +16,9 @@ import {
 import CursosSection from "./CursosSection";
 import ClinicaCarousel from "./ClinicaCarousel";
 import CoworkingCarousel from "./CoworkingCarousel";
-import { updateExpiredCourses, getPublicCourseVisibilityCutoffDate } from "@/lib/courses";
+import { getPublicCourseVisibilityCutoffDate } from "@/lib/courses";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 1800; // Revalidación ISR cada 30 min (actualización inmediata vía revalidatePath desde el ERP)
 
 // Icono personalizado para TikTok
 function TikTokIcon({ size = 20 }: { size?: number }) {
@@ -31,9 +31,6 @@ function TikTokIcon({ size = 20 }: { size?: number }) {
 
 export default async function HomePage() {
   const supabase = createAdminClient();
-
-  // Auto-completar cursos expirados
-  await updateExpiredCourses(supabase);
 
   // 1. Obtener configuraciones del sitio
   const { data: settingsData } = await supabase
@@ -67,8 +64,7 @@ export default async function HomePage() {
     address: "Quito, Ecuador"
   };
 
-  // 2. Auto-actualizar estados de cursos y obtener cursos públicos
-  await updateExpiredCourses(supabase);
+  // 2. Obtener cursos públicos
   const cutoffDate = getPublicCourseVisibilityCutoffDate();
 
   const { data: rawCourses } = await supabase

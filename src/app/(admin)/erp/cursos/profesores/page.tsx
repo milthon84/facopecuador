@@ -8,6 +8,7 @@ import { parseDbError } from "@/lib/db-error-parser";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import NuevoProfesorModal from "@/components/NuevoProfesorModal";
 import TeacherDetailClient from "./TeacherDetailClient";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +16,33 @@ async function uploadTeacherFile(file: File, prefix: string): Promise<string | n
   if (!file || file.size === 0) return null;
   try {
     const supabase = createAdminClient();
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${prefix}_${Date.now()}.${fileExt}`;
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const originalBuffer = Buffer.from(arrayBuffer);
+
+    let uploadBuffer: any = originalBuffer;
+    let contentType = file.type;
+    let fileExt = file.name.split(".").pop() || "bin";
+
+    if (file.type.startsWith("image/")) {
+      const optimized = await optimizeImageForWeb(originalBuffer, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 80,
+        format: "webp",
+      });
+      uploadBuffer = optimized.buffer;
+      contentType = optimized.contentType;
+      fileExt = optimized.extension;
+    }
+
+    const fileName = `${prefix}_${Date.now()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("course-banners")
-      .upload(fileName, buffer, {
-        contentType: file.type,
+      .upload(fileName, uploadBuffer, {
+        contentType,
+        cacheControl: "31536000",
+        upsert: true,
       });
 
     if (!uploadError) {
