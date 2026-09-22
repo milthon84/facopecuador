@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import { 
   GraduationCap, Calendar, FileText, CheckCircle2, XCircle, AlertCircle, 
-  Pencil, ArrowLeft, Users, DollarSign, ExternalLink, Camera, User, X, CreditCard, Receipt
+  Pencil, ArrowLeft, Users, DollarSign, ExternalLink, Camera, User, X, CreditCard, Receipt,
+  ChevronDown, ChevronUp
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,7 +27,10 @@ interface StudentDetailProps {
 
 const formatDateES = (d: string) => {
   if (!d) return "";
-  return new Date(d + "T12:00:00").toLocaleDateString("es-EC", {
+  const dateStr = d.includes("T") ? d.split("T")[0] : d;
+  const dateObj = new Date(dateStr + "T12:00:00");
+  if (isNaN(dateObj.getTime())) return "";
+  return dateObj.toLocaleDateString("es-EC", {
     day: "2-digit",
     month: "short",
     year: "numeric"
@@ -51,6 +55,24 @@ export default function StudentDetailClient({
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  // Cursos retirados inician minimizados por defecto
+  const [collapsedCourses, setCollapsedCourses] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    (enrollments || []).forEach((e: any) => {
+      if (e.status === "dropped") {
+        initial[e.id] = true;
+      }
+    });
+    return initial;
+  });
+
+  const toggleCollapse = (id: string) => {
+    setCollapsedCourses((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -274,190 +296,276 @@ export default function StudentDetailClient({
         {/* Cuerpo de la Pestaña Activa */}
         <div className="p-6">
           {/* TAB 1: CURSOS */}
-          {activeTab === "cursos" && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {enrollments.length === 0 ? (
-                <div className="p-10 text-center text-sm text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-2xl">
-                  El alumno no está matriculado en ningún curso todavía.
-                </div>
-              ) : (
-                enrollments.map((enroll: any) => {
-                  const curso = enroll.cursos;
-                  if (!curso) return null;
+          {activeTab === "cursos" && (() => {
+            // Separar y ordenar cursos por estado:
+            // 1º Cursos en Ejecución / Matriculados
+            // 2º Cursos en Inscripción / Pendientes
+            // 3º Cursos Retirados (Minimizados por defecto)
+            const inProgressEnrollments: any[] = [];
+            const inscriptionEnrollments: any[] = [];
+            const droppedEnrollments: any[] = [];
 
-                  const sortedModules = [...(enroll.curso_modulo_inscripciones || [])].sort(
-                    (a: any, b: any) => (a.curso_modulos?.number || 0) - (b.curso_modulos?.number || 0)
-                  );
+            (enrollments || []).forEach((enroll: any) => {
+              const sortedModules = [...(enroll.curso_modulo_inscripciones || [])];
+              const isNoFiscal = enroll.payment_type === "no_fiscal" || sortedModules.some((m: any) => m.billing_status === "free");
+              const isPaidFromModules = sortedModules.some((m: any) => m.billing_status === "invoiced") || enroll.payment_type === "full_course";
+              const isPaidOrMatriculado = isPaidFromModules || isNoFiscal || enroll.status === "completed";
 
-                  const isNoFiscal = enroll.payment_type === "no_fiscal" || sortedModules.some((m: any) => m.billing_status === "free");
-                  const isPaidFromModules = sortedModules.some((m: any) => m.billing_status === "invoiced") || enroll.payment_type === "full_course";
-                  const isPaidOrMatriculado = isPaidFromModules || isNoFiscal || enroll.status === "completed";
+              if (enroll.status === "dropped") {
+                droppedEnrollments.push(enroll);
+              } else if (isPaidOrMatriculado || enroll.cursos?.status === "in_progress") {
+                inProgressEnrollments.push(enroll);
+              } else {
+                inscriptionEnrollments.push(enroll);
+              }
+            });
 
-                  return (
-                    <div key={enroll.id} className="bg-white border border-lilac-100 rounded-2xl shadow-2xs overflow-hidden">
-                      <div className="px-5 py-4 border-b border-lilac-50 bg-lilac-50/10 flex flex-wrap items-center justify-between gap-4">
-                        <div>
-                          <h3 className="font-bold text-ink-950 text-base">{curso.name}</h3>
-                          <p className="text-xs text-ink-500">Inscrito el {formatDateES(enroll.created_at)}</p>
-                        </div>
+            const renderCourseCard = (enroll: any, isRetirado = false) => {
+              const curso = enroll.cursos;
+              if (!curso) return null;
 
-                        <div className="flex items-center gap-3">
-                          {canEdit && (
-                            <EnrollmentStatusSelector
-                              enrollmentId={enroll.id}
-                              studentId={student.id}
-                              initialStatus={enroll.status}
-                              isMatriculado={isPaidOrMatriculado}
-                              action={updateEnrollmentStatusAction}
-                            />
-                          )}
-                          <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                            isNoFiscal
-                              ? "bg-indigo-50 text-indigo-900 border-indigo-200"
-                              : isPaidOrMatriculado || enroll.status === "completed"
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : enroll.status === "dropped"
-                              ? "bg-red-50 text-red-700 border-red-100"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}>
-                            {isNoFiscal
-                              ? "Matriculado (Sin Factura)"
-                              : isPaidOrMatriculado || enroll.status === "completed"
-                              ? "Matriculado"
-                              : enroll.status === "dropped"
-                              ? "Retirado"
-                              : "Inscrito"}
-                          </span>
+              const sortedModules = [...(enroll.curso_modulo_inscripciones || [])].sort(
+                (a: any, b: any) => (a.curso_modulos?.number || 0) - (b.curso_modulos?.number || 0)
+              );
 
-                          {!isPaidOrMatriculado && enroll.status !== "dropped" && canEdit && (
-                            <PagoInscripcionModal
-                              studentName={student.full_name}
-                              studentDoc={student.document_number}
-                              studentEmail={student.email}
-                              studentPhone={student.phone}
-                              courseId={curso.id}
-                              courseName={curso.name}
-                              courseTotalCost={Number(curso.total_cost)}
-                              enrollmentId={enroll.id}
-                              firstModuleCost={sortedModules[0]?.curso_modulos?.cost ? Number(sortedModules[0].curso_modulos.cost) : undefined}
-                              firstModuleName={sortedModules[0]?.curso_modulos?.name}
-                              returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
-                            />
+              const isNoFiscal = enroll.payment_type === "no_fiscal" || sortedModules.some((m: any) => m.billing_status === "free");
+              const isPaidFromModules = sortedModules.some((m: any) => m.billing_status === "invoiced") || enroll.payment_type === "full_course";
+              const isPaidOrMatriculado = isPaidFromModules || isNoFiscal || enroll.status === "completed";
+              const isCollapsed = !!collapsedCourses[enroll.id];
+
+              return (
+                <div key={enroll.id} className={`bg-white border rounded-2xl shadow-2xs overflow-hidden transition-all ${
+                  isRetirado ? "border-slate-200 bg-slate-50/30 opacity-90" : "border-lilac-100"
+                }`}>
+                  <div 
+                    onClick={() => toggleCollapse(enroll.id)}
+                    className={`px-5 py-4 border-b flex flex-wrap items-center justify-between gap-4 cursor-pointer select-none transition-colors ${
+                      isRetirado 
+                        ? "border-slate-150 bg-slate-100/70 hover:bg-slate-150/80" 
+                        : "border-lilac-50 bg-lilac-50/10 hover:bg-lilac-50/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="p-1 rounded-lg hover:bg-white/80 text-ink-500 hover:text-ink-900 transition-colors shrink-0"
+                        title={isCollapsed ? "Desplegar módulos" : "Minimizar curso"}
+                      >
+                        {isCollapsed ? <ChevronDown size={17} /> : <ChevronUp size={17} />}
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className={`font-bold text-base ${isRetirado ? "text-ink-700 line-through decoration-rose-300" : "text-ink-950"}`}>
+                            {curso.name}
+                          </h3>
+                          {isRetirado && isCollapsed && (
+                            <span className="text-[10px] text-ink-400 font-medium bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                              {sortedModules.length} módulos ocultos
+                            </span>
                           )}
                         </div>
-                      </div>
-
-                      <div className="p-5 space-y-3">
-                        <span className="text-xs font-semibold text-ink-600 block">Módulos del Curso y Estado de Pago:</span>
-
-                        {sortedModules.length === 0 ? (
-                          <p className="text-xs text-ink-400 italic">No hay módulos configurados para este curso.</p>
-                        ) : (
-                          <div className="grid sm:grid-cols-2 gap-3">
-                            {sortedModules.map((mi: any) => {
-                              const mod = mi.curso_modulos;
-                              if (!mod) return null;
-
-                              const prefName = encodeURIComponent(student.full_name);
-                              const prefDoc = encodeURIComponent(student.document_number);
-                              const prefEmail = encodeURIComponent(student.email);
-                              const prefPhone = encodeURIComponent(student.phone);
-                              const prefDesc = encodeURIComponent(`Pago Curso: ${curso.name} - Módulo ${mod.number}: ${mod.name}`);
-                              const prefPrice = encodeURIComponent(mod.cost.toString());
-
-                              const invoiceLink = `/erp/facturacion/nueva?client_name=${prefName}&client_document=${prefDoc}&client_email=${prefEmail}&client_phone=${prefPhone}&module_enrollment_ids=${mi.id}&item_description=${prefDesc}&item_price=${prefPrice}`;
-
-                              return (
-                                <div key={mi.id} className="p-3.5 bg-lilac-50/20 border border-lilac-100 rounded-xl flex items-center justify-between gap-3">
-                                  <div>
-                                    <div className="text-xs font-bold text-ink-950">
-                                      Módulo {mod.number}: {mod.name}
-                                    </div>
-                                    <div className="text-[11px] text-ink-500 font-semibold mt-0.5">
-                                      Costo: ${Number(mod.cost).toFixed(2)}
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {(() => {
-                                      const items = mi.invoices?.invoice_items || [];
-                                      const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
-                                        item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
-                                      );
-                                      const isFullCourse = enroll.payment_type === "full_course";
-                                      const isModulePending = mi.billing_status === "pending";
-                                      const isModuleFree = mi.billing_status === "free";
-                                      const isModuleInvoiced = !isModulePending && !isModuleFree && (mi.billing_status === "invoiced" || (!mi.billing_status && isFullCourse)) && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected" && mi.invoices?.sri_status !== "error";
-                                      const isRejected = mi.invoices && (mi.invoices.sri_status === "rejected" || mi.invoices.sri_status === "error");
-                                      const targetInvId = mi.invoices?.id || (isFullCourse ? (enroll.invoices?.id || enroll.invoice_id) : null);
-                                      const targetInvNum = mi.invoices?.invoice_number || (isFullCourse ? enroll.invoices?.invoice_number : null);
-
-                                      if (isModuleInvoiced) {
-                                        return targetInvId ? (
-                                          <Link
-                                            href={`/erp/facturacion/${targetInvId}`}
-                                            className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 hover:border-green-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
-                                            title="Ver detalles de la factura"
-                                          >
-                                            <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
-                                          </Link>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
-                                            <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
-                                          </span>
-                                        );
-                                      } else if (isRejected) {
-                                        return (
-                                          <Link
-                                            href={`/erp/facturacion/${mi.invoices.id}`}
-                                            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
-                                            title="Ver motivo de rechazo SRI"
-                                          >
-                                            <AlertCircle size={11} /> Factura Rechazada SRI (#{mi.invoices?.invoice_number || "ERR"})
-                                          </Link>
-                                        );
-                                      } else if (mi.billing_status === "free") {
-                                        return (
-                                          <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
-                                            Pagado SF
-                                          </span>
-                                        );
-                                      } else {
-                                        return (
-                                          <>
-                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
-                                              Pendiente
-                                            </span>
-                                            {canEdit && (
-                                              <PagoModuloModal
-                                                studentName={student.full_name}
-                                                studentDoc={student.document_number}
-                                                studentEmail={student.email}
-                                                studentPhone={student.phone}
-                                                moduleInscriptionId={mi.id}
-                                                moduleName={`Módulo ${mod.number}: ${mod.name}`}
-                                                moduleCost={Number(mod.cost)}
-                                                courseId={curso.id}
-                                                returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
-                                              />
-                                            )}
-                                          </>
-                                        );
-                                      }
-                                    })()}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                        <p className="text-xs text-ink-500">
+                          {isRetirado ? "Retirado del curso" : `Inscrito el ${formatDateES(enroll.created_at)}`}
+                        </p>
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          )}
+
+                    <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                      {canEdit && (
+                        <EnrollmentStatusSelector
+                          enrollmentId={enroll.id}
+                          studentId={student.id}
+                          initialStatus={enroll.status}
+                          isMatriculado={isPaidOrMatriculado}
+                          action={updateEnrollmentStatusAction}
+                        />
+                      )}
+                      <span className={`inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        isRetirado || enroll.status === "dropped"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : isNoFiscal
+                          ? "bg-indigo-50 text-indigo-900 border-indigo-200"
+                          : isPaidOrMatriculado || enroll.status === "completed"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}>
+                        {isRetirado || enroll.status === "dropped"
+                          ? "Retirado"
+                          : isNoFiscal
+                          ? "Matriculado (Sin Factura)"
+                          : isPaidOrMatriculado || enroll.status === "completed"
+                          ? "Matriculado"
+                          : "Inscrito"}
+                      </span>
+
+                      {!isPaidOrMatriculado && enroll.status !== "dropped" && canEdit && (
+                        <PagoInscripcionModal
+                          studentName={student.full_name}
+                          studentDoc={student.document_number}
+                          studentEmail={student.email}
+                          studentPhone={student.phone}
+                          courseId={curso.id}
+                          courseName={curso.name}
+                          courseTotalCost={Number(curso.total_cost)}
+                          enrollmentId={enroll.id}
+                          firstModuleCost={sortedModules[0]?.curso_modulos?.cost ? Number(sortedModules[0].curso_modulos.cost) : undefined}
+                          firstModuleName={sortedModules[0]?.curso_modulos?.name}
+                          returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {!isCollapsed && (
+                    <div className="p-5 space-y-3 animate-in fade-in duration-150">
+                      <span className="text-xs font-semibold text-ink-600 block">Módulos del Curso y Estado de Pago:</span>
+
+                      {sortedModules.length === 0 ? (
+                        <p className="text-xs text-ink-400 italic">No hay módulos configurados para este curso.</p>
+                      ) : (
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {sortedModules.map((mi: any) => {
+                            const mod = mi.curso_modulos;
+                            if (!mod) return null;
+
+                            const items = mi.invoices?.invoice_items || [];
+                            const isInscriptionInvoice = Array.isArray(items) && items.some((item: any) =>
+                              item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
+                            );
+                            const isFullCourse = enroll.payment_type === "full_course";
+                            const isModulePending = mi.billing_status === "pending";
+                            const isModuleFree = mi.billing_status === "free";
+                            const isModuleInvoiced = !isModulePending && !isModuleFree && (mi.billing_status === "invoiced" || (!mi.billing_status && isFullCourse)) && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected" && mi.invoices?.sri_status !== "error";
+                            const isRejected = mi.invoices && (mi.invoices.sri_status === "rejected" || mi.invoices.sri_status === "error");
+                            const targetInvId = mi.invoices?.id || (isFullCourse ? (enroll.invoices?.id || enroll.invoice_id) : null);
+                            const targetInvNum = mi.invoices?.invoice_number || (isFullCourse ? enroll.invoices?.invoice_number : null);
+
+                            return (
+                              <div key={mi.id} className="p-3.5 bg-lilac-50/20 border border-lilac-100 rounded-xl flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-xs font-bold text-ink-950">
+                                    Módulo {mod.number}: {mod.name}
+                                  </div>
+                                  <div className="text-[11px] text-ink-500 font-semibold mt-0.5">
+                                    Costo: ${Number(mod.cost).toFixed(2)}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {isModuleInvoiced ? (
+                                    targetInvId ? (
+                                      <Link
+                                        href={`/erp/facturacion/${targetInvId}`}
+                                        className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 hover:bg-green-100 hover:border-green-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
+                                        title="Ver detalles de la factura"
+                                      >
+                                        <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
+                                      </Link>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-xl">
+                                        <CheckCircle2 size={11} /> {isFullCourse ? `Pagado (Curso Completo${targetInvNum ? ` #${targetInvNum}` : ""})` : `Facturado (${targetInvNum ? `#${targetInvNum}` : "OK"})`}
+                                      </span>
+                                    )
+                                  ) : isRejected ? (
+                                    <Link
+                                      href={`/erp/facturacion/${mi.invoices.id}`}
+                                      className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors px-2.5 py-1 rounded-xl cursor-pointer"
+                                      title="Ver motivo de rechazo SRI"
+                                    >
+                                      <AlertCircle size={11} /> Factura Rechazada SRI (#{mi.invoices?.invoice_number || "ERR"})
+                                    </Link>
+                                  ) : mi.billing_status === "free" ? (
+                                    <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
+                                      Pagado SF
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                                        Pendiente
+                                      </span>
+                                      {canEdit && !isRetirado && (
+                                        <PagoModuloModal
+                                          studentName={student.full_name}
+                                          studentDoc={student.document_number}
+                                          studentEmail={student.email}
+                                          studentPhone={student.phone}
+                                          moduleInscriptionId={mi.id}
+                                          moduleName={`Módulo ${mod.number}: ${mod.name}`}
+                                          moduleCost={Number(mod.cost)}
+                                          courseId={curso.id}
+                                          returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
+                                        />
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            return (
+              <div className="space-y-8 animate-in fade-in duration-200">
+                {enrollments.length === 0 ? (
+                  <div className="p-10 text-center text-sm text-ink-500 italic bg-lilac-50/20 border border-lilac-100/60 rounded-2xl">
+                    El alumno no está matriculado en ningún curso todavía.
+                  </div>
+                ) : (
+                  <>
+                    {/* 1. CURSOS EN EJECUCIÓN / MATRICULADOS */}
+                    {inProgressEnrollments.length > 0 && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 uppercase tracking-wider bg-emerald-50/70 border border-emerald-200/60 px-3 py-1.5 rounded-xl w-fit">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Cursos en Ejecución ({inProgressEnrollments.length})</span>
+                        </div>
+                        <div className="space-y-4">
+                          {inProgressEnrollments.map((e) => renderCourseCard(e, false))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 2. CURSOS EN PROCESO DE INSCRIPCIÓN */}
+                    {inscriptionEnrollments.length > 0 && (
+                      <div className="space-y-3.5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-amber-800 uppercase tracking-wider bg-amber-50/70 border border-amber-200/60 px-3 py-1.5 rounded-xl w-fit">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                          <span>Cursos en Inscripción ({inscriptionEnrollments.length})</span>
+                        </div>
+                        <div className="space-y-4">
+                          {inscriptionEnrollments.map((e) => renderCourseCard(e, false))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3. CURSOS RETIRADOS (MINIMIZADOS) */}
+                    {droppedEnrollments.length > 0 && (
+                      <div className="space-y-3 pt-4 border-t border-slate-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 uppercase tracking-wider bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl w-fit">
+                            <span className="w-2 h-2 rounded-full bg-slate-400" />
+                            <span>Cursos Retirados ({droppedEnrollments.length})</span>
+                          </div>
+                          <span className="text-[11px] text-ink-400 italic">
+                            Minimizados automáticamente
+                          </span>
+                        </div>
+                        <div className="space-y-2.5">
+                          {droppedEnrollments.map((e) => renderCourseCard(e, true))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB 2: ASISTENCIA */}
           {activeTab === "asistencia" && (

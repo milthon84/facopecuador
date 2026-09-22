@@ -342,22 +342,22 @@ export default async function CursoDetallePage({
                             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-lilac-500 rounded-full ring-2 ring-white" />
                           )}
 
-                          {/* Globo Flotante con Descripción */}
+                          {/* Globo Flotante con Descripción (Fondo sólido oscuro de alto contraste) */}
                           {m.description && (
-                            <div className="absolute left-0 top-full mt-2 hidden group-hover/badge:block z-50 w-72 sm:w-80 p-3.5 bg-ink-950 text-white rounded-2xl shadow-2xl border border-white/10 pointer-events-none transition-all">
-                              <div className="absolute -top-1.5 left-4 w-3 h-3 bg-ink-950 border-t border-l border-white/10 rotate-45" />
-                              <div className="flex items-center gap-1.5 font-bold text-lilac-300 text-[10px] uppercase tracking-wider mb-1">
-                                <Info size={12} className="text-lilac-400 shrink-0" />
+                            <div className="absolute left-0 top-full mt-2 hidden group-hover/badge:block z-50 w-72 sm:w-80 p-3.5 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 pointer-events-none transition-all">
+                              <div className="absolute -top-1.5 left-4 w-3 h-3 bg-slate-900 border-t border-l border-slate-700 rotate-45" />
+                              <div className="flex items-center gap-1.5 font-bold text-lilac-300 text-[10px] uppercase tracking-wider mb-1.5">
+                                <Info size={13} className="text-lilac-400 shrink-0" />
                                 <span>Descripción del Módulo {m.number}</span>
                               </div>
-                              <p className="text-ink-200 text-xs leading-relaxed font-normal">
+                              <p className="text-slate-100 text-xs leading-relaxed font-normal">
                                 {m.description}
                               </p>
                             </div>
                           )}
                         </div>
 
-                        {/* Título y Costo */}
+                        {/* Título, Costo y Descripción */}
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-start justify-between gap-1.5">
                             <h3 className="font-bold text-ink-950 text-sm leading-snug line-clamp-2" title={m.name}>
@@ -367,6 +367,13 @@ export default async function CursoDetallePage({
                               ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
                             </span>
                           </div>
+
+                          {/* Descripción legible directamente en la tarjeta (2 líneas compactas) */}
+                          {m.description && (
+                            <p className="text-xs text-ink-600 line-clamp-2 leading-relaxed mt-1" title={m.description}>
+                              {m.description}
+                            </p>
+                          )}
 
                           {/* Meta: Fechas y Docentes */}
                           <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
