@@ -729,8 +729,14 @@ export default async function ClasesPage({
                             let fullCourseInvoiceNumber: string | null = null;
 
                             if (enrollment.payment_type === "full_course") {
-                              effectiveBillingStatus = "invoiced_full";
-                              fullCourseInvoiceNumber = enrollment.invoices?.invoice_number || null;
+                              if (billingInfo.billingStatus === "pending") {
+                                effectiveBillingStatus = "pending";
+                              } else if (billingInfo.billingStatus === "free") {
+                                effectiveBillingStatus = "free";
+                              } else {
+                                effectiveBillingStatus = "invoiced_full";
+                                fullCourseInvoiceNumber = enrollment.invoices?.invoice_number || null;
+                              }
                             }
                             const fullCourseInvoiceId = enrollment.invoices?.id || enrollment.invoice_id || null;
 

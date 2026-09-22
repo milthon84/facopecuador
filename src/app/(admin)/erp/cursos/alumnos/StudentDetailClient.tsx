@@ -385,7 +385,9 @@ export default function StudentDetailClient({
                                         item.description?.toLowerCase().includes("inscripción") || item.description?.toLowerCase().includes("inscripcion")
                                       );
                                       const isFullCourse = enroll.payment_type === "full_course";
-                                      const isModuleInvoiced = (isFullCourse || mi.billing_status === "invoiced") && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected" && mi.invoices?.sri_status !== "error";
+                                      const isModulePending = mi.billing_status === "pending";
+                                      const isModuleFree = mi.billing_status === "free";
+                                      const isModuleInvoiced = !isModulePending && !isModuleFree && (mi.billing_status === "invoiced" || (!mi.billing_status && isFullCourse)) && !isInscriptionInvoice && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected" && mi.invoices?.sri_status !== "error";
                                       const isRejected = mi.invoices && (mi.invoices.sri_status === "rejected" || mi.invoices.sri_status === "error");
                                       const targetInvId = mi.invoices?.id || (isFullCourse ? (enroll.invoices?.id || enroll.invoice_id) : null);
                                       const targetInvNum = mi.invoices?.invoice_number || (isFullCourse ? enroll.invoices?.invoice_number : null);

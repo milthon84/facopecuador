@@ -626,8 +626,8 @@ export async function getModuleAttendanceDataAction(moduleId: string) {
         const isFullCourse = mi.curso_inscripciones?.payment_type === "full_course";
 
         let status = mi.billing_status as string;
-        if (isFullCourse) {
-          status = "invoiced";
+        if (!status) {
+          status = isFullCourse ? "invoiced" : "pending";
         } else if (status === "invoiced" && isInscriptionInvoice) {
           status = "pending";
         }
@@ -671,6 +671,8 @@ export async function updateModuleBillingStatusAction(moduloInscripcionId: strin
   if (error) throw new Error(error.message);
 
   revalidatePath(`/erp/cursos`);
+  revalidatePath(`/erp/cursos/alumnos`);
+  revalidatePath(`/erp/cursos/clases`);
   return { success: true };
 }
 
