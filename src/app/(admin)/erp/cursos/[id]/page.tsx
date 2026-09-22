@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { 
   GraduationCap, Calendar, Users, DollarSign, ArrowLeft, 
   Settings, Award, BookOpen, Plus, Trash2, UserPlus, UserMinus, 
-  CheckCircle2, Pencil, UserCheck, CreditCard 
+  CheckCircle2, Pencil, UserCheck, CreditCard, Info 
 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
@@ -310,7 +310,7 @@ export default async function CursoDetallePage({
                 )}
               </div>
             ) : (
-              <div className="space-y-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {modules.map((m: any) => {
                   const mTeachers = m.modulo_profesores || [];
                   const mTeacherIds = mTeachers.map((mt: any) => mt.teacher_id);
@@ -319,53 +319,79 @@ export default async function CursoDetallePage({
                   return (
                     <div
                       key={m.id}
-                      className="bg-white border border-lilac-100 hover:border-lilac-300 rounded-2xl p-5 shadow-2xs hover:shadow-sm transition-all flex flex-col md:flex-row md:items-center justify-between gap-5 group"
+                      className="bg-white border border-lilac-100 hover:border-lilac-300 rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-3 group relative"
                     >
-                      <div className="flex items-start gap-4 flex-1">
-                        {/* Indicador de Número de Módulo */}
-                        <div className="w-11 h-11 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-800 flex flex-col items-center justify-center shrink-0 shadow-2xs group-hover:bg-lilac-600 group-hover:text-white transition-colors">
-                          <span className="text-[9px] font-bold uppercase tracking-wider leading-none">Mód</span>
-                          <span className="text-sm font-black leading-tight">{moduleNum}</span>
+                      {/* Cabecera de Tarjeta: Número con Globo/Tooltip + Título y Costo */}
+                      <div className="flex items-start gap-3">
+                        {/* Indicador de Número de Módulo con Globo / Tooltip */}
+                        <div className="relative group/badge shrink-0">
+                          <div
+                            className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center shadow-2xs transition-all select-none ${
+                              m.description
+                                ? "bg-lilac-50 border border-lilac-200 text-lilac-800 group-hover:bg-lilac-600 group-hover:text-white cursor-help"
+                                : "bg-lilac-50/70 border border-lilac-200 text-lilac-700 cursor-default"
+                            }`}
+                            title={m.description ? undefined : "Sin descripción"}
+                          >
+                            <span className="text-[9px] font-bold uppercase tracking-wider leading-none">Mód</span>
+                            <span className="text-sm font-black leading-tight">{moduleNum}</span>
+                          </div>
+
+                          {/* Indicador sutil de que tiene descripción */}
+                          {m.description && (
+                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-lilac-500 rounded-full ring-2 ring-white" />
+                          )}
+
+                          {/* Globo Flotante con Descripción */}
+                          {m.description && (
+                            <div className="absolute left-0 top-full mt-2 hidden group-hover/badge:block z-50 w-72 sm:w-80 p-3.5 bg-ink-950 text-white rounded-2xl shadow-2xl border border-white/10 pointer-events-none transition-all">
+                              <div className="absolute -top-1.5 left-4 w-3 h-3 bg-ink-950 border-t border-l border-white/10 rotate-45" />
+                              <div className="flex items-center gap-1.5 font-bold text-lilac-300 text-[10px] uppercase tracking-wider mb-1">
+                                <Info size={12} className="text-lilac-400 shrink-0" />
+                                <span>Descripción del Módulo {m.number}</span>
+                              </div>
+                              <p className="text-ink-200 text-xs leading-relaxed font-normal">
+                                {m.description}
+                              </p>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Detalles */}
-                        <div className="space-y-2 flex-1">
-                          <div className="flex flex-wrap items-center gap-2.5">
-                            <h3 className="font-bold text-ink-950 text-base leading-snug">{m.name}</h3>
-                            <span className="inline-flex items-center gap-0.5 text-xs font-bold text-lilac-800 bg-lilac-50 border border-lilac-200 px-2.5 py-0.5 rounded-lg">
+                        {/* Título y Costo */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-start justify-between gap-1.5">
+                            <h3 className="font-bold text-ink-950 text-sm leading-snug line-clamp-2" title={m.name}>
+                              {m.name}
+                            </h3>
+                            <span className="inline-flex items-center text-xs font-bold text-lilac-800 bg-lilac-50 border border-lilac-200 px-2 py-0.5 rounded-lg shrink-0">
                               ${Number(m.cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}
                             </span>
                           </div>
 
-                          {m.description && (
-                            <p className="text-xs text-ink-600 leading-relaxed max-w-3xl">
-                              {m.description}
-                            </p>
-                          )}
-
-                          <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                          {/* Meta: Fechas y Docentes */}
+                          <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
                             {m.start_date ? (
-                              <span className="inline-flex items-center gap-1.5 font-medium text-ink-700 bg-lilac-50/60 px-2.5 py-1 rounded-lg border border-lilac-100/60">
-                                <Calendar size={13} className="text-lilac-600 shrink-0" />
+                              <span className="inline-flex items-center gap-1 font-medium text-ink-700 bg-lilac-50/60 px-2 py-0.5 rounded-lg border border-lilac-100/60 text-[11px]">
+                                <Calendar size={12} className="text-lilac-600 shrink-0" />
                                 <span>Clase: <strong>{formatDateES(m.start_date)}</strong></span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-ink-400 text-[11px] italic">
-                                <Calendar size={12} className="text-ink-300 shrink-0" /> Fecha por definir
+                                <Calendar size={11} className="text-ink-300 shrink-0" /> Fecha por definir
                               </span>
                             )}
 
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="font-semibold text-ink-600 flex items-center gap-1 text-xs">
-                                <UserCheck size={13} className="text-lilac-600 shrink-0" /> Docentes:
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="font-semibold text-ink-600 flex items-center gap-1 text-[11px]">
+                                <UserCheck size={12} className="text-lilac-600 shrink-0" /> Docentes:
                               </span>
                               {mTeachers.length === 0 ? (
-                                <span className="text-ink-400 text-xs italic">Sin asignar</span>
+                                <span className="text-ink-400 text-[11px] italic">Sin asignar</span>
                               ) : (
                                 mTeachers.map((mt: any) => (
                                   <span
                                     key={mt.teacher_id}
-                                    className="bg-lilac-50 text-lilac-900 border border-lilac-200/80 px-2.5 py-0.5 rounded-lg font-bold text-[11px] inline-flex items-center gap-1"
+                                    className="bg-lilac-50 text-lilac-900 border border-lilac-200/80 px-2 py-0.5 rounded-md font-bold text-[10px] inline-flex items-center"
                                   >
                                     {mt.profesores?.full_name}
                                   </span>
@@ -376,8 +402,8 @@ export default async function CursoDetallePage({
                         </div>
                       </div>
 
-                      {/* Acciones */}
-                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center pt-2 md:pt-0 border-t md:border-t-0 border-lilac-50 w-full md:w-auto justify-end">
+                      {/* Pie de Tarjeta: Asistencia & Pagos a la izquierda, Editar/Eliminar a la derecha */}
+                      <div className="pt-2.5 border-t border-lilac-100/60 flex items-center justify-between gap-2 mt-auto">
                         <AttendanceListModal
                           moduleId={m.id}
                           moduleName={m.name}
@@ -385,7 +411,7 @@ export default async function CursoDetallePage({
                         />
 
                         {canEdit && (
-                          <div className="flex items-center gap-1.5 pl-1">
+                          <div className="flex items-center gap-1">
                             <EditModuleModal
                               module={m}
                               allTeachers={allTeachers}
