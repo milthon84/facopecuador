@@ -213,6 +213,7 @@ export default async function HomePage() {
             muted
             loop
             playsInline
+            preload="metadata"
             className="absolute inset-0 w-full h-full object-cover"
           >
             <source src="/videos/facop-intro.mp4" type="video/mp4" />
