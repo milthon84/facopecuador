@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
-import { updateExpiredCourses } from "@/lib/courses";
+import { updateExpiredCourses, syncMissingModuleInscriptions } from "@/lib/courses";
 import EditModuleModal from "@/components/EditModuleModal";
 import CopyCourseButton from "@/components/CopyCourseButton";
 import AttendanceListModal from "@/components/AttendanceListModal";
@@ -128,6 +128,9 @@ export default async function CursoDetallePage({
 
   // Auto-completar cursos expirados en segundo plano sin bloquear la carga inicial
   updateExpiredCourses(supabase).catch(() => {});
+
+  // Sincronizar automáticamente cualquier módulo faltante para los alumnos matriculados en este curso
+  await syncMissingModuleInscriptions(supabase, { courseId: id });
 
   // Cargar todos los datos requeridos en paralelo optimizados por id de curso
   const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, allStudentsRes] = await Promise.all([

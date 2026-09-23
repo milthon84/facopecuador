@@ -54,3 +54,105 @@ export async function updateExpiredCourses(supabase: SupabaseClient): Promise<vo
 export function getPublicCourseVisibilityCutoffDate(): string {
   return getEcuadorDateString(-14);
 }
+
+/**
+ * Garantiza que cada inscripción a un curso tenga registrados todos los módulos existentes
+ * en la tabla `curso_modulo_inscripciones`.
+ * Si se crearon nuevos módulos después de que el alumno se inscribió, esta función los detecta
+ * e inserta automáticamente las inscripciones faltantes.
+ */
+export async function syncMissingModuleInscriptions(
+  supabase: SupabaseClient,
+  filter?: { studentId?: string; courseId?: string; enrollmentId?: string }
+): Promise<{ insertedCount: number }> {
+  try {
+    let enrollQuery = supabase
+      .from("curso_inscripciones")
+      .select("id, course_id, payment_type, status");
+
+    if (filter?.enrollmentId) {
+      enrollQuery = enrollQuery.eq("id", filter.enrollmentId);
+    } else {
+      if (filter?.studentId) {
+        enrollQuery = enrollQuery.eq("student_id", filter.studentId);
+      }
+      if (filter?.courseId) {
+        enrollQuery = enrollQuery.eq("course_id", filter.courseId);
+      }
+    }
+
+    // Excluir alumnos retirados del curso
+    enrollQuery = enrollQuery.neq("status", "dropped");
+
+    const { data: enrollments, error: enrollErr } = await enrollQuery;
+    if (enrollErr || !enrollments || enrollments.length === 0) {
+      return { insertedCount: 0 };
+    }
+
+    const courseIds = Array.from(new Set(enrollments.map((e) => e.course_id)));
+    const enrollmentIds = enrollments.map((e) => e.id);
+
+    // Obtener todos los módulos actuales de estos cursos
+    const { data: allModules, error: modErr } = await supabase
+      .from("curso_modulos")
+      .select("id, course_id, number")
+      .in("course_id", courseIds);
+
+    if (modErr || !allModules || allModules.length === 0) {
+      return { insertedCount: 0 };
+    }
+
+    // Obtener inscripciones de módulo ya existentes
+    const { data: existingInscriptions, error: existErr } = await supabase
+      .from("curso_modulo_inscripciones")
+      .select("enrollment_id, module_id")
+      .in("enrollment_id", enrollmentIds);
+
+    if (existErr) {
+      console.error("[syncMissingModuleInscriptions] Error consultando inscripciones existentes:", existErr.message);
+      return { insertedCount: 0 };
+    }
+
+    const existingSet = new Set(
+      (existingInscriptions || []).map((ei: any) => `${ei.enrollment_id}_${ei.module_id}`)
+    );
+
+    const toInsert: { enrollment_id: string; module_id: string; billing_status: string }[] = [];
+
+    for (const enroll of enrollments) {
+      const courseMods = allModules.filter((m) => m.course_id === enroll.course_id);
+      for (const mod of courseMods) {
+        const key = `${enroll.id}_${mod.id}`;
+        if (!existingSet.has(key)) {
+          toInsert.push({
+            enrollment_id: enroll.id,
+            module_id: mod.id,
+            billing_status:
+              enroll.payment_type === "full_course"
+                ? "invoiced"
+                : enroll.payment_type === "no_fiscal"
+                ? "free"
+                : "pending",
+          });
+        }
+      }
+    }
+
+    if (toInsert.length > 0) {
+      const { error: insErr } = await supabase
+        .from("curso_modulo_inscripciones")
+        .insert(toInsert);
+
+      if (insErr) {
+        console.error("[syncMissingModuleInscriptions] Error insertando módulos faltantes:", insErr.message);
+        return { insertedCount: 0 };
+      }
+    }
+
+    return { insertedCount: toInsert.length };
+  } catch (err: any) {
+    console.error("[syncMissingModuleInscriptions] Excepción:", err.message);
+    return { insertedCount: 0 };
+  }
+}
+

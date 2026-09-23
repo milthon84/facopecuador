@@ -13,6 +13,7 @@ import { sendCourseNoticeEmail } from "@/lib/email";
 import NoticeComposerClient from "@/components/NoticeComposerClient";
 import CourseClasesTabsClient from "./CourseClasesTabsClient";
 import PagoModuloModal from "@/components/PagoModuloModal";
+import { syncMissingModuleInscriptions } from "@/lib/courses";
 
 export const dynamic = "force-dynamic";
 
@@ -517,6 +518,9 @@ export default async function ClasesPage({
             }
 
             const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
+
+            // Sincronizar automáticamente cualquier módulo faltante para los alumnos de este curso
+            await syncMissingModuleInscriptions(supabase, { courseId });
 
             // Cargar alumnos inscritos (excluyendo explícitamente los retirados)
             const enrolledDocs = await supabase

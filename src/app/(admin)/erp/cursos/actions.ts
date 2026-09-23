@@ -5,6 +5,7 @@ import { assertWritePermission } from "@/lib/auth-action";
 import { revalidatePath } from "next/cache";
 import { parseDbError } from "@/lib/db-error-parser";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { syncMissingModuleInscriptions } from "@/lib/courses";
 
 export async function copyCourseAction(courseId: string) {
   await assertWritePermission("/erp/cursos");
@@ -224,25 +225,8 @@ export async function createModuleAction(payload: {
     }
   }
 
-  // Crear inscripciones para los alumnos ya matriculados
-  try {
-    const { data: enrollments } = await supabase
-      .from("curso_inscripciones")
-      .select("id, payment_type")
-      .eq("course_id", courseId)
-      .eq("status", "enrolled");
-
-    if (enrollments && enrollments.length > 0) {
-      const moduleInscriptions = enrollments.map((enr: any) => ({
-        enrollment_id: enr.id,
-        module_id: insertedMod.id,
-        billing_status: enr.payment_type === "full_course" ? "invoiced" : "pending",
-      }));
-      await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
-    }
-  } catch (e: any) {
-    console.error("[createModuleAction] Error al crear inscripciones de módulo:", e.message);
-  }
+  // Sincronizar automáticamente el nuevo módulo con todos los alumnos inscritos
+  await syncMissingModuleInscriptions(supabase, { courseId });
 
   revalidatePath(`/erp/cursos/${courseId}`);
   return { success: true, moduleId: insertedMod.id };
@@ -454,29 +438,7 @@ export async function enrollStudentInCourseAction(studentId: string, courseId: s
   }
 
   // 2. Garantizar que todos los módulos del curso estén inscritos para el alumno
-  const { data: modules } = await supabase
-    .from("curso_modulos")
-    .select("id")
-    .eq("course_id", courseId);
-
-  if (modules && modules.length > 0) {
-    const { data: existingModuleInscriptions } = await supabase
-      .from("curso_modulo_inscripciones")
-      .select("module_id")
-      .eq("enrollment_id", enrollmentId);
-
-    const existingModIds = new Set((existingModuleInscriptions || []).map((m: any) => m.module_id));
-    const missingModules = modules.filter((m) => !existingModIds.has(m.id));
-
-    if (missingModules.length > 0) {
-      const moduleInscriptions = missingModules.map((m) => ({
-        enrollment_id: enrollmentId,
-        module_id: m.id,
-        billing_status: "pending",
-      }));
-      await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
-    }
-  }
+  await syncMissingModuleInscriptions(supabase, { enrollmentId, courseId });
 
   revalidatePath(`/erp/cursos/${courseId}`);
   revalidatePath("/erp/cursos/alumnos");
@@ -744,3 +706,20 @@ export async function registerNoFiscalModuleAction(moduleInscriptionId: string, 
   revalidatePath("/erp/cursos");
   return { success: true };
 }
+
+export async function syncStudentModulesAction(payload: { studentId?: string; courseId?: string }) {
+  await assertWritePermission("/erp/cursos");
+  const supabase = createAdminClient();
+  const res = await syncMissingModuleInscriptions(supabase, payload);
+
+  if (payload.courseId) {
+    revalidatePath(`/erp/cursos/${payload.courseId}`);
+  }
+  if (payload.studentId) {
+    revalidatePath(`/erp/cursos/alumnos?id=${payload.studentId}`);
+  }
+  revalidatePath("/erp/cursos/alumnos");
+  revalidatePath("/erp/cursos/clases");
+  return { success: true, insertedCount: res.insertedCount };
+}
+

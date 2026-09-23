@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Users, Search, ArrowRight, User } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { updateExpiredCourses } from "@/lib/courses";
+import { updateExpiredCourses, syncMissingModuleInscriptions } from "@/lib/courses";
 import { parseDbError } from "@/lib/db-error-parser";
 import NuevoAlumnoModal from "@/components/NuevoAlumnoModal";
 import StudentDetailClient from "./StudentDetailClient";
@@ -134,19 +134,7 @@ async function addStudent(formData: FormData) {
         .single();
 
       if (enrollment) {
-        const { data: modules } = await supabase
-          .from("curso_modulos")
-          .select("id")
-          .eq("course_id", courseId);
-
-        if (modules && modules.length > 0) {
-          const moduleInscriptions = modules.map((m) => ({
-            enrollment_id: enrollment.id,
-            module_id: m.id,
-            billing_status: "pending",
-          }));
-          await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
-        }
+        await syncMissingModuleInscriptions(supabase, { enrollmentId: enrollment.id, courseId });
       }
     }
   }
@@ -218,21 +206,8 @@ async function enrollStudent(formData: FormData) {
     throw new Error(enrollError.message);
   }
 
-  // 2. Obtener todos los módulos asociados al curso
-  const { data: modules } = await supabase
-    .from("curso_modulos")
-    .select("id")
-    .eq("course_id", courseId);
-
-  // 3. Crear las inscripciones detalladas por módulo en curso_modulo_inscripciones
-  if (modules && modules.length > 0) {
-    const moduleInscriptions = modules.map((m) => ({
-      enrollment_id: enrollment.id,
-      module_id: m.id,
-      billing_status: "pending",
-    }));
-    await supabase.from("curso_modulo_inscripciones").insert(moduleInscriptions);
-  }
+  // 2. Sincronizar todos los módulos existentes para esta inscripción
+  await syncMissingModuleInscriptions(supabase, { enrollmentId: enrollment.id, courseId });
 
   revalidatePath(`/erp/cursos/alumnos?id=${studentId}`);
 }
@@ -272,6 +247,9 @@ export default async function AlumnosPage({
   updateExpiredCourses(supabase).catch(() => {});
 
   if (studentId) {
+    // Sincronizar automáticamente cualquier módulo faltante para este alumno antes de cargar su información
+    await syncMissingModuleInscriptions(supabase, { studentId });
+
     // === VISTA DE DETALLE DEL ALUMNO ===
     const [studentRes, enrollmentsRes, attendanceRes, allCoursesRes] = await Promise.all([
       supabase.from("alumnos").select("*").eq("id", studentId).single(),
@@ -280,7 +258,10 @@ export default async function AlumnosPage({
         .select(`
           id,
           status,
+          payment_type,
+          invoice_id,
           created_at,
+          invoices (id, invoice_number, sri_status),
           cursos (id, name, total_cost, start_date, end_date),
           curso_modulo_inscripciones: curso_modulo_inscripciones (
             id,

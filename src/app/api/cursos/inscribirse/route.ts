@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncMissingModuleInscriptions } from "@/lib/courses";
 
 interface StudentInput {
   full_name: string;
@@ -138,7 +139,9 @@ export async function POST(req: Request) {
         .select("id")
         .single();
 
-      return NextResponse.json({ enrollment_id: reactivated?.id, reactivated: true });
+      await syncMissingModuleInscriptions(supabase, { enrollmentId: existingEnrollment.id, courseId: course_id });
+
+      return NextResponse.json({ enrollment_id: reactivated?.id || existingEnrollment.id, reactivated: true });
     }
 
     // 5. Crear la inscripción
@@ -157,6 +160,9 @@ export async function POST(req: Request) {
       console.error("Error creando inscripción:", enrollErr);
       return NextResponse.json({ error: "No se pudo completar la inscripción. Intenta nuevamente." }, { status: 500 });
     }
+
+    // Sincronizar los módulos del curso con la nueva inscripción
+    await syncMissingModuleInscriptions(supabase, { enrollmentId: enrollment.id, courseId: course_id });
 
     return NextResponse.json({ enrollment_id: enrollment.id }, { status: 201 });
   } catch (err) {

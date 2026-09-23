@@ -4,13 +4,14 @@ import { useState, useRef } from "react";
 import { 
   GraduationCap, Calendar, FileText, CheckCircle2, XCircle, AlertCircle, 
   Pencil, ArrowLeft, Users, DollarSign, ExternalLink, Camera, User, X, CreditCard, Receipt,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
 import PagoInscripcionModal from "@/components/PagoInscripcionModal";
 import PagoModuloModal from "@/components/PagoModuloModal";
+import { syncStudentModulesAction } from "@/app/(admin)/erp/cursos/actions";
 
 interface StudentDetailProps {
   student: any;
@@ -55,6 +56,19 @@ export default function StudentDetailClient({
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const [syncingCourseId, setSyncingCourseId] = useState<string | null>(null);
+
+  const handleSyncModules = async (courseId: string) => {
+    try {
+      setSyncingCourseId(courseId);
+      await syncStudentModulesAction({ studentId: student.id, courseId });
+      router.refresh();
+    } catch (err: any) {
+      console.error("Error sincronizando módulos:", err);
+    } finally {
+      setSyncingCourseId(null);
+    }
+  };
 
   // Cursos retirados inician minimizados por defecto
   const [collapsedCourses, setCollapsedCourses] = useState<Record<string, boolean>>(() => {
@@ -418,7 +432,21 @@ export default function StudentDetailClient({
 
                   {!isCollapsed && (
                     <div className="p-5 space-y-3 animate-in fade-in duration-150">
-                      <span className="text-xs font-semibold text-ink-600 block">Módulos del Curso y Estado de Pago:</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-ink-600 block">Módulos del Curso y Estado de Pago:</span>
+                        {canEdit && !isRetirado && (
+                          <button
+                            type="button"
+                            onClick={() => handleSyncModules(curso.id)}
+                            disabled={syncingCourseId === curso.id}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-60"
+                            title="Sincronizar módulos agregados recientemente al curso"
+                          >
+                            <RefreshCw size={11} className={syncingCourseId === curso.id ? "animate-spin" : ""} />
+                            <span>{syncingCourseId === curso.id ? "Sincronizando..." : "Sincronizar módulos"}</span>
+                          </button>
+                        )}
+                      </div>
 
                       {sortedModules.length === 0 ? (
                         <p className="text-xs text-ink-400 italic">No hay módulos configurados para este curso.</p>
