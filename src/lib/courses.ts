@@ -68,7 +68,7 @@ export async function syncMissingModuleInscriptions(
   try {
     let enrollQuery = supabase
       .from("curso_inscripciones")
-      .select("id, course_id, payment_type, status");
+      .select("id, course_id, status");
 
     if (filter?.enrollmentId) {
       enrollQuery = enrollQuery.eq("id", filter.enrollmentId);
@@ -127,12 +127,7 @@ export async function syncMissingModuleInscriptions(
           toInsert.push({
             enrollment_id: enroll.id,
             module_id: mod.id,
-            billing_status:
-              enroll.payment_type === "full_course"
-                ? "invoiced"
-                : enroll.payment_type === "no_fiscal"
-                ? "free"
-                : "pending",
+            billing_status: "pending",
           });
         }
       }

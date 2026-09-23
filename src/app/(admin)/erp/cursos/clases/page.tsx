@@ -520,7 +520,11 @@ export default async function ClasesPage({
             const selectedModule = modules.find(m => m.id === moduleId) ?? modules[0];
 
             // Sincronizar automáticamente cualquier módulo faltante para los alumnos de este curso
-            await syncMissingModuleInscriptions(supabase, { courseId });
+            try {
+              await syncMissingModuleInscriptions(supabase, { courseId });
+            } catch (e: any) {
+              console.error("[clases/page.tsx] Error sincronizando módulos:", e?.message);
+            }
 
             // Cargar alumnos inscritos (excluyendo explícitamente los retirados)
             const enrolledDocs = await supabase

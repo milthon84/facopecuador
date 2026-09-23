@@ -130,7 +130,11 @@ export default async function CursoDetallePage({
   updateExpiredCourses(supabase).catch(() => {});
 
   // Sincronizar automáticamente cualquier módulo faltante para los alumnos matriculados en este curso
-  await syncMissingModuleInscriptions(supabase, { courseId: id });
+  try {
+    await syncMissingModuleInscriptions(supabase, { courseId: id });
+  } catch (e: any) {
+    console.error("[cursos/[id]/page.tsx] Error sincronizando módulos:", e?.message);
+  }
 
   // Cargar todos los datos requeridos en paralelo optimizados por id de curso
   const [courseRes, modulesRes, assignedTeachersRes, allTeachersRes, studentsRes, allStudentsRes] = await Promise.all([

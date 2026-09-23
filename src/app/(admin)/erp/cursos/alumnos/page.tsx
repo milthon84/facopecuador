@@ -248,7 +248,11 @@ export default async function AlumnosPage({
 
   if (studentId) {
     // Sincronizar automáticamente cualquier módulo faltante para este alumno antes de cargar su información
-    await syncMissingModuleInscriptions(supabase, { studentId });
+    try {
+      await syncMissingModuleInscriptions(supabase, { studentId });
+    } catch (e: any) {
+      console.error("[alumnos/page.tsx] Error sincronizando módulos:", e?.message);
+    }
 
     // === VISTA DE DETALLE DEL ALUMNO ===
     const [studentRes, enrollmentsRes, attendanceRes, allCoursesRes] = await Promise.all([
@@ -258,10 +262,7 @@ export default async function AlumnosPage({
         .select(`
           id,
           status,
-          payment_type,
-          invoice_id,
           created_at,
-          invoices (id, invoice_number, sri_status),
           cursos (id, name, total_cost, start_date, end_date),
           curso_modulo_inscripciones: curso_modulo_inscripciones (
             id,
@@ -301,6 +302,10 @@ export default async function AlumnosPage({
 
     const student = studentRes.data;
     if (!student) return redirect("/erp/cursos/alumnos");
+
+    if (enrollmentsRes.error) {
+      console.error("[alumnos/page.tsx] Error consultando curso_inscripciones:", enrollmentsRes.error);
+    }
 
     // Cargar facturas emitidas a nombre del alumno (por cédula o email)
     const invoicesRes = await supabase
