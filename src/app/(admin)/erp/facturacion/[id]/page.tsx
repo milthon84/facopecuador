@@ -227,20 +227,27 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <h2 className="text-sm font-semibold text-ink-700 flex items-center gap-2 mb-3">
               <Hash size={14} className="text-lilac-500" /> Información SRI
             </h2>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex flex-col gap-0.5">
-                <span className="text-[11px] text-ink-400 uppercase tracking-wide font-semibold">N° de Autorización (SRI)</span>
+                <span className="text-[11px] text-ink-500 uppercase tracking-wide font-bold">
+                  Clave de Acceso / N° de Autorización (SRI)
+                </span>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono bg-lilac-50 border border-lilac-100 rounded-lg px-3 py-1.5 break-all flex-1 font-bold text-ink-900">
-                    {invoice.sri_authorization_number || invoice.sri_access_key}
+                  <code className="text-xs font-mono bg-lilac-50 border border-lilac-100 rounded-lg px-3 py-1.5 break-all flex-1 font-bold text-ink-900 select-all">
+                    {invoice.sri_authorization_number || invoice.sri_access_key || "No disponible"}
                   </code>
-                  <CopyButton text={invoice.sri_authorization_number || invoice.sri_access_key} label="Copiar número de autorización" />
+                  {(invoice.sri_authorization_number || invoice.sri_access_key) && (
+                    <CopyButton text={invoice.sri_authorization_number || invoice.sri_access_key} label="Copiar Clave de Acceso" />
+                  )}
                 </div>
+                <p className="text-[10px] text-ink-400 mt-0.5">
+                  Esta clave de 49 dígitos es el identificador único con el que se consulta o anula la factura en el SRI.
+                </p>
               </div>
 
-              {invoice.sri_access_key && invoice.sri_access_key !== invoice.sri_authorization_number && (
+              {invoice.sri_access_key && invoice.sri_authorization_number && invoice.sri_access_key !== invoice.sri_authorization_number && (
                 <div>
-                  <span className="text-[11px] text-ink-400 uppercase tracking-wide">Clave de Acceso</span>
+                  <span className="text-[11px] text-ink-400 uppercase tracking-wide">Clave de Acceso Secundaria</span>
                   <p className="text-xs font-mono text-ink-800 break-all">{invoice.sri_access_key}</p>
                 </div>
               )}
@@ -266,14 +273,32 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               {invoice.sri_error_messages && (
                 <div className="space-y-2 mt-2">
                   {(invoice.sri_error_messages as any).annulment && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
-                      <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                        <Trash2 size={13} className="text-red-500" /> Registro de Anulación Local
-                      </p>
-                      <div className="text-slate-600 space-y-0.5 pt-0.5 text-[11px]">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2">
+                        <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Trash2 size={14} className="text-red-500" /> Registro de Anulación Local
+                        </p>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                          Anulada en Sistema
+                        </span>
+                      </div>
+
+                      <div className="text-slate-600 space-y-0.5 text-[11px]">
                         <p><b>Anulado por:</b> {(invoice.sri_error_messages as any).annulment.annulled_by}</p>
                         <p><b>Fecha de anulación:</b> {new Date((invoice.sri_error_messages as any).annulment.annulled_at).toLocaleString("es-EC")}</p>
                         <p><b>Estado original:</b> {(invoice.sri_error_messages as any).annulment.original_status} (pago: {(invoice.sri_error_messages as any).annulment.original_payment_status})</p>
+                      </div>
+
+                      <div className="pt-1 flex items-center justify-end">
+                        <a
+                          href="https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 hover:underline"
+                        >
+                          <span>Ir a anulación en SRI en Línea</span>
+                          <ExternalLink size={12} />
+                        </a>
                       </div>
                     </div>
                   )}
