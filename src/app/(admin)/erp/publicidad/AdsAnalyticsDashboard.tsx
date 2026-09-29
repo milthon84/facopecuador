@@ -28,6 +28,11 @@ import {
   Table,
   Calendar,
   Minus,
+  Award,
+  PieChart,
+  Flame,
+  Zap,
+  Target,
 } from "lucide-react";
 
 // Estructura de datos por campaña
@@ -94,9 +99,13 @@ export type PeriodKey = "hoy" | "30" | "14" | "7" | "3";
 export interface DailyEvolutionItem {
   dia: string;
   fecha: string;
-  ct: number; // Conversaciones / Contactos
-  b: number; // Presupuesto ($)
-  cc: number; // Costo por Conversación ($)
+  ct: number; // Conversaciones / Contactos del día
+  b: number; // Presupuesto ($) del día
+  cc: number; // Costo por Conversación ($) del día
+  cumCt: number; // Conversaciones Acumuladas hasta la fecha
+  cumB: number; // Presupuesto Acumulado ($) hasta la fecha
+  cumCc: number; // Costo por Conversación Acumulado ($)
+  growthRateCt?: number; // % Crecimiento de contactos respecto al inicio del periodo
   trendCt?: "up" | "down" | "flat";
   trendCc?: "up" | "down" | "flat";
 }
@@ -113,10 +122,34 @@ export interface AdsDataPayload {
 // Función helper para obtener o calcular la evolución día a día del período acumulado
 function getDailyEvolution(
   periodKey: PeriodKey,
-  currentRows: CampaignRow[],
+  selectedRows: CampaignRow[],
   adsData: AdsDataPayload
 ): DailyEvolutionItem[] {
-  if (periodKey === "hoy") return [];
+  const totalBud = selectedRows.reduce((acc, r) => acc + (r.b || 0), 0);
+  const totalCt = selectedRows.reduce((acc, r) => acc + (r.ct || 0), 0);
+  const now = new Date();
+
+  // Si solo hay una fila seleccionada (un anuncio individual), averiguar cuántos días lleva activa
+  const singleRow = selectedRows.length === 1 ? selectedRows[0] : null;
+  const activeDaysLimit = singleRow ? getActiveDays(singleRow) : null;
+
+  if (periodKey === "hoy") {
+    const cc = totalCt > 0 ? totalBud / totalCt : 0;
+    const dayLabel = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}`;
+    return [{
+      dia: `${dayLabel} (Hoy)`,
+      fecha: now.toISOString().slice(0, 10),
+      ct: totalCt,
+      b: Number(totalBud.toFixed(2)),
+      cc: Number(cc.toFixed(2)),
+      cumCt: totalCt,
+      cumB: Number(totalBud.toFixed(2)),
+      cumCc: Number(cc.toFixed(2)),
+      growthRateCt: 0,
+      trendCt: "flat",
+      trendCc: "flat",
+    }];
+  }
 
   const numDays = parseInt(periodKey, 10);
   if (isNaN(numDays) || numDays <= 1) return [];
@@ -143,102 +176,159 @@ function getDailyEvolution(
   }
 
   if (explicitDailyArray && explicitDailyArray.length > 0) {
+    let runningCt = 0;
+    let runningB = 0;
     const parsed = explicitDailyArray.map((item: any, idx: number) => {
       const ct = Number(item.ct ?? item.contactos ?? item.conversaciones ?? item.leads ?? 0);
       const b = Number(item.b ?? item.presupuesto ?? item.gasto ?? item.costo ?? 0);
       const cc = ct > 0 ? b / ct : Number(item.cc ?? item.costo_contacto ?? item.costo_conversacion ?? 0);
       const label = item.dia || item.fecha || item.date || `Día ${idx + 1}`;
+      runningCt += ct;
+      runningB += b;
+      const cumCc = runningCt > 0 ? runningB / runningCt : 0;
+
       return {
         dia: String(label),
         fecha: item.fecha ? String(item.fecha) : String(label),
         ct,
-        b,
-        cc,
+        b: Number(b.toFixed(2)),
+        cc: Number(cc.toFixed(2)),
+        cumCt: runningCt,
+        cumB: Number(runningB.toFixed(2)),
+        cumCc: Number(cumCc.toFixed(2)),
       };
     });
+
+    const firstCt = parsed[0]?.ct || 1;
 
     return parsed.map((item, idx) => {
       const prev = idx > 0 ? parsed[idx - 1] : null;
       const trendCt: "up" | "down" | "flat" = !prev ? "flat" : item.ct > prev.ct ? "up" : item.ct < prev.ct ? "down" : "flat";
       const trendCc: "up" | "down" | "flat" = !prev ? "flat" : item.cc < prev.cc ? "up" : item.cc > prev.cc ? "down" : "flat";
-      return { ...item, trendCt, trendCc };
+      const growthRateCt = Number((((item.cumCt - firstCt) / (firstCt || 1)) * 100).toFixed(1));
+      return { ...item, trendCt, trendCc, growthRateCt };
     });
   }
 
-  // Generación proyectada basada en métricas del período y el día de hoy
-  const totalBud = currentRows.reduce((acc, r) => acc + (r.b || 0), 0);
-  const totalCt = currentRows.reduce((acc, r) => acc + (r.ct || 0), 0);
-
-  const hoyRows = adsData.hoy || [];
-  const hoyBud = hoyRows.reduce((acc, r) => acc + (r.b || 0), 0);
-  const hoyCt = hoyRows.reduce((acc, r) => acc + (r.ct || 0), 0);
-
+  // Generación proporcional de evolución cuando la API entrega datos acumulados por período
   const items: DailyEvolutionItem[] = [];
-  const now = new Date();
 
-  const hasHoy = hoyRows.length > 0 && (hoyBud > 0 || hoyCt > 0);
-  const pastDaysCount = numDays - (hasHoy ? 1 : 0);
-  const remBud = hasHoy ? Math.max(0, totalBud - hoyBud) : totalBud;
-  const remCt = hasHoy ? Math.max(0, totalCt - hoyCt) : totalCt;
+  if (totalBud === 0 && totalCt === 0) {
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - (numDays - 1 - i));
+      const dayLabel = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+      items.push({
+        dia: i === numDays - 1 ? `${dayLabel} (Hoy)` : dayLabel,
+        fecha: d.toISOString().slice(0, 10),
+        ct: 0,
+        b: 0,
+        cc: 0,
+        cumCt: 0,
+        cumB: 0,
+        cumCc: 0,
+        growthRateCt: 0,
+        trendCt: "flat",
+        trendCc: "flat",
+      });
+    }
+    return items;
+  }
 
-  const avgPastBud = pastDaysCount > 0 ? remBud / pastDaysCount : 0;
-  const avgPastCt = pastDaysCount > 0 ? remCt / pastDaysCount : 0;
+  // Días efectivos en los que el anuncio estuvo activo dentro del período
+  const effectiveActiveDays = activeDaysLimit !== null && activeDaysLimit > 0
+    ? Math.min(numDays, activeDaysLimit)
+    : numDays;
 
+  // Índice de inicio de la actividad del anuncio (los días previos estuvo inactivo / antes de ser lanzado)
+  const startIndex = numDays - effectiveActiveDays;
+
+  const baseBudPerDay = totalBud / effectiveActiveDays;
+  const baseCtPerDay = totalCt / effectiveActiveDays;
+
+  const rawItems: { dia: string; fecha: string; isActiveOnDay: boolean; rawB: number; rawCt: number }[] = [];
   for (let i = 0; i < numDays; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() - (numDays - 1 - i));
     const dayLabel = `${d.getDate().toString().padStart(2, "0")}/${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-    const isToday = i === numDays - 1;
+    const isActiveOnDay = i >= startIndex;
 
-    let dayB: number;
-    let dayCt: number;
+    let rawB = 0;
+    let rawCt = 0;
 
-    if (isToday && hasHoy) {
-      dayB = hoyBud;
-      dayCt = hoyCt;
-    } else {
-      const factorB = 1 + 0.15 * Math.sin(i * 1.3);
-      const factorCt = 1 + 0.2 * Math.cos(i * 1.1);
-
-      dayB = avgPastBud * factorB;
-      dayCt = Math.round(avgPastCt * factorCt);
+    if (isActiveOnDay) {
+      const activeStep = i - startIndex;
+      const factorB = 1 + 0.12 * Math.sin((activeStep + 1) * 1.35);
+      const factorCt = 1 + 0.18 * Math.cos((activeStep + 1) * 1.25);
+      rawB = Math.max(0.05, baseBudPerDay * factorB);
+      rawCt = Math.max(0.5, baseCtPerDay * factorCt);
     }
 
-    const dayCc = dayCt > 0 ? dayB / dayCt : 0;
+    rawItems.push({
+      dia: i === numDays - 1 ? `${dayLabel} (Hoy)` : dayLabel,
+      fecha: d.toISOString().slice(0, 10),
+      isActiveOnDay,
+      rawB,
+      rawCt,
+    });
+  }
+
+  const activeRawList = rawItems.filter((it) => it.isActiveOnDay);
+  const sumRawB = activeRawList.reduce((acc, it) => acc + it.rawB, 0) || 1;
+  const sumRawCt = activeRawList.reduce((acc, it) => acc + it.rawCt, 0) || 1;
+
+  let allocatedBud = 0;
+  let allocatedCt = 0;
+  let runningCumCt = 0;
+  let runningCumB = 0;
+
+  for (let i = 0; i < numDays; i++) {
+    const it = rawItems[i];
+    const isLast = i === numDays - 1;
+
+    let dayB = 0;
+    let dayCt = 0;
+
+    if (it.isActiveOnDay) {
+      if (isLast) {
+        dayB = Math.max(0, Number((totalBud - allocatedBud).toFixed(2)));
+        dayCt = Math.max(0, totalCt - allocatedCt);
+      } else {
+        dayB = Number(((it.rawB / sumRawB) * totalBud).toFixed(2));
+        dayCt = totalCt > 0 ? Math.max(1, Math.round((it.rawCt / sumRawCt) * totalCt)) : 0;
+        allocatedBud += dayB;
+        allocatedCt += dayCt;
+      }
+    }
+
+    const dayCc = dayCt > 0 ? Number((dayB / dayCt).toFixed(2)) : 0;
+    runningCumCt += dayCt;
+    runningCumB += dayB;
+    const dayCumCc = runningCumCt > 0 ? Number((runningCumB / runningCumCt).toFixed(2)) : 0;
 
     items.push({
-      dia: isToday ? `${dayLabel} (Hoy)` : dayLabel,
-      fecha: d.toISOString().slice(0, 10),
-      ct: Math.max(0, dayCt),
-      b: Math.max(0, Number(dayB.toFixed(2))),
-      cc: Number(dayCc.toFixed(2)),
+      dia: it.dia,
+      fecha: it.fecha,
+      ct: dayCt,
+      b: dayB,
+      cc: dayCc,
+      cumCt: runningCumCt,
+      cumB: Number(runningCumB.toFixed(2)),
+      cumCc: dayCumCc,
     });
   }
 
-  if (pastDaysCount > 0) {
-    const sumPastB = items.slice(0, pastDaysCount).reduce((acc, it) => acc + it.b, 0);
-    const sumPastCt = items.slice(0, pastDaysCount).reduce((acc, it) => acc + it.ct, 0);
-
-    const diffB = remBud - sumPastB;
-    const diffCt = remCt - sumPastCt;
-
-    if (diffB !== 0 && items[0]) {
-      items[0].b = Math.max(0, Number((items[0].b + diffB).toFixed(2)));
-    }
-    if (diffCt !== 0 && items[0]) {
-      items[0].ct = Math.max(0, items[0].ct + diffCt);
-    }
-
-    items.forEach((it) => {
-      it.cc = it.ct > 0 ? Number((it.b / it.ct).toFixed(2)) : 0;
-    });
-  }
+  const firstActiveItem = items.find((it) => it.ct > 0) || items[0];
+  const baseFirstCt = firstActiveItem?.ct || 1;
 
   return items.map((item, idx) => {
     const prev = idx > 0 ? items[idx - 1] : null;
     const trendCt: "up" | "down" | "flat" = !prev ? "flat" : item.ct > prev.ct ? "up" : item.ct < prev.ct ? "down" : "flat";
     const trendCc: "up" | "down" | "flat" = !prev ? "flat" : item.cc < prev.cc ? "up" : item.cc > prev.cc ? "down" : "flat";
-    return { ...item, trendCt, trendCc };
+    const growthRateCt = item.cumCt > 0
+      ? Number((((item.cumCt - baseFirstCt) / (baseFirstCt || 1)) * 100).toFixed(1))
+      : 0;
+    return { ...item, trendCt, trendCc, growthRateCt };
   });
 }
 
@@ -450,22 +540,181 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
     return adsData[period] || [];
   }, [adsData, period]);
 
-  // Pestaña dentro de Detalle de Anuncios: "tabla" o "grafico"
-  const [detailTab, setDetailTab] = useState<"tabla" | "grafico">("tabla");
+  // Colores distintivos asignados a cada anuncio para la comparativa multilínea (16 colores únicos)
+  const AD_COLORS = useMemo(() => [
+    { stroke: "#8b5cf6", fill: "#8b5cf6", name: "Púrpura", badge: "bg-purple-100 text-purple-900 border-purple-300" },
+    { stroke: "#059669", fill: "#059669", name: "Esmeralda", badge: "bg-emerald-100 text-emerald-900 border-emerald-300" },
+    { stroke: "#2563eb", fill: "#2563eb", name: "Azul", badge: "bg-blue-100 text-blue-900 border-blue-300" },
+    { stroke: "#d97706", fill: "#d97706", name: "Ámbar", badge: "bg-amber-100 text-amber-900 border-amber-300" },
+    { stroke: "#db2777", fill: "#db2777", name: "Rosa", badge: "bg-pink-100 text-pink-900 border-pink-300" },
+    { stroke: "#0891b2", fill: "#0891b2", name: "Cian", badge: "bg-cyan-100 text-cyan-900 border-cyan-300" },
+    { stroke: "#ea580c", fill: "#ea580c", name: "Naranja", badge: "bg-orange-100 text-orange-900 border-orange-300" },
+    { stroke: "#4f46e5", fill: "#4f46e5", name: "Índigo", badge: "bg-indigo-100 text-indigo-900 border-indigo-300" },
+    { stroke: "#16a34a", fill: "#16a34a", name: "Verde", badge: "bg-green-100 text-green-900 border-green-300" },
+    { stroke: "#e11d48", fill: "#e11d48", name: "Rojo Carmín", badge: "bg-rose-100 text-rose-900 border-rose-300" },
+    { stroke: "#0284c7", fill: "#0284c7", name: "Cielo", badge: "bg-sky-100 text-sky-900 border-sky-300" },
+    { stroke: "#9333ea", fill: "#9333ea", name: "Violeta", badge: "bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300" },
+    { stroke: "#ca8a04", fill: "#ca8a04", name: "Dorado", badge: "bg-yellow-100 text-yellow-900 border-yellow-300" },
+    { stroke: "#0d9488", fill: "#0d9488", name: "Teal", badge: "bg-teal-100 text-teal-900 border-teal-300" },
+    { stroke: "#c026d3", fill: "#c026d3", name: "Magenta", badge: "bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300" },
+    { stroke: "#475569", fill: "#475569", name: "Pizarra", badge: "bg-slate-200 text-slate-900 border-slate-400" },
+  ], []);
 
-  // Filtro de anuncio específico para el gráfico de líneas
-  const [selectedAdFilter, setSelectedAdFilter] = useState<string>("todos");
+  // Pestaña dentro de Detalle de Anuncios: "grafico" o "tabla"
+  const [detailTab, setDetailTab] = useState<"grafico" | "tabla">("grafico");
 
-  // Filas filtradas según el anuncio seleccionado
-  const selectedRows = useMemo(() => {
-    if (selectedAdFilter === "todos") return currentRows;
-    return currentRows.filter((r) => r.a === selectedAdFilter);
-  }, [currentRows, selectedAdFilter]);
+  // Métrica a comparar en el gráfico multilínea: "acumulado" (crecimiento acumulado), "conversaciones" (diario), "crecimiento_pct" (% crecimiento) o "costo" (rendimiento)
+  const [compareMetric, setCompareMetric] = useState<"acumulado" | "conversaciones" | "crecimiento_pct" | "costo">("acumulado");
 
-  // Obtener serie temporal de evolución día a día del anuncio o conjunto seleccionado
-  const dailyEvolution = useMemo(() => {
-    return getDailyEvolution(period, selectedRows, adsData);
-  }, [period, selectedRows, adsData]);
+  // Anuncios seleccionados para comparar (siempre muestra todos por defecto)
+  const [selectedAdsToCompare, setSelectedAdsToCompare] = useState<string[]>([]);
+
+  // Punto con hover activo para tooltip interactivo en la comparativa
+  const [hoveredComparePoint, setHoveredComparePoint] = useState<{
+    adName: string;
+    color: string;
+    dayIndex: number;
+    dia: string;
+    ct: number;
+    b: number;
+    cc: number;
+    cumCt: number;
+    cumB: number;
+    cumCc: number;
+    growthRateCt: number;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Inicializar seleccionando TODOS los anuncios del periodo por defecto
+  useEffect(() => {
+    if (currentRows.length > 0) {
+      setSelectedAdsToCompare(currentRows.map((r) => r.a));
+    }
+  }, [currentRows]);
+
+  // Función para alternar selección de un anuncio para la comparativa
+  const toggleAdComparison = (adName: string) => {
+    setSelectedAdsToCompare((prev) => {
+      if (prev.includes(adName)) {
+        if (prev.length === 1) return prev; // Mantener al menos uno seleccionado
+        return prev.filter((a) => a !== adName);
+      } else {
+        return [...prev, adName];
+      }
+    });
+  };
+
+  // Comparativa de series diarias por cada anuncio seleccionado (renderiza todos los anuncios marcados)
+  const multiSeriesData = useMemo(() => {
+    if (!currentRows || currentRows.length === 0) return [];
+
+    const activeList = selectedAdsToCompare.length > 0
+      ? currentRows.filter((r) => selectedAdsToCompare.includes(r.a))
+      : currentRows;
+
+    return activeList.map((row, idx) => {
+      const colorObj = AD_COLORS[idx % AD_COLORS.length];
+      const daily = getDailyEvolution(period, [row], adsData);
+      return {
+        row,
+        adName: row.a,
+        color: colorObj.stroke,
+        badge: colorObj.badge,
+        daily,
+        totalContacts: row.ct || 0,
+        totalSpent: row.b || 0,
+        costPerContact: row.cc || 0,
+      };
+    });
+  }, [currentRows, selectedAdsToCompare, period, adsData, AD_COLORS]);
+
+  // Análisis inteligente de inversión: ¿Dónde está mejor invertido tu dinero?
+  const investmentAnalysis = useMemo(() => {
+    if (!currentRows || currentRows.length === 0) {
+      return {
+        ranking: [],
+        best: null,
+        worst: null,
+        totalSpent: 0,
+        totalContacts: 0,
+        averageCpa: 0,
+      };
+    }
+
+    const totalSpent = currentRows.reduce((sum, r) => sum + (r.b || 0), 0);
+    const totalContacts = currentRows.reduce((sum, r) => sum + (r.ct || 0), 0);
+    const averageCpa = totalContacts > 0 ? totalSpent / totalContacts : 0;
+
+    const ranking = [...currentRows].map((r) => {
+      const spent = r.b || 0;
+      const contacts = r.ct || 0;
+      const costPerContact = r.cc || (contacts > 0 ? spent / contacts : 0);
+      const pctBudget = totalSpent > 0 ? (spent / totalSpent) * 100 : 0;
+      const pctContacts = totalContacts > 0 ? (contacts / totalContacts) * 100 : 0;
+      const contactsPer10Dollars = spent > 0 ? (contacts / spent) * 10 : 0;
+      const efficiencyRatio = pctBudget > 0 ? pctContacts / pctBudget : (contacts > 0 ? 2 : 0);
+
+      let verdictLabel = "Inversión Rentable";
+      let verdictBadgeCls = "bg-purple-100 text-purple-900 border-purple-300";
+      let icon = "✅";
+
+      if (contacts === 0 && spent > 0) {
+        verdictLabel = "Sin Retorno (0 contactos)";
+        verdictBadgeCls = "bg-rose-100 text-rose-800 border-rose-300 font-bold";
+        icon = "🛑";
+      } else if (costPerContact <= (averageCpa * 0.8) || efficiencyRatio >= 1.25) {
+        verdictLabel = "Excelente Inversión";
+        verdictBadgeCls = "bg-emerald-100 text-emerald-950 border-emerald-300 font-extrabold";
+        icon = "🏆";
+      } else if (costPerContact <= (averageCpa * 1.15)) {
+        verdictLabel = "Inversión Rentable";
+        verdictBadgeCls = "bg-purple-100 text-purple-900 border-purple-300 font-bold";
+        icon = "✅";
+      } else if (costPerContact <= (averageCpa * 1.6)) {
+        verdictLabel = "Inversión Aceptable";
+        verdictBadgeCls = "bg-amber-100 text-amber-900 border-amber-300 font-semibold";
+        icon = "⚖️";
+      } else {
+        verdictLabel = "Alto Costo / Revisar";
+        verdictBadgeCls = "bg-rose-100 text-rose-800 border-rose-300 font-bold";
+        icon = "⚠️";
+      }
+
+      return {
+        ...r,
+        spent,
+        contacts,
+        costPerContact,
+        pctBudget,
+        pctContacts,
+        contactsPer10Dollars,
+        efficiencyRatio,
+        verdictLabel,
+        verdictBadgeCls,
+        icon,
+      };
+    }).sort((a, b) => {
+      // Ordenar por mejor inversión (menor costo por contacto y que tenga contactos)
+      if (a.contacts === 0 && b.contacts > 0) return 1;
+      if (b.contacts === 0 && a.contacts > 0) return -1;
+      if (a.costPerContact !== b.costPerContact) return a.costPerContact - b.costPerContact;
+      return b.contacts - a.contacts;
+    });
+
+    const activeWithContacts = ranking.filter((r) => r.contacts > 0);
+    const best = activeWithContacts[0] || ranking[0] || null;
+    const worst = ranking.length > 1 ? ranking[ranking.length - 1] : null;
+
+    return {
+      ranking,
+      best,
+      worst,
+      totalSpent,
+      totalContacts,
+      averageCpa,
+    };
+  }, [currentRows]);
 
   // Cambiar ordenamiento de la tabla
   function handleSort(field: "a" | "b" | "ct" | "cc" | "ctr" | "e" | "d" | "st") {
@@ -844,64 +1093,64 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
             {metrics.totalCt}
           </div>
           <div className="text-xs text-slate-500 mt-1.5">
-            Últimos <b className="text-slate-700">{period} días</b>
+            {period === "hoy" ? "Generados Hoy" : `Últimos ${period} días`}
           </div>
         </div>
 
-        {/* KPI 2: Presupuesto Total */}
+        {/* KPI 2: Total Pagado Acumulado (Período Seleccionado) */}
         <div className="relative bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition group overflow-hidden">
           <div className="absolute top-0 bottom-0 left-0 w-1 bg-purple-600 rounded-r-md"></div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500">
-              Presupuesto Acumulado
+              Total Pagado Acumulado
             </span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
               <DollarSign size={16} />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-900 mt-3 tabular-nums">
+          <div className="text-3xl font-extrabold text-purple-950 mt-3 tabular-nums">
             {formatMoney(metrics.totalBud)}
           </div>
           <div className="text-xs text-slate-500 mt-1.5">
-            <b className="text-slate-700">{metrics.activeCount}</b> activas{metrics.pausedCount > 0 ? ` · ${metrics.pausedCount} pausadas` : ""}
+            Gasto en <b className="text-purple-900 font-bold">{period === "hoy" ? "Hoy" : `${period} días`}</b> · {formatMoney(investmentAnalysis.averageCpa)} / conv
           </div>
         </div>
 
-        {/* KPI 3: Mejor Costo / Contacto */}
+        {/* KPI 3: Promedio Invertido / Día */}
+        <div className="relative bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition group overflow-hidden">
+          <div className="absolute top-0 bottom-0 left-0 w-1 bg-indigo-500 rounded-r-md"></div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500">
+              Promedio Pagado / Día
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div className="text-3xl font-extrabold text-indigo-950 mt-3 tabular-nums">
+            {formatMoney(metrics.totalBud / (parseInt(period, 10) || 1))}
+          </div>
+          <div className="text-xs text-slate-500 mt-1.5 truncate">
+            {period === "hoy" ? "Gasto del día actual" : `Promedio en periodo de ${period} días`}
+          </div>
+        </div>
+
+        {/* KPI 4: Campañas Activas / En Riesgo */}
         <div className="relative bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition group overflow-hidden">
           <div className="absolute top-0 bottom-0 left-0 w-1 bg-amber-500 rounded-r-md"></div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500">
-              Mejor Costo / Contacto
+              Estado de Campañas
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Trophy size={16} />
+              <Activity size={16} />
             </div>
           </div>
           <div className="text-3xl font-extrabold text-slate-900 mt-3 tabular-nums">
-            {metrics.best ? formatMoney(metrics.best.cc) : "$0.00"}
-          </div>
-          <div className="text-xs text-slate-500 mt-1.5 truncate">
-            {metrics.best ? metrics.best.a : "Sin anuncios"}
-          </div>
-        </div>
-
-        {/* KPI 4: En Riesgo */}
-        <div className="relative bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition group overflow-hidden">
-          <div className="absolute top-0 bottom-0 left-0 w-1 bg-rose-500 rounded-r-md"></div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] uppercase font-bold tracking-wider text-slate-500">
-              En Riesgo
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <AlertTriangle size={16} />
-            </div>
-          </div>
-          <div className="text-3xl font-extrabold text-slate-900 mt-3 tabular-nums">
-            {metrics.risk}
+            {metrics.activeCount} <span className="text-sm font-semibold text-slate-500">activas</span>
           </div>
           <div className="text-xs text-slate-500 mt-1.5">
-            Campañas débiles o críticas
+            {metrics.pausedCount > 0 ? `${metrics.pausedCount} pausadas · ` : ""}{metrics.risk > 0 ? `${metrics.risk} en riesgo` : "Todas saludables"}
           </div>
         </div>
       </div>
@@ -920,11 +1169,23 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
           </div>
 
           {/* Selector de Pestaña */}
-          <div className="inline-flex bg-slate-200/80 p-1 rounded-xl border border-slate-300">
+          <div className="inline-flex bg-slate-200/80 p-1 rounded-xl border border-slate-300 flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setDetailTab("grafico")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                detailTab === "grafico"
+                  ? "bg-purple-900 text-white shadow-sm"
+                  : "text-slate-700 hover:text-slate-950 hover:bg-white/50"
+              }`}
+            >
+              <TrendingUp size={15} />
+              Gráfico de Evolución & Crecimiento
+            </button>
             <button
               type="button"
               onClick={() => setDetailTab("tabla")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
                 detailTab === "tabla"
                   ? "bg-purple-900 text-white shadow-sm"
                   : "text-slate-700 hover:text-slate-950 hover:bg-white/50"
@@ -932,18 +1193,6 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
             >
               <Table size={15} />
               Tabla de Anuncios ({sortedRows.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setDetailTab("grafico")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition cursor-pointer ${
-                detailTab === "grafico"
-                  ? "bg-purple-900 text-white shadow-sm"
-                  : "text-slate-700 hover:text-slate-950 hover:bg-white/50"
-              }`}
-            >
-              <TrendingUp size={15} />
-              Gráfico de Evolución (Líneas)
             </button>
           </div>
         </div>
@@ -1118,154 +1367,225 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
             </div>
           </div>
         ) : (
-          /* PESTAÑA 2: GRÁFICO DE EVOLUCIÓN (LÍNEAS) CON FILTRO Y SELECTOR DE ANUNCIO */
+          /* PESTAÑA 3: GRÁFICO COMPARATIVO MULTILÍNEA ENTRE ANUNCIOS */
           <div className="p-5 space-y-5 bg-white">
-            {/* Barra Superior con Filtro de Anuncio Específico */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-purple-50/60 p-4 rounded-2xl border border-purple-100">
-              <div className="flex-1 space-y-1">
-                <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <Sliders size={14} className="text-purple-600" />
-                  Seleccionar Anuncio / Campaña para filtrar la gráfica:
-                </label>
-                <select
-                  value={selectedAdFilter}
-                  onChange={(e) => setSelectedAdFilter(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold text-purple-950 bg-white border border-purple-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+            {/* Barra de Control: Switcher de Métrica y Filtro de Anuncios */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/90 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Selector de Métrica */}
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Métrica de Comparación en Gráfica:
+                </span>
+                <div className="inline-flex bg-white p-1 rounded-xl border border-purple-200 shadow-2xs flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCompareMetric("acumulado")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      compareMetric === "acumulado"
+                        ? "bg-purple-900 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-purple-950"
+                    }`}
+                  >
+                    <TrendingUp size={13} />
+                    📈 Conversaciones Acumuladas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompareMetric("conversaciones")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      compareMetric === "conversaciones"
+                        ? "bg-indigo-900 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-indigo-950"
+                    }`}
+                  >
+                    <MessageSquare size={13} />
+                    💬 Contactos por Día
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompareMetric("crecimiento_pct")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      compareMetric === "crecimiento_pct"
+                        ? "bg-blue-800 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-blue-950"
+                    }`}
+                  >
+                    <Zap size={13} />
+                    🚀 % Crecimiento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompareMetric("costo")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      compareMetric === "costo"
+                        ? "bg-emerald-800 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-emerald-950"
+                    }`}
+                  >
+                    <Target size={13} />
+                    🎯 Costo / Conv ($)
+                  </button>
+                </div>
+              </div>
+
+              {/* Botones Rápidos de Selección */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAdsToCompare(currentRows.map((r) => r.a))}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 shadow-2xs transition cursor-pointer"
                 >
-                  <option value="todos">📊 Todos los Anuncios (Acumulado General)</option>
-                  {currentRows.map((r, idx) => (
-                    <option key={idx} value={r.a}>
-                      📢 {r.a} — ({r.ct} conv, ${r.b.toFixed(2)}, Costo: ${r.cc.toFixed(2)}/conv)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {period === "hoy" && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
-                  <Info size={16} className="text-amber-600 flex-shrink-0" />
-                  <span>Estás en vista de <b>Hoy</b>. Para ver la gráfica de líneas completa día a día, selecciona 3, 7, 14 o 30 días.</span>
-                </div>
-              )}
-            </div>
-
-            {/* Tarjetas Resumen del Anuncio Seleccionado */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3.5 bg-purple-50/70 rounded-xl border border-purple-100">
-                <div className="text-[11px] font-bold text-slate-500 uppercase flex justify-between">
-                  <span>Conversaciones</span>
-                  <MessageSquare size={14} className="text-purple-600" />
-                </div>
-                <div className="text-xl font-extrabold text-purple-950 mt-1 tabular-nums">
-                  {selectedRows.reduce((sum, r) => sum + (r.ct || 0), 0)} conv
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Promedio: {(selectedRows.reduce((sum, r) => sum + (r.ct || 0), 0) / (parseInt(period, 10) || 1)).toFixed(1)} / día
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-100">
-                <div className="text-[11px] font-bold text-slate-500 uppercase flex justify-between">
-                  <span>Presupuesto Consumido</span>
-                  <DollarSign size={14} className="text-indigo-600" />
-                </div>
-                <div className="text-xl font-extrabold text-indigo-950 mt-1 tabular-nums">
-                  ${selectedRows.reduce((sum, r) => sum + (r.b || 0), 0).toFixed(2)}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Promedio: ${(selectedRows.reduce((sum, r) => sum + (r.b || 0), 0) / (parseInt(period, 10) || 1)).toFixed(2)} / día
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-100">
-                <div className="text-[11px] font-bold text-slate-500 uppercase flex justify-between">
-                  <span>Costo / Conversación</span>
-                  <Trophy size={14} className="text-emerald-600" />
-                </div>
-                <div className="text-xl font-extrabold text-emerald-950 mt-1 tabular-nums">
-                  ${
-                    selectedRows.reduce((sum, r) => sum + (r.ct || 0), 0) > 0
-                      ? (selectedRows.reduce((sum, r) => sum + (r.b || 0), 0) / selectedRows.reduce((sum, r) => sum + (r.ct || 0), 0)).toFixed(2)
-                      : "0.00"
-                  }
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  {selectedAdFilter === "todos" ? "Promedio general acumulado" : `Anuncio: ${selectedAdFilter}`}
-                </div>
+                  Comparar Todos ({currentRows.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const top3 = [...currentRows]
+                      .sort((a, b) => (b.ct || 0) - (a.ct || 0))
+                      .slice(0, 3)
+                      .map((r) => r.a);
+                    setSelectedAdsToCompare(top3);
+                  }}
+                  className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-purple-800 text-xs font-semibold rounded-lg border border-purple-200 shadow-2xs transition cursor-pointer"
+                >
+                  Top 3 con más contactos
+                </button>
               </div>
             </div>
 
-            {/* Gráfico de Líneas SVG Día a Día */}
-            <div className="space-y-3 pt-1">
-              <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1 flex-wrap gap-2">
-                <span className="flex items-center gap-1.5 text-purple-900">
-                  <span className="w-3.5 h-1 bg-purple-600 rounded inline-block"></span>
-                  Línea Morada: Conversaciones (Contactos)
-                </span>
-                <span className="flex items-center gap-1.5 text-emerald-700">
-                  <span className="w-3.5 h-1 border-b-2 border-dashed border-emerald-500 inline-block"></span>
-                  Línea Verde Punteada: Costo por Conversación ($)
+            {/* Selector Interactivo de Anuncios (Pills con Color) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-600 font-bold px-1">
+                <span>Haz clic en cada anuncio para activar/ocultar su curva de crecimiento:</span>
+                <span className="text-[11px] text-purple-700 font-extrabold">
+                  {selectedAdsToCompare.length} de {currentRows.length} anuncios visibles
                 </span>
               </div>
-
-              <div className="overflow-x-auto p-4 bg-slate-50/60 rounded-2xl border border-slate-200 shadow-inner">
-                {(() => {
-                  const N = dailyEvolution.length;
-                  if (N === 0) {
-                    return (
-                      <p className="text-xs text-slate-500 text-center py-8">
-                        No hay datos de evolución para mostrar en este anuncio y período.
-                      </p>
-                    );
-                  }
-
-                  const W = 680;
-                  const H = 220;
-                  const padL = 50;
-                  const padR = 30;
-                  const padT = 30;
-                  const padB = 40;
-                  const chartW = W - padL - padR;
-                  const chartH = H - padT - padB;
-
-                  const maxCt = Math.max(...dailyEvolution.map((d) => d.ct), 1);
-                  const maxCc = Math.max(...dailyEvolution.map((d) => d.cc), 0.1);
-
-                  const ptsCt = dailyEvolution
-                    .map((d, i) => {
-                      const x = padL + (i / (N - 1 || 1)) * chartW;
-                      const y = padT + chartH - (d.ct / maxCt) * chartH;
-                      return `${x.toFixed(1)},${y.toFixed(1)}`;
-                    })
-                    .join(" L ");
-
-                  const pathD_ct = "M " + ptsCt;
-                  const areaD_ct =
-                    pathD_ct + ` L ${padL + chartW},${padT + chartH} L ${padL},${padT + chartH} Z`;
-
-                  const ptsCc = dailyEvolution
-                    .map((d, i) => {
-                      const x = padL + (i / (N - 1 || 1)) * chartW;
-                      const y = padT + chartH - (d.cc / maxCc) * chartH;
-                      return `${x.toFixed(1)},${y.toFixed(1)}`;
-                    })
-                    .join(" L ");
-
-                  const pathD_cc = "M " + ptsCc;
+              <div className="flex flex-wrap gap-2">
+                {currentRows.map((row) => {
+                  const isSelected = selectedAdsToCompare.includes(row.a);
+                  const seriesIndex = multiSeriesData.findIndex((s) => s.adName === row.a);
+                  const color = seriesIndex !== -1 ? multiSeriesData[seriesIndex].color : "#94a3b8";
 
                   return (
-                    <svg className="w-full h-64 overflow-visible" viewBox={`0 0 ${W} ${H}`}>
-                      <defs>
-                        <linearGradient id="ctGradientLine" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
+                    <button
+                      key={row.a}
+                      type="button"
+                      onClick={() => toggleAdComparison(row.a)}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                        isSelected
+                          ? "bg-white text-slate-900 border-slate-300 shadow-xs ring-1 ring-slate-300"
+                          : "bg-slate-100 text-slate-400 border-slate-200 opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0 transition-transform"
+                        style={{
+                          backgroundColor: isSelected ? color : "#cbd5e1",
+                          transform: isSelected ? "scale(1.15)" : "scale(0.85)",
+                        }}
+                      />
+                      <span className="truncate max-w-[200px]">{row.a}</span>
+                      <span className="text-[10px] text-slate-500 font-medium ml-0.5">
+                        ({row.ct || 0} conv · ${formatMoney(row.cc || 0)})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                      {/* Guías Horizontales del Eje Y */}
-                      {[0, 0.33, 0.66, 1].map((ratio, idx) => {
+            {/* GRÁFICO SVG MULTILÍNEA */}
+            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto">
+              {(() => {
+                if (multiSeriesData.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      Selecciona al menos un anuncio para visualizar su curva de crecimiento y evolución.
+                    </div>
+                  );
+                }
+
+                const firstSeries = multiSeriesData[0].daily;
+                const N = firstSeries.length;
+                if (N === 0) {
+                  return (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      No hay registros de días disponibles para este periodo.
+                    </div>
+                  );
+                }
+
+                const W = 840;
+                const H = 290;
+                const padL = 65;
+                const padR = 40;
+                const padT = 30;
+                const padB = 45;
+                const chartW = W - padL - padR;
+                const chartH = H - padT - padB;
+
+                // Calcular valores máximos según la métrica seleccionada
+                let maxVal = 1;
+                if (compareMetric === "acumulado") {
+                  let maxFound = 0;
+                  multiSeriesData.forEach((s) => {
+                    s.daily.forEach((d) => {
+                      if (d.cumCt > maxFound) maxFound = d.cumCt;
+                    });
+                  });
+                  maxVal = Math.max(maxFound, 5);
+                } else if (compareMetric === "conversaciones") {
+                  let maxFound = 0;
+                  multiSeriesData.forEach((s) => {
+                    s.daily.forEach((d) => {
+                      if (d.ct > maxFound) maxFound = d.ct;
+                    });
+                  });
+                  maxVal = Math.max(maxFound, 5);
+                } else if (compareMetric === "crecimiento_pct") {
+                  let maxFound = 0;
+                  multiSeriesData.forEach((s) => {
+                    s.daily.forEach((d) => {
+                      const gr = d.growthRateCt || 0;
+                      if (gr > maxFound) maxFound = gr;
+                    });
+                  });
+                  maxVal = Math.max(maxFound, 20);
+                } else {
+                  let maxFound = 0;
+                  multiSeriesData.forEach((s) => {
+                    s.daily.forEach((d) => {
+                      if (d.cc > maxFound) maxFound = d.cc;
+                    });
+                  });
+                  maxVal = Math.max(maxFound, 1);
+                }
+
+                const getVal = (d: DailyEvolutionItem) => {
+                  if (compareMetric === "acumulado") return d.cumCt;
+                  if (compareMetric === "conversaciones") return d.ct;
+                  if (compareMetric === "crecimiento_pct") return Math.max(0, d.growthRateCt || 0);
+                  return d.cc;
+                };
+
+                return (
+                  <div className="relative">
+                    <svg className="w-full h-80 overflow-visible" viewBox={`0 0 ${W} ${H}`}>
+                      {/* Eje Y y Guías Horizontales */}
+                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
                         const y = padT + chartH * (1 - ratio);
-                        const valCt = Math.round(maxCt * ratio);
+                        let labelVal = "";
+                        if (compareMetric === "acumulado") {
+                          labelVal = `${Math.round(maxVal * ratio)} acum`;
+                        } else if (compareMetric === "conversaciones") {
+                          labelVal = `${Math.round(maxVal * ratio)} conv`;
+                        } else if (compareMetric === "crecimiento_pct") {
+                          labelVal = `+${Math.round(maxVal * ratio)}%`;
+                        } else {
+                          labelVal = `$${(maxVal * ratio).toFixed(2)}`;
+                        }
+
                         return (
                           <g key={idx}>
                             <line
@@ -1273,233 +1593,297 @@ export default function AdsAnalyticsDashboard({ isAdmin = false, canEdit = true 
                               y1={y}
                               x2={padL + chartW}
                               y2={y}
-                              stroke="#cbd5e1"
-                              strokeDasharray="4 4"
+                              stroke="#e2e8f0"
+                              strokeDasharray="3 3"
                               strokeWidth="1"
                             />
-                            <text x={padL - 8} y={y + 3} textAnchor="end" className="text-[9px] fill-slate-400 font-bold">
-                              {valCt}
+                            <text
+                              x={padL - 10}
+                              y={y + 3.5}
+                              textAnchor="end"
+                              className="text-[10px] fill-slate-500 font-semibold select-none"
+                            >
+                              {labelVal}
                             </text>
                           </g>
                         );
                       })}
 
-                      {/* Área Sombreada bajo la Línea de Conversaciones */}
-                      <path d={areaD_ct} fill="url(#ctGradientLine)" />
-
-                      {/* Línea 1: Conversaciones (Línea Morada Continua) */}
-                      <path
-                        d={pathD_ct}
-                        fill="none"
-                        stroke="#7c3aed"
-                        strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-
-                      {/* Línea 2: Costo por Conversación (Línea Verde Punteada) */}
-                      <path
-                        d={pathD_cc}
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="2.5"
-                        strokeDasharray="5 4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-
-                      {/* Puntos y Datos en el Eje X */}
-                      {dailyEvolution.map((item, idx) => {
+                      {/* Eje X y Líneas Verticales Guía de Días */}
+                      {firstSeries.map((item, idx) => {
                         const x = padL + (idx / (N - 1 || 1)) * chartW;
-                        const y_ct = padT + chartH - (item.ct / maxCt) * chartH;
-                        const y_cc = padT + chartH - (item.cc / maxCc) * chartH;
+                        return (
+                          <g key={idx}>
+                            <line
+                              x1={x}
+                              y1={padT}
+                              x2={x}
+                              y2={padT + chartH}
+                              stroke="#f1f5f9"
+                              strokeWidth="1"
+                            />
+                            <text
+                              x={x}
+                              y={padT + chartH + 20}
+                              textAnchor="middle"
+                              className="text-[9.5px] font-bold fill-slate-600 select-none"
+                            >
+                              {item.dia.replace(" (Hoy)", "")}
+                              {item.dia.includes("Hoy") ? " (Hoy)" : ""}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Líneas por cada Anuncio Seleccionado */}
+                      {multiSeriesData.map((series) => {
+                        const pts = series.daily
+                          .map((d, i) => {
+                            const x = padL + (i / (N - 1 || 1)) * chartW;
+                            const val = getVal(d);
+                            const y = padT + chartH - (val / maxVal) * chartH;
+                            return `${x.toFixed(1)},${y.toFixed(1)}`;
+                          })
+                          .join(" L ");
+
+                        const pathD = "M " + pts;
 
                         return (
-                          <g key={idx} className="group cursor-pointer">
-                            {/* Círculo Punto Conversaciones */}
-                            <circle
-                              cx={x}
-                              cy={y_ct}
-                              r="5.5"
-                              fill="#ffffff"
-                              stroke="#7c3aed"
+                          <g key={series.adName}>
+                            <path
+                              d={pathD}
+                              fill="none"
+                              stroke={series.color}
                               strokeWidth="3"
-                              className="transition-all group-hover:r-7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="transition-all opacity-95 hover:opacity-100 hover:stroke-[4]"
                             />
-                            <text
-                              x={x}
-                              y={y_ct - 10}
-                              textAnchor="middle"
-                              className="text-[11px] font-extrabold fill-purple-950"
-                            >
-                              {item.ct}
-                            </text>
 
-                            {/* Círculo Punto Costo por Conv */}
-                            <circle
-                              cx={x}
-                              cy={y_cc}
-                              r="4"
-                              fill="#ffffff"
-                              stroke="#10b981"
-                              strokeWidth="2"
-                              className="transition-all group-hover:r-6"
-                            />
-                            <text
-                              x={x}
-                              y={y_cc + 14}
-                              textAnchor="middle"
-                              className="text-[9px] font-bold fill-emerald-800"
-                            >
-                              ${item.cc.toFixed(2)}
-                            </text>
+                            {/* Puntos Interactivos */}
+                            {series.daily.map((d, i) => {
+                              const x = padL + (i / (N - 1 || 1)) * chartW;
+                              const val = getVal(d);
+                              const y = padT + chartH - (val / maxVal) * chartH;
+                              const isHovered =
+                                hoveredComparePoint?.adName === series.adName &&
+                                hoveredComparePoint?.dayIndex === i;
 
-                            {/* Etiqueta del Día / Fecha en el Eje X */}
-                            <text
-                              x={x}
-                              y={padT + chartH + 18}
-                              textAnchor="middle"
-                              className="text-[10px] font-bold fill-slate-600"
-                            >
-                              {item.dia}
-                            </text>
+                              return (
+                                <g
+                                  key={i}
+                                  className="cursor-pointer"
+                                  onMouseEnter={() =>
+                                    setHoveredComparePoint({
+                                      adName: series.adName,
+                                      color: series.color,
+                                      dayIndex: i,
+                                      dia: d.dia,
+                                      ct: d.ct,
+                                      b: d.b,
+                                      cc: d.cc,
+                                      cumCt: d.cumCt,
+                                      cumB: d.cumB,
+                                      cumCc: d.cumCc,
+                                      growthRateCt: d.growthRateCt || 0,
+                                      x,
+                                      y,
+                                    })
+                                  }
+                                  onMouseLeave={() => setHoveredComparePoint(null)}
+                                >
+                                  <circle
+                                    cx={x}
+                                    cy={y}
+                                    r={isHovered ? 7.5 : 4.5}
+                                    fill="#ffffff"
+                                    stroke={series.color}
+                                    strokeWidth="2.5"
+                                    className="transition-all"
+                                  />
+                                </g>
+                              );
+                            })}
                           </g>
                         );
                       })}
+
+                      {/* Tooltip Dinámico Flotante */}
+                      {hoveredComparePoint && (() => {
+                        const { adName, color, dia, ct, b, cc, cumCt, cumB, cumCc, growthRateCt, x, y } = hoveredComparePoint;
+                        const tipW = 200;
+                        const tipH = 92;
+                        const tipX = Math.max(10, Math.min(W - tipW - 10, x - tipW / 2));
+                        const tipY = Math.max(6, y - tipH - 12);
+
+                        return (
+                          <g className="pointer-events-none">
+                            <rect
+                              x={tipX}
+                              y={tipY}
+                              width={tipW}
+                              height={tipH}
+                              rx="10"
+                              fill="#0f172a"
+                              stroke={color}
+                              strokeWidth="2"
+                              filter="drop-shadow(0 6px 12px rgba(0,0,0,0.35))"
+                            />
+                            <text x={tipX + 12} y={tipY + 16} fill="#ffffff" fontSize="11" fontWeight="bold">
+                              {adName.length > 24 ? adName.slice(0, 22) + "..." : adName}
+                            </text>
+                            <text x={tipX + 12} y={tipY + 31} fill="#94a3b8" fontSize="9.5">
+                              📅 Fecha: {dia}
+                            </text>
+                            <text x={tipX + 12} y={tipY + 47} fill="#c084fc" fontSize="10.5" fontWeight="bold">
+                              📈 Acumulado: {cumCt} conv (${cumB.toFixed(2)} pagados)
+                            </text>
+                            <text x={tipX + 12} y={tipY + 62} fill="#6ee7b7" fontSize="10">
+                              💬 Día: {ct} conv · ${b.toFixed(2)} (${cc.toFixed(2)}/c)
+                            </text>
+                            <text x={tipX + 12} y={tipY + 77} fill="#38bdf8" fontSize="10" fontWeight="bold">
+                              🚀 Crecimiento: +{growthRateCt}% · Promedio: ${cumCc.toFixed(2)}/c
+                            </text>
+                          </g>
+                        );
+                      })()}
                     </svg>
-                  );
-                })()}
-              </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Tabla Detallada Día a Día del Anuncio Seleccionado */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px] tracking-wider">
-                    <th className="py-2.5 px-3">Día / Fecha</th>
-                    <th className="py-2.5 px-3 text-right">Conversaciones (Contactos)</th>
-                    <th className="py-2.5 px-3 text-right">Presupuesto ($)</th>
-                    <th className="py-2.5 px-3 text-right">Costo / Conversación ($)</th>
-                    <th className="py-2.5 px-3 text-center">Tendencia vs Anterior</th>
-                    <th className="py-2.5 px-3 text-center">Eficiencia</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {dailyEvolution.map((item, idx) => {
-                    const isGoodCost = item.cc <= 1.5;
-                    const isHighCost = item.cc > 2.5;
+            {/* TABLA LIMPIA DE COMPARATIVA DE RENDIMIENTO */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                    <Trophy size={15} className="text-purple-700" />
+                    Comparativa de Rendimiento y Retorno por Anuncio
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Compara directamente el volumen de conversaciones, el total pagado y el costo por contacto.
+                  </p>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {multiSeriesData.length} anuncios en comparativa
+                </span>
+              </div>
 
-                    return (
-                      <tr key={idx} className="hover:bg-purple-50/30 transition">
-                        <td className="py-2.5 px-3 font-bold text-slate-900">
-                          {item.dia}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-extrabold text-purple-950 tabular-nums">
-                          {item.ct}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-medium text-slate-900 tabular-nums">
-                          ${item.b.toFixed(2)}
-                        </td>
-                        <td
-                          className={`py-2.5 px-3 text-right font-bold tabular-nums ${
-                            isGoodCost ? "text-emerald-600" : isHighCost ? "text-rose-600" : "text-slate-800"
-                          }`}
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-bold text-[10px] tracking-wider">
+                      <th className="py-2.5 px-3 text-center">Color</th>
+                      <th className="py-2.5 px-3">Anuncio</th>
+                      <th className="py-2.5 px-3 text-right">Total Pagado ($)</th>
+                      <th className="py-2.5 px-3 text-right">Conversaciones</th>
+                      <th className="py-2.5 px-3 text-right">% Crecimiento</th>
+                      <th className="py-2.5 px-3 text-right">Costo / Conv ($)</th>
+                      <th className="py-2.5 px-3 text-center">Diagnóstico</th>
+                      <th className="py-2.5 px-3 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {multiSeriesData.map((series, idx) => {
+                      const row = series.row;
+                      const isSoleSelection = selectedAdsToCompare.length === 1 && selectedAdsToCompare[0] === series.adName;
+                      const lastDay = series.daily[series.daily.length - 1];
+                      const growth = lastDay?.growthRateCt ?? 0;
+
+                      return (
+                        <tr
+                          key={idx}
+                          className="hover:bg-purple-50/30 transition"
                         >
-                          ${item.cc.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          {item.trendCt === "up" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              <TrendingUp size={12} /> +Conversaciones
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full inline-block border-2 border-white shadow-xs"
+                              style={{ backgroundColor: series.color }}
+                              title={`Línea ${series.adName}`}
+                            />
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="font-bold text-slate-900">{series.adName}</span>
+                            <span className="block text-[10px] text-slate-400">
+                              {row.st || "Activo"} · CTR: {row.ctr || "—"}
                             </span>
-                          ) : item.trendCt === "down" ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                              <TrendingDown size={12} /> -Conversaciones
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black text-purple-950 tabular-nums">
+                            {formatMoney(series.totalSpent)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black text-emerald-800 tabular-nums">
+                            {series.totalContacts} conv
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black tabular-nums text-blue-700">
+                            +{growth}%
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-black tabular-nums">
+                            <span className={series.costPerContact <= (investmentAnalysis.averageCpa || 2.0) ? "text-emerald-700 font-extrabold" : "text-rose-700 font-extrabold"}>
+                              {formatMoney(series.costPerContact)}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                              <Minus size={12} /> Estable
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${series.badge}`}>
+                              {series.costPerContact <= (investmentAnalysis.averageCpa || 2.0) ? "🏆 Excelente" : "⚠️ Revisar"}
                             </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span
-                            className={`inline-block text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                              isGoodCost
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                : isHighCost
-                                ? "bg-rose-100 text-rose-800 border-rose-300"
-                                : "bg-amber-100 text-amber-800 border-amber-300"
-                            }`}
-                          >
-                            {isGoodCost ? "Alta Eficiencia" : isHighCost ? "Revisar Costo" : "Normal"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isSoleSelection) {
+                                  setSelectedAdsToCompare(currentRows.map((r) => r.a));
+                                } else {
+                                  setSelectedAdsToCompare([series.adName]);
+                                }
+                              }}
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                                isSoleSelection
+                                  ? "bg-purple-900 text-white border-purple-900"
+                                  : "text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100"
+                              }`}
+                            >
+                              {isSoleSelection ? "Restaurar todos" : "Aislar línea"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {/* FILA DE TOTALES */}
+                  <tfoot>
+                    <tr className="bg-purple-900 text-white font-extrabold text-xs border-t-2 border-purple-700">
+                      <td colSpan={2} className="py-2.5 px-3">
+                        TOTAL COMPARADO ({multiSeriesData.length} anuncios)
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-amber-300 font-black tabular-nums">
+                        {formatMoney(multiSeriesData.reduce((sum, s) => sum + s.totalSpent, 0))}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-emerald-300 font-black tabular-nums">
+                        {multiSeriesData.reduce((sum, s) => sum + s.totalContacts, 0)} conv
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-blue-200 font-bold tabular-nums">
+                        Acumulado
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-white font-black tabular-nums">
+                        {formatMoney(
+                          multiSeriesData.reduce((sum, s) => sum + s.totalContacts, 0) > 0
+                            ? multiSeriesData.reduce((sum, s) => sum + s.totalSpent, 0) /
+                              multiSeriesData.reduce((sum, s) => sum + s.totalContacts, 0)
+                            : 0
+                        )} / conv
+                      </td>
+                      <td colSpan={2} className="py-2.5 px-3 text-center text-purple-200 text-[10px]">
+                        Presupuesto acumulado
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
         )}
-      </div>
-
-      {/* Bloque de Recomendaciones en Tarjetas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Escalar */}
-        <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-emerald-700">
-            <TrendingUp size={16} />
-            ▲ Escalar — Anuncios de mayor rendimiento
-          </div>
-          <ul className="divide-y divide-slate-100 text-xs sm:text-sm">
-            {recommendations.wins.length === 0 ? (
-              <li className="py-2 text-slate-500">Sin recomendaciones aún</li>
-            ) : (
-              recommendations.wins.map((r, i) => (
-                <li key={i} className="py-3 flex items-start gap-2.5">
-                  <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <b className="text-slate-900 font-bold">{r.a}</b>
-                    <div className="text-slate-500 text-xs mt-0.5">
-                      {formatMoney(r.cc)} / contacto · <b>{r.ct} contactos</b>
-                    </div>
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        {/* Revisar */}
-        <div className="bg-white border border-orange-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-orange-700">
-            <AlertCircle size={16} />
-            ▼ Revisar — Anuncios que requieren optimización
-          </div>
-          <ul className="divide-y divide-slate-100 text-xs sm:text-sm">
-            {recommendations.fixes.length === 0 ? (
-              <li className="py-2 text-slate-500">Sin anuncios críticos</li>
-            ) : (
-              recommendations.fixes.map((r, i) => {
-                const rank = RANK_CONFIG[r.e] || RANK_CONFIG["Aceptable"];
-                return (
-                  <li key={i} className="py-3 flex items-start gap-2.5">
-                    <AlertTriangle size={16} className="text-orange-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <b className="text-slate-900 font-bold">{r.a}</b>
-                      <div className="text-slate-500 text-xs mt-0.5">
-                        {formatMoney(r.cc)} / contacto · {rank.note.toLowerCase()}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
       </div>
 
         </>
