@@ -20,6 +20,7 @@ import TeacherMultiSelect from "@/components/TeacherMultiSelect";
 import CreateModuleModal from "@/components/CreateModuleModal";
 
 import CourseStatusSelector from "@/components/CourseStatusSelector";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -204,8 +205,9 @@ export default async function CursoDetallePage({
         <div className="flex items-start sm:items-center gap-4.5">
           {course.image_url ? (
             <img 
-              src={course.image_url} 
+              src={proxyStorageUrl(course.image_url)} 
               alt={course.name} 
+              loading="lazy"
               className="w-18 h-18 sm:w-20 sm:h-20 object-cover rounded-2xl border border-lilac-200 shadow-xs shrink-0" 
             />
           ) : (

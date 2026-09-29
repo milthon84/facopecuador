@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { sendQuotationEmail, QuotationItem } from "@/lib/email";
 import { buildQuotationWhatsAppUrl } from "@/lib/whatsapp";
 import { assertWritePermission } from "@/lib/auth-action";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 export async function createPatientQuotationAction(data: {
   patientId: string;
@@ -198,15 +200,35 @@ export async function uploadPatientPhotoAction(formData: FormData) {
       return { success: false, error: "El asunto y la foto son obligatorios." };
     }
 
-    const fileExt = imageFile.name.split(".").pop() || "jpg";
-    const fileName = `${patientId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
     const arrayBuffer = await imageFile.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const rawBuffer = Buffer.from(arrayBuffer);
+
+    let uploadBuffer: Buffer = rawBuffer;
+    let contentType = imageFile.type || "image/jpeg";
+    let fileExt = imageFile.name.split(".").pop() || "jpg";
+
+    if (contentType.startsWith("image/")) {
+      try {
+        const optimized = await optimizeImageForWeb(rawBuffer, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 82,
+          format: "webp",
+        });
+        uploadBuffer = optimized.buffer;
+        contentType = optimized.contentType;
+        fileExt = optimized.extension;
+      } catch (optErr) {
+        console.warn("No se pudo optimizar foto de paciente a WebP, usando original:", optErr);
+      }
+    }
+
+    const fileName = `${patientId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("patient-photos")
-      .upload(fileName, buffer, {
-        contentType: imageFile.type,
+      .upload(fileName, uploadBuffer, {
+        contentType,
         cacheControl: "31536000",
         upsert: true,
       });
@@ -215,6 +237,8 @@ export async function uploadPatientPhotoAction(formData: FormData) {
       console.error("Error al subir foto a Supabase storage:", uploadError);
       return { success: false, error: `Error al guardar archivo: ${uploadError.message}` };
     }
+
+    await warmLocalStorageCache("patient-photos", fileName, uploadBuffer);
 
     const { data: urlData } = supabase.storage.from("patient-photos").getPublicUrl(fileName);
     const imageUrl = urlData.publicUrl;

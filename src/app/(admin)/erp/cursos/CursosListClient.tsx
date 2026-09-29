@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import CopyCourseButton from "@/components/CopyCourseButton";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface CourseItem {
   id: string;
@@ -67,8 +68,10 @@ export default function CursosListClient({ cursos, studentCountMap, canEdit }: P
         {c.image_url && (
           <div className="h-36 w-full overflow-hidden border-b border-lilac-50">
             <img 
-              src={c.image_url} 
+              src={proxyStorageUrl(c.image_url)} 
               alt={c.name} 
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
             />
           </div>

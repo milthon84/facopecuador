@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Stethoscope, ArrowRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Post {
   id: string;
@@ -46,7 +47,30 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const [hasBeenInView, setHasBeenInView] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setIsInView(true);
+      setHasBeenInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          setHasBeenInView(true);
+        }
+      },
+      { rootMargin: "250px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const displayPosts = useMemo(() => {
     if (posts && posts.length >= 2) return posts;
@@ -88,13 +112,19 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
   // - Si el afiche activo tiene VIDEO: NO se usa temporizador fijo. Avanza únicamente al terminar el video (onEnded).
   // - Si el afiche es IMAGEN o texto: Avanza de forma normal cada 5.5 segundos.
   useEffect(() => {
-    if (totalItems <= 1) return;
+    if (!isInView) {
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      return;
+    }
 
     if (activePost?.video_url) {
       if (videoRef.current) {
-        videoRef.current.currentTime = 0;
         videoRef.current.play().catch(() => {});
       }
+
+      if (totalItems <= 1) return;
 
       const safetyTimer = setTimeout(() => {
         next();
@@ -103,12 +133,14 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
       return () => clearTimeout(safetyTimer);
     }
 
+    if (totalItems <= 1) return;
+
     const interval = setInterval(() => {
       next();
     }, 5500);
 
     return () => clearInterval(interval);
-  }, [next, totalItems, activePost?.video_url, currentIndex]);
+  }, [next, totalItems, activePost?.video_url, currentIndex, isInView]);
 
   const clinicaWaMessage = encodeURIComponent(
     `Hola FACOP Ecuador, deseo agendar una consulta sobre: "${activePost.title}".`
@@ -126,7 +158,7 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
   };
 
   return (
-    <div className="relative w-full h-[520px] sm:h-[580px] select-none group/carousel">
+    <div ref={containerRef} className="relative w-full h-[520px] sm:h-[580px] select-none group/carousel">
       {/* ── CONTROLES MANUALES DE NAVEGACIÓN (BOTONES PREV / NEXT) ── */}
       <div className="absolute top-4 left-4 z-30 flex items-center gap-2">
         <button
@@ -186,23 +218,13 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
         >
           {nextPost.image_url ? (
             <Image
-              src={nextPost.image_url}
+              src={proxyStorageUrl(nextPost.image_url)}
               alt={nextPost.title}
               fill
+              unoptimized
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              quality={80}
               className="object-cover"
             />
-          ) : nextPost.video_url ? (
-            <div className="w-full h-full bg-slate-950 relative">
-              <video
-                src={nextPost.video_url}
-                muted
-                playsInline
-                preload="none"
-                className="w-full h-full object-cover"
-              />
-            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-amber-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
               <Stethoscope size={36} className="text-amber-400/80 mb-2" />
@@ -238,28 +260,35 @@ export default function ClinicaCarousel({ posts = [] }: Props) {
       >
         {activePost.video_url ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
-            <video
-              ref={videoRef}
-              key={activePost.video_url}
-              src={activePost.video_url}
-              autoPlay
-              muted
-              playsInline
-              preload="metadata"
-              poster={activePost.image_url || undefined}
-              onEnded={() => next()}
-              onError={() => next()}
-              className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
-            />
+            {hasBeenInView && (
+              <video
+                ref={videoRef}
+                key={activePost.video_url}
+                src={proxyStorageUrl(activePost.video_url)}
+                autoPlay={isInView}
+                loop={totalItems <= 1}
+                muted
+                playsInline
+                preload="metadata"
+                poster={activePost.image_url ? proxyStorageUrl(activePost.image_url) : undefined}
+                onEnded={() => {
+                  if (totalItems > 1) next();
+                }}
+                onError={() => {
+                  if (totalItems > 1) next();
+                }}
+                className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
+              />
+            )}
           </div>
         ) : activePost.image_url ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
             <Image
-              src={activePost.image_url}
+              src={proxyStorageUrl(activePost.image_url)}
               alt={activePost.title}
               fill
+              unoptimized
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              quality={80}
               className="object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>

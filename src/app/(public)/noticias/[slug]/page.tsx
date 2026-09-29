@@ -3,8 +3,9 @@ import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Calendar, FileText, Phone, CalendarDays } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 1800;
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -81,8 +82,9 @@ export default async function NoticiaDetailPage({ params }: Props) {
         {post.video_url ? (
           <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8 bg-black">
             <video
-              src={post.video_url}
-              poster={post.image_url || undefined}
+              src={proxyStorageUrl(post.video_url)}
+              poster={post.image_url ? proxyStorageUrl(post.image_url) : undefined}
+              preload="metadata"
               controls
               className="w-full h-auto max-h-[480px] object-contain mx-auto"
             />
@@ -90,9 +92,10 @@ export default async function NoticiaDetailPage({ params }: Props) {
         ) : post.image_url ? (
           <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm mb-8 w-full h-[450px]">
             <Image 
-              src={post.image_url} 
+              src={proxyStorageUrl(post.image_url)} 
               alt={post.title} 
               fill
+              unoptimized
               className="object-cover"
             />
           </div>

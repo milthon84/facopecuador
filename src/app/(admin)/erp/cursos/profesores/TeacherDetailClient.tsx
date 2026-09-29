@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Props {
   teacher: any;
@@ -100,8 +101,9 @@ export default function TeacherDetailClient({
               >
                 {teacher.photo_url ? (
                   <img
-                    src={teacher.photo_url}
+                    src={proxyStorageUrl(teacher.photo_url)}
                     alt={teacher.full_name}
+                    loading="lazy"
                     className="w-16 h-16 rounded-2xl object-cover border border-lilac-200 shadow-2xs transition group-hover:brightness-95"
                   />
                 ) : (
@@ -145,7 +147,7 @@ export default function TeacherDetailClient({
             {teacher.cv_url && (
               <div className="pt-3 border-t border-lilac-50">
                 <a
-                  href={teacher.cv_url}
+                  href={proxyStorageUrl(teacher.cv_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full inline-flex items-center justify-center gap-1.5 bg-lilac-50 hover:bg-lilac-100 text-lilac-700 text-xs px-3.5 py-2 rounded-xl transition font-bold border border-lilac-200 shadow-2xs"
@@ -403,7 +405,7 @@ export default function TeacherDetailClient({
                   <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-lilac-200 shadow-md bg-lilac-50 flex items-center justify-center">
                     {previewPhotoUrl || teacher.photo_url ? (
                       <img
-                        src={previewPhotoUrl || teacher.photo_url}
+                        src={previewPhotoUrl || proxyStorageUrl(teacher.photo_url)}
                         alt={teacher.full_name}
                         className="w-full h-full object-cover"
                       />

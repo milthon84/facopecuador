@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { revalidatePath } from "next/cache";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 // Helper para crear un slug amigable a partir del título
 function slugify(text: string): string {
@@ -115,6 +116,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
           });
 
         if (!uploadError) {
+          await warmLocalStorageCache("web-assets", webFileName, webpBuffer);
           const { data } = supabase.storage.from("web-assets").getPublicUrl(webFileName);
           imageUrl = data.publicUrl;
         } else {
@@ -148,6 +150,7 @@ export async function savePostAction(formData: FormData): Promise<{ success: boo
           });
 
         if (!uploadError) {
+          await warmLocalStorageCache("web-assets", fileName, buffer);
           const { data } = supabase.storage.from("web-assets").getPublicUrl(fileName);
           videoUrl = data.publicUrl;
         } else {

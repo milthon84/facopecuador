@@ -16,6 +16,7 @@ import {
   Sparkles,
   Paperclip
 } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export interface InvoicePhoto {
   id: string;
@@ -178,7 +179,7 @@ export default function InvoicePhotosSection({
               title={`Ver ${photo.title}`}
             >
               <img
-                src={photo.image_url}
+                src={proxyStorageUrl(photo.image_url)}
                 alt={photo.title}
                 className="w-8 h-8 rounded-lg object-cover border border-lilac-200 group-hover:scale-105 transition-transform"
               />
@@ -231,7 +232,7 @@ export default function InvoicePhotosSection({
                 </div>
                 <div className="flex items-center gap-2">
                   <a
-                    href={activePhoto.image_url}
+                    href={proxyStorageUrl(activePhoto.image_url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink-800 hover:bg-ink-700 text-white text-xs font-semibold rounded-xl border border-ink-700 transition-colors"
@@ -262,7 +263,7 @@ export default function InvoicePhotosSection({
               {/* Lightbox Body */}
               <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/40">
                 <img
-                  src={activePhoto.image_url}
+                  src={proxyStorageUrl(activePhoto.image_url)}
                   alt={activePhoto.title}
                   className="max-h-[75vh] w-auto object-contain rounded-xl shadow-lg"
                 />
@@ -450,7 +451,7 @@ export default function InvoicePhotosSection({
               title={photo.title}
             >
               <img
-                src={photo.image_url}
+                src={proxyStorageUrl(photo.image_url)}
                 alt={photo.title}
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
@@ -521,7 +522,7 @@ export default function InvoicePhotosSection({
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={activePhoto.image_url}
+                  href={proxyStorageUrl(activePhoto.image_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-ink-800 hover:bg-ink-700 text-white text-xs font-semibold rounded-xl border border-ink-700 transition-colors"
@@ -552,7 +553,7 @@ export default function InvoicePhotosSection({
             {/* Lightbox Body */}
             <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-black/50 min-h-[300px]">
               <img
-                src={activePhoto.image_url}
+                src={proxyStorageUrl(activePhoto.image_url)}
                 alt={activePhoto.title}
                 className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl shadow-xl"
               />

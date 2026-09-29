@@ -2,6 +2,8 @@ import { getSessionUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 export async function POST(req: Request) {
   try {
@@ -26,27 +28,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Debes seleccionar un archivo de imagen válido." }, { status: 400 });
     }
 
-    // 1. Garantizar que el bucket 'patient-photos' exista en Supabase Storage
-    try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const exists = buckets?.some((b) => b.name === "patient-photos" || b.id === "patient-photos");
-      if (!exists) {
-        await supabase.storage.createBucket("patient-photos", { public: true });
+    // 1. Comprimir y optimizar imagen clínica a WebP
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const rawBuffer = Buffer.from(arrayBuffer);
+
+    let uploadBuffer: Buffer = rawBuffer;
+    let contentType = imageFile.type || "image/jpeg";
+    let fileExt = imageFile.name.split(".").pop() || "jpg";
+
+    if (contentType.startsWith("image/")) {
+      try {
+        const optimized = await optimizeImageForWeb(rawBuffer, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 82,
+          format: "webp",
+        });
+        uploadBuffer = optimized.buffer;
+        contentType = optimized.contentType;
+        fileExt = optimized.extension;
+      } catch (optErr) {
+        console.warn("No se pudo optimizar foto de paciente a WebP, usando original:", optErr);
       }
-    } catch (bucketErr) {
-      console.warn("No se pudo verificar/crear el bucket automáticamente:", bucketErr);
     }
 
-    // 2. Subir imagen a Supabase Storage
-    const fileExt = imageFile.name.split(".").pop() || "jpg";
     const fileName = `${patientId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-    const arrayBuffer = await imageFile.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
     const { error: uploadError } = await supabase.storage
       .from("patient-photos")
-      .upload(fileName, buffer, {
-        contentType: imageFile.type,
+      .upload(fileName, uploadBuffer, {
+        contentType,
         cacheControl: "31536000",
         upsert: true,
       });
@@ -58,6 +69,8 @@ export async function POST(req: Request) {
         error: `Error al guardar archivo en Supabase Storage: ${uploadError.message}` 
       }, { status: 500 });
     }
+
+    await warmLocalStorageCache("patient-photos", fileName, uploadBuffer);
 
     const { data: urlData } = supabase.storage.from("patient-photos").getPublicUrl(fileName);
     const imageUrl = urlData.publicUrl;

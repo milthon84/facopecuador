@@ -336,22 +336,37 @@ export default function NewInvoiceForm({
     if (!validateForm()) return;
     setLoading(true);
     try {
-      // Subir comprobante si existe
-      let comprobanteUrl: string | undefined;
-      if (comprobanteFile) {
+      // Subir comprobante si existe (comprimido a WebP para evitar exceso de Egress)
+      let compressedComprobante: File | Blob | null = comprobanteFile;
+      if (comprobanteFile && comprobanteFile.type.startsWith("image/")) {
         try {
-          const supabase = createClient();
-          const ext = comprobanteFile.name.split(".").pop();
-          const path = `comprobantes/${Date.now()}.${ext}`;
-          const { data: upload } = await supabase.storage
-            .from("payment-proofs")
-            .upload(path, comprobanteFile, { upsert: true });
-          if (upload) {
-            const { data: { publicUrl } } = supabase.storage.from("payment-proofs").getPublicUrl(path);
-            comprobanteUrl = publicUrl;
+          const bitmap = await createImageBitmap(comprobanteFile);
+          const maxDim = 1400;
+          let { width, height } = bitmap;
+          if (width > maxDim || height > maxDim) {
+            const ratio = Math.min(maxDim / width, maxDim / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
           }
-        } catch (uErr) {
-          console.warn("Error al subir comprobante en creación:", uErr);
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(bitmap, 0, 0, width, height);
+            const webpBlob = await new Promise<Blob | null>((resolve) =>
+              canvas.toBlob((b) => resolve(b), "image/webp", 0.8)
+            );
+            if (webpBlob) {
+              compressedComprobante = new File(
+                [webpBlob],
+                comprobanteFile.name.replace(/\.[^.]+$/, ".webp"),
+                { type: "image/webp" }
+              );
+            }
+          }
+        } catch {
+          // Fallback al archivo original si el navegador no soporta compresión en canvas
         }
       }
 
@@ -369,12 +384,10 @@ export default function NewInvoiceForm({
           items,
           payment_method:    paymentMethod,
           bank_account_id:   bankAccountId || undefined,
-          payment_reference: comprobanteUrl || paymentReference || (paymentMethod === "tarjeta_credito" ? cardVoucher : undefined),
+          payment_reference: paymentReference || (paymentMethod === "tarjeta_credito" ? cardVoucher : undefined),
           card_type:         paymentMethod === "tarjeta_credito" ? cardType : undefined,
           card_lote:         paymentMethod === "tarjeta_credito" ? cardLote : undefined,
           card_voucher:      paymentMethod === "tarjeta_credito" ? cardVoucher : undefined,
-          comprobante_url:   comprobanteUrl,
-          image_url:         comprobanteUrl,
           forma_pago:        PAYMENT_METHODS.find(m => m.value === paymentMethod)?.sriCode ?? "01",
           module_enrollment_ids: moduleEnrollmentIds.length > 0 ? moduleEnrollmentIds : undefined,
           course_enrollment_id: initialCourseEnrollmentId || undefined,
@@ -386,13 +399,13 @@ export default function NewInvoiceForm({
       
       const createdInvoiceId = result.invoice_id;
 
-      // Subir comprobante mediante la API del servidor usando admin client
-      if (comprobanteFile && createdInvoiceId) {
+      // Subir comprobante una sola vez mediante la API del servidor (comprime a WebP y pre-calienta caché local)
+      if (compressedComprobante && createdInvoiceId && comprobanteFile) {
         try {
           const photoFormData = new FormData();
           photoFormData.append("invoiceId", createdInvoiceId);
           photoFormData.append("title", `Comprobante (${comprobanteFile.name})`);
-          photoFormData.append("imageFile", comprobanteFile);
+          photoFormData.append("imageFile", compressedComprobante);
 
           await fetch("/api/admin/invoice-photos", {
             method: "POST",

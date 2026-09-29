@@ -18,6 +18,7 @@ import {
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Course {
   id: string;
@@ -266,8 +267,10 @@ export default function InscripcionCursoPage() {
               {course.image_url ? (
                 <div className="w-32 sm:w-44 flex-shrink-0">
                   <img
-                    src={course.image_url}
+                    src={proxyStorageUrl(course.image_url)}
                     alt={course.name}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                     style={{ minHeight: "120px", maxHeight: "180px" }}
                   />

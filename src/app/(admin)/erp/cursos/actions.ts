@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { parseDbError } from "@/lib/db-error-parser";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
 import { syncMissingModuleInscriptions } from "@/lib/courses";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 export async function copyCourseAction(courseId: string) {
   await assertWritePermission("/erp/cursos");
@@ -280,6 +281,7 @@ export async function createCourseAction(formData: FormData) {
         });
 
       if (!uploadError) {
+        await warmLocalStorageCache("course-banners", fileName, webpBuffer);
         const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
         imageUrl = data.publicUrl;
       } else {

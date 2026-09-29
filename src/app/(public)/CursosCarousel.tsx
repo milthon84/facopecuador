@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { BookOpen, ArrowRight, CalendarDays, GraduationCap, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Course {
   id: string;
@@ -57,7 +58,30 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const [hasBeenInView, setHasBeenInView] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setIsInView(true);
+      setHasBeenInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          setHasBeenInView(true);
+        }
+      },
+      { rootMargin: "250px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Filtrar para mostrar únicamente cursos que estén Abiertos (status === "active" o no especificado)
   const activeCoursesOnly = useMemo(
@@ -129,13 +153,19 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
   // - Si el elemento activo contiene VIDEO: NO se usa temporizador fijo. Avanza al finalizar el video (onEnded).
   // - Si es IMAGEN o texto: Avanza de forma regular cada 6 segundos.
   useEffect(() => {
-    if (totalItems <= 1) return;
+    if (!isInView) {
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      return;
+    }
 
     if (activeVideo) {
       if (videoRef.current) {
-        videoRef.current.currentTime = 0;
         videoRef.current.play().catch(() => {});
       }
+
+      if (totalItems <= 1) return;
 
       const safetyTimer = setTimeout(() => {
         next();
@@ -144,12 +174,14 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
       return () => clearTimeout(safetyTimer);
     }
 
+    if (totalItems <= 1) return;
+
     const interval = setInterval(() => {
       next();
     }, 6000);
 
     return () => clearInterval(interval);
-  }, [next, totalItems, activeVideo, currentIndex]);
+  }, [next, totalItems, activeVideo, currentIndex, isInView]);
 
   const activeIsCourse = activeItem.kind === "course";
   const activeTitle = activeIsCourse ? activeItem.data.name : activeItem.data.title;
@@ -160,7 +192,6 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
   const nextTitle = nextIsCourse ? nextItem.data.name : nextItem.data.title;
   const nextDate = nextIsCourse ? nextItem.data.start_date : nextItem.data.created_at;
   const nextImage = nextItem.data.image_url;
-  const nextVideo = nextItem.kind === "post" ? nextItem.data.video_url : null;
 
   const waMessage = encodeURIComponent(
     `Hola FACOP Ecuador, estoy interesado en: "${activeTitle}". ¿Podría darme información?`
@@ -184,7 +215,7 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
   };
 
   return (
-    <div className="relative w-full h-[520px] sm:h-[580px] select-none group/carousel">
+    <div ref={containerRef} className="relative w-full h-[520px] sm:h-[580px] select-none group/carousel">
       {/* ── CONTROLES MANUALES DE NAVEGACIÓN (BOTONES PREV / NEXT) ── */}
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
         <button
@@ -244,23 +275,13 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
         >
           {nextImage ? (
             <Image
-              src={nextImage}
+              src={proxyStorageUrl(nextImage)}
               alt={nextTitle}
               fill
+              unoptimized
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              quality={80}
               className="object-cover"
             />
-          ) : nextVideo ? (
-            <div className="w-full h-full bg-slate-950 relative">
-              <video
-                src={nextVideo}
-                muted
-                playsInline
-                preload="none"
-                className="w-full h-full object-cover"
-              />
-            </div>
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-purple-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
               <BookOpen size={36} className="text-purple-400/80 mb-2" />
@@ -296,28 +317,35 @@ export default function CursosCarousel({ courses = [], posts = [], whatsappPhone
       >
         {activeVideo ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
-            <video
-              ref={videoRef}
-              key={activeVideo}
-              src={activeVideo}
-              autoPlay
-              muted
-              playsInline
-              preload="metadata"
-              poster={activeImage || undefined}
-              onEnded={() => next()}
-              onError={() => next()}
-              className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
-            />
+            {hasBeenInView && (
+              <video
+                ref={videoRef}
+                key={activeVideo}
+                src={proxyStorageUrl(activeVideo)}
+                autoPlay={isInView}
+                loop={totalItems <= 1}
+                muted
+                playsInline
+                preload="metadata"
+                poster={activeImage ? proxyStorageUrl(activeImage) : undefined}
+                onEnded={() => {
+                  if (totalItems > 1) next();
+                }}
+                onError={() => {
+                  if (totalItems > 1) next();
+                }}
+                className="w-full h-full object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
+              />
+            )}
           </div>
         ) : activeImage ? (
           <div className="absolute inset-0 w-full h-full bg-slate-950">
             <Image
-              src={activeImage}
+              src={proxyStorageUrl(activeImage)}
               alt={activeTitle}
               fill
+              unoptimized
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              quality={80}
               className="object-cover group-hover/maincard:scale-[1.02] transition-transform duration-500"
             />
           </div>

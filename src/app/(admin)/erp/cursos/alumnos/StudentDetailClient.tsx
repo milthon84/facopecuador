@@ -12,6 +12,7 @@ import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
 import PagoInscripcionModal from "@/components/PagoInscripcionModal";
 import PagoModuloModal from "@/components/PagoModuloModal";
 import { syncStudentModulesAction } from "@/app/(admin)/erp/cursos/actions";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface StudentDetailProps {
   student: any;
@@ -155,8 +156,9 @@ export default function StudentDetailClient({
               >
                 {student.photo_url ? (
                   <img
-                    src={student.photo_url}
+                    src={proxyStorageUrl(student.photo_url)}
                     alt={student.full_name}
+                    loading="lazy"
                     className="w-16 h-16 rounded-2xl object-cover border border-lilac-200 shadow-2xs transition group-hover:brightness-95"
                   />
                 ) : (
@@ -800,7 +802,7 @@ export default function StudentDetailClient({
                   <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-lilac-200 shadow-md bg-lilac-50 flex items-center justify-center">
                     {previewPhotoUrl || student.photo_url ? (
                       <img
-                        src={previewPhotoUrl || student.photo_url}
+                        src={previewPhotoUrl || proxyStorageUrl(student.photo_url)}
                         alt={student.full_name}
                         className="w-full h-full object-cover"
                       />

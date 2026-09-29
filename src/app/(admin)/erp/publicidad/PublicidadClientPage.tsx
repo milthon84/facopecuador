@@ -24,6 +24,7 @@ import {
   Sparkles,
   ExternalLink,
 } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import { savePostAction, deletePostAction, togglePostStatusAction } from "./actions";
 import AdsAnalyticsDashboard from "./AdsAnalyticsDashboard";
@@ -554,31 +555,39 @@ export default function PublicidadClientPage({
                   >
                     {/* MINIATURA / MULTIMEDIA DE PORTADA (IMAGEN O VIDEO CON PREVIEW FOTOGRAMA) */}
                     <div className="relative h-44 bg-slate-950 overflow-hidden">
-                      {post.video_url ? (
+                      {post.image_url ? (
+                        <div className="w-full h-full relative">
+                          <img
+                            src={proxyStorageUrl(post.image_url)}
+                            alt={post.title}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
+                          {post.video_url ? (
+                            <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/90 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
+                              <Play size={10} className="fill-white text-white" />
+                              Video
+                            </span>
+                          ) : (
+                            <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
+                              <ImageIcon size={10} />
+                              Afiche
+                            </span>
+                          )}
+                        </div>
+                      ) : post.video_url ? (
                         <div className="w-full h-full relative">
                           <video
-                            src={`${post.video_url}#t=0.5`}
+                            src={`${proxyStorageUrl(post.video_url)}#t=0.5`}
                             preload="metadata"
-                            poster={post.image_url || undefined}
                             className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/20" />
                           <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/90 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
                             <Play size={10} className="fill-white text-white" />
                             Video
-                          </span>
-                        </div>
-                      ) : post.image_url ? (
-                        <div className="w-full h-full relative">
-                          <img
-                            src={post.image_url}
-                            alt={post.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/80 border border-white/20 text-white text-[10px] font-bold flex items-center gap-1 backdrop-blur-md">
-                            <ImageIcon size={10} />
-                            Afiche
                           </span>
                         </div>
                       ) : (
@@ -706,20 +715,32 @@ export default function PublicidadClientPage({
                   <div key={post.id} className="p-4 hover:bg-slate-50/80 transition-colors flex items-center gap-4">
                     {/* Miniatura lista */}
                     <div className="relative w-20 h-20 rounded-xl bg-slate-950 overflow-hidden flex-shrink-0 border border-slate-200">
-                      {post.video_url ? (
+                      {post.image_url ? (
+                        <div className="w-full h-full relative">
+                          <img
+                            src={proxyStorageUrl(post.image_url)}
+                            alt={post.title}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover"
+                          />
+                          {post.video_url && (
+                            <div className="absolute inset-0 bg-slate-950/30 flex items-center justify-center">
+                              <Play size={14} className="fill-white text-white" />
+                            </div>
+                          )}
+                        </div>
+                      ) : post.video_url ? (
                         <div className="w-full h-full relative">
                           <video
-                            src={`${post.video_url}#t=0.5`}
+                            src={`${proxyStorageUrl(post.video_url)}#t=0.5`}
                             preload="metadata"
-                            poster={post.image_url || undefined}
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 bg-slate-950/30 flex items-center justify-center">
                             <Play size={14} className="fill-white text-white" />
                           </div>
                         </div>
-                      ) : post.image_url ? (
-                        <img src={post.image_url} alt={post.title} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full bg-purple-50 flex items-center justify-center text-purple-400">
                           <FileText size={20} />
@@ -967,7 +988,7 @@ export default function PublicidadClientPage({
                 </label>
                 {editingPost && editingPost.image_url && (
                   <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
-                    <img src={editingPost.image_url} alt="Preview" className="h-14 w-14 object-cover rounded-lg" />
+                    <img src={proxyStorageUrl(editingPost.image_url)} alt="Preview" loading="lazy" className="h-14 w-14 object-cover rounded-lg" />
                     <div className="flex-grow">
                       <p className="text-xs font-bold text-slate-800">Imagen actual en uso</p>
                       <button
@@ -1003,7 +1024,7 @@ export default function PublicidadClientPage({
                 </label>
                 {editingPost && editingPost.video_url && (
                   <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
-                    <video src={`${editingPost.video_url}#t=0.5`} preload="metadata" className="h-14 w-14 object-cover rounded-lg bg-black" />
+                    <video src={`${proxyStorageUrl(editingPost.video_url)}#t=0.5`} preload="metadata" className="h-14 w-14 object-cover rounded-lg bg-black" />
                     <div className="flex-grow">
                       <p className="text-xs font-bold text-slate-800">Video actual cargado</p>
                       <button

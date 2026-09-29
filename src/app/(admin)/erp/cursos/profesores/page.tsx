@@ -9,6 +9,8 @@ import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
 import NuevoProfesorModal from "@/components/NuevoProfesorModal";
 import TeacherDetailClient from "./TeacherDetailClient";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,7 @@ async function uploadTeacherFile(file: File, prefix: string): Promise<string | n
       });
 
     if (!uploadError) {
+      await warmLocalStorageCache("course-banners", fileName, uploadBuffer);
       const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
       return data.publicUrl;
     } else {
@@ -285,8 +288,9 @@ export default async function ProfesoresPage({
                       <div className="flex items-center gap-3">
                         {prof.photo_url ? (
                           <img
-                            src={prof.photo_url}
+                            src={proxyStorageUrl(prof.photo_url)}
                             alt={prof.full_name}
+                            loading="lazy"
                             className="w-10 h-10 rounded-full object-cover border border-lilac-200 shadow-2xs shrink-0"
                           />
                         ) : (
@@ -313,7 +317,7 @@ export default async function ProfesoresPage({
                     <td className="px-6 py-4 text-xs">
                       {prof.cv_url ? (
                         <a
-                          href={prof.cv_url}
+                          href={proxyStorageUrl(prof.cv_url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 bg-lilac-50 text-lilac-700 hover:bg-lilac-100 font-bold text-xs px-2.5 py-1 rounded-xl border border-lilac-200 shadow-2xs transition"

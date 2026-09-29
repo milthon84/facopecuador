@@ -9,6 +9,8 @@ import { parseDbError } from "@/lib/db-error-parser";
 import NuevoAlumnoModal from "@/components/NuevoAlumnoModal";
 import StudentDetailClient from "./StudentDetailClient";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
+import { warmLocalStorageCache } from "@/lib/storage-cache-server";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,7 @@ async function uploadStudentPhoto(file: File): Promise<string | null> {
       });
 
     if (!uploadError) {
+      await warmLocalStorageCache("course-banners", fileName, webpBuffer);
       const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
       return data.publicUrl;
     } else {
@@ -423,8 +426,9 @@ export default async function AlumnosPage({
                       <div className="flex items-center gap-3">
                         {student.photo_url ? (
                           <img
-                            src={student.photo_url}
+                            src={proxyStorageUrl(student.photo_url)}
                             alt={student.full_name}
+                            loading="lazy"
                             className="w-10 h-10 rounded-full object-cover border border-lilac-200 shadow-2xs shrink-0"
                           />
                         ) : (

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Calendar, Megaphone, GraduationCap, BookOpen, ArrowLeft, Users } from "lucide-react";
 import Link from "next/link";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Props {
   courseId: string;
@@ -31,8 +32,9 @@ export default function CourseClasesTabsClient({
           <div className="flex items-center gap-3">
             {selectedCourse.image_url ? (
               <img
-                src={selectedCourse.image_url}
+                src={proxyStorageUrl(selectedCourse.image_url)}
                 alt={selectedCourse.name}
+                loading="lazy"
                 className="w-12 h-12 rounded-xl object-cover border border-lilac-200 shadow-2xs shrink-0"
               />
             ) : (

@@ -14,6 +14,7 @@ import NoticeComposerClient from "@/components/NoticeComposerClient";
 import CourseClasesTabsClient from "./CourseClasesTabsClient";
 import PagoModuloModal from "@/components/PagoModuloModal";
 import { syncMissingModuleInscriptions } from "@/lib/courses";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -318,8 +319,9 @@ export default async function ClasesPage({
                   {/* Foto del curso mucho más grande */}
                   {c.image_url ? (
                     <img
-                      src={c.image_url}
+                      src={proxyStorageUrl(c.image_url)}
                       alt={c.name}
+                      loading="lazy"
                       className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-lilac-200 shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-200"
                     />
                   ) : (

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2
 } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export interface PatientPhoto {
   id: string;
@@ -212,7 +213,7 @@ export default function FotosPacienteSection({
                 className="relative group w-8 h-8 rounded-lg overflow-hidden border border-lilac-200 cursor-pointer shrink-0 shadow-xs hover:border-gold-500 transition-colors"
                 title={photo.title}
               >
-                <Image src={photo.image_url} alt={photo.title} fill className="object-cover" />
+                <Image src={proxyStorageUrl(photo.image_url)} alt={photo.title} fill unoptimized className="object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white">
                   <Eye size={11} />
                 </div>
@@ -298,9 +299,10 @@ export default function FotosPacienteSection({
               title={photo.title}
             >
               <Image
-                src={photo.image_url}
+                src={proxyStorageUrl(photo.image_url)}
                 alt={photo.title}
                 fill
+                unoptimized
                 className="object-cover transition-transform duration-300 group-hover:scale-105"
               />
 
@@ -517,9 +519,10 @@ export default function FotosPacienteSection({
           {/* Image display */}
           <div className="relative p-4 flex-1 overflow-auto flex items-center justify-center bg-black/40 min-h-[50vh]">
             <Image
-              src={activePhoto.image_url}
+              src={proxyStorageUrl(activePhoto.image_url)}
               alt={activePhoto.title}
               fill
+              unoptimized
               className="object-contain rounded-xl shadow-lg p-4"
             />
           </div>
