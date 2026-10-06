@@ -63,8 +63,24 @@ export default function NewAppointmentForm({ initialDate, doctors = [] }: NewApp
     setCustomEnd(endStr);
   };
 
-  // Paciente y Doctor
-  const [selectedDoctorId, setSelectedDoctorId] = useState("");
+  // Ordenar doctores: Odontólogo General siempre primero
+  const sortedDoctors = useMemo(() => {
+    return [...doctors].sort((a, b) => {
+      const isGeneralA =
+        (a.specialty || "").toLowerCase().includes("general") ||
+        (a.full_name || "").toLowerCase().includes("general");
+      const isGeneralB =
+        (b.specialty || "").toLowerCase().includes("general") ||
+        (b.full_name || "").toLowerCase().includes("general");
+      if (isGeneralA && !isGeneralB) return -1;
+      if (!isGeneralA && isGeneralB) return 1;
+      return a.full_name.localeCompare(b.full_name);
+    });
+  }, [doctors]);
+
+  // Paciente y Doctor (Preseleccionar Odontólogo General por defecto)
+  const defaultDoctorId = sortedDoctors[0]?.id || "";
+  const [selectedDoctorId, setSelectedDoctorId] = useState(defaultDoctorId);
   const [documentNumber, setDocumentNumber] = useState("");
   const [isPassport, setIsPassport] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -487,15 +503,14 @@ export default function NewAppointmentForm({ initialDate, doctors = [] }: NewApp
                 onChange={(e) => setSelectedDoctorId(e.target.value)}
                 className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-medium text-ink-800"
               >
-                <option value="">— Sin asignar (Asignar más tarde) —</option>
-                {doctors.map((doc) => (
+                {sortedDoctors.map((doc) => (
                   <option key={doc.id} value={doc.id}>
                     {doc.full_name} {doc.specialty ? `(${doc.specialty})` : ""}
                   </option>
                 ))}
               </select>
               <p className="text-[11px] text-ink-500">
-                Puedes seleccionar el especialista ahora o dejarlo para asignarlo más tarde desde la agenda.
+                El odontólogo general está seleccionado por defecto. Puedes cambiar de doctor en cualquier momento.
               </p>
             </div>
 
