@@ -142,7 +142,7 @@ export default async function CursoDetallePage({
     supabase.from("cursos").select("*").eq("id", id).single(),
     supabase.from("curso_modulos").select("*, modulo_profesores(module_id, teacher_id, profesores(id, full_name, specialty))").eq("course_id", id).order("number"),
     supabase.from("curso_profesores").select("role, profesores(*)").eq("course_id", id),
-    supabase.from("profesores").select("id, full_name, specialty").order("full_name"),
+    supabase.from("profesores").select("id, full_name, specialty").eq("is_teacher", true).order("full_name"),
     supabase.from("curso_inscripciones").select("id, status, created_at, alumnos(*), curso_modulo_inscripciones(id, billing_status)").eq("course_id", id).order("created_at", { ascending: false }),
     supabase.from("alumnos").select("id, full_name, document_number, phone, email").order("full_name"),
   ]);

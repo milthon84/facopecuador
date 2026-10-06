@@ -13,6 +13,7 @@ const schema = z.object({
   starts_at: z.string(),
   ends_at: z.string(),
   reason: z.string().nullable().optional(),
+  doctor_id: z.string().uuid().nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
   if (!parse.success) {
     return NextResponse.json({ error: "Datos inválidos", issues: parse.error.issues }, { status: 400 });
   }
-  const { patient, starts_at, ends_at, reason } = parse.data;
+  const { patient, starts_at, ends_at, reason, doctor_id } = parse.data;
 
   const startsDate = new Date(starts_at);
   if (isNaN(startsDate.getTime())) {
@@ -91,7 +92,9 @@ export async function POST(req: Request) {
     patientId = newPatient.id;
   }
 
-  // 3) Crear la cita
+  // 3) Crear la cita (solo el personal puede asignar doctor; pacientes públicos no asignan doctor)
+  const assignedDoctorId = isClinicStaff && doctor_id ? doctor_id : null;
+
   const { data: appt, error: apptErr } = await supabase
     .from("appointments")
     .insert({
@@ -100,6 +103,7 @@ export async function POST(req: Request) {
       ends_at,
       reason: reason || null,
       status: "scheduled",
+      doctor_id: assignedDoctorId,
     })
     .select("id")
     .single();

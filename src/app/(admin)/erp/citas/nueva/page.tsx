@@ -1,5 +1,6 @@
 import NewAppointmentForm from "./NewAppointmentForm";
 import { hasWritePermission } from "@/lib/auth-action";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -25,5 +26,12 @@ export default async function NewAppointmentPage({
   const todayStr = y && m && d ? `${y}-${m}-${d}` : new Date().toISOString().split("T")[0];
   const initialDate = searchParams?.date || todayStr;
 
-  return <NewAppointmentForm initialDate={initialDate} />;
+  const supabase = createAdminClient();
+  const { data: doctors } = await supabase
+    .from("profesores")
+    .select("id, full_name, specialty, photo_url")
+    .eq("is_doctor", true)
+    .order("full_name");
+
+  return <NewAppointmentForm initialDate={initialDate} doctors={doctors || []} />;
 }

@@ -28,27 +28,33 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { id, status, extra } = body;
+    const { id, status, doctor_id, extra } = body;
 
-    if (!id || !status) {
-      return NextResponse.json({ error: "id y status son requeridos" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id es requerido" }, { status: 400 });
+    }
+
+    if (!status && doctor_id === undefined && !extra) {
+      return NextResponse.json({ error: "No hay campos para actualizar" }, { status: 400 });
     }
 
     // Obtener estado anterior para auditoría
     const { data: prevAppt } = await adminClient
       .from("appointments")
-      .select("status, patient_id")
+      .select("status, patient_id, doctor_id")
       .eq("id", id)
       .single();
 
-    const updateData: Record<string, any> = { status };
+    const updateData: Record<string, any> = {};
+    if (status) updateData.status = status;
+    if (doctor_id !== undefined) updateData.doctor_id = doctor_id || null;
     if (extra) Object.assign(updateData, extra);
 
     const { data: updatedAppt, error } = await adminClient
       .from("appointments")
       .update(updateData)
       .eq("id", id)
-      .select("patient_id")
+      .select("patient_id, doctor_id, status")
       .single();
 
     if (error) {
@@ -63,6 +69,12 @@ export async function PATCH(req: Request) {
       no_show:   "Cita marcada como no asistió",
       scheduled: "Cita reprogramada",
     };
+    
+    let description = status ? (actionLabels[status] || `Cita actualizada: ${status}`) : "Cita actualizada";
+    if (doctor_id !== undefined && prevAppt?.doctor_id !== doctor_id) {
+      description = doctor_id ? "Doctor asignado a la cita" : "Doctor desasignado de la cita";
+    }
+
     await logAudit({
       user_id: user.id,
       user_email: user.email,
@@ -70,10 +82,12 @@ export async function PATCH(req: Request) {
       action,
       resource: "appointment",
       resource_id: id,
-      description: actionLabels[status] || `Cita actualizada: ${status}`,
+      description,
       metadata: {
         previous_status: prevAppt?.status,
-        new_status: status,
+        new_status: status || prevAppt?.status,
+        previous_doctor_id: prevAppt?.doctor_id,
+        new_doctor_id: doctor_id,
         ...(extra || {}),
       },
       ip_address: getIpFromRequest(req),
@@ -81,16 +95,16 @@ export async function PATCH(req: Request) {
 
     // Invalidar caché
     try {
-      revalidatePath("/admin");
-      revalidatePath("/admin/calendario");
-      revalidatePath(`/admin/citas/${id}`);
-      revalidatePath("/admin/pacientes");
+      revalidatePath("/erp");
+      revalidatePath("/erp/calendario");
+      revalidatePath(`/erp/citas/${id}`);
+      revalidatePath("/erp/pacientes");
       if (updatedAppt?.patient_id) {
-        revalidatePath(`/admin/pacientes/${updatedAppt.patient_id}`);
+        revalidatePath(`/erp/pacientes/${updatedAppt.patient_id}`);
       }
     } catch { /* ignorar */ }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, appointment: updatedAppt });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Error al procesar la actualización" }, { status: 500 });
   }

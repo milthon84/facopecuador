@@ -117,6 +117,7 @@ export interface ResourceDef {
 export const ALL_RESOURCES: readonly ResourceDef[] = [
   // Clínica
   { section: "Clínica",       path: "/erp",              label: "Agenda", hasEdit: true },
+  { section: "Clínica",       path: "/erp/dashboard",    label: "Resumen de Citas y Atenciones", hasEdit: false },
   { section: "Clínica",       path: "/erp/calendario",   label: "Calendario", hasEdit: true },
   { section: "Clínica",       path: "/erp/pacientes",    label: "Pacientes", hasEdit: true },
   { section: "Clínica",       path: "/erp/horarios",     label: "Horarios", hasEdit: true },
@@ -130,7 +131,7 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
 
   // Cursos
   { section: "Cursos",        path: "/erp/cursos",       label: "Cursos", hasEdit: true },
-  { section: "Cursos",        path: "/erp/cursos/profesores", label: "Profesores", hasEdit: true },
+  { section: "Cursos",        path: "/erp/cursos/profesores", label: "Especialistas", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/alumnos",    label: "Alumnos e Inscripciones", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/clases",     label: "Clases y Asistencia", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/facturacion", label: "Facturación de Módulos", hasEdit: true },
@@ -183,6 +184,7 @@ export const NAV_SECTIONS = ["Clínica", "Cursos", "General", "Publicidad", "Sis
 export const NAV_ITEMS: NavItemDef[] = [
   // Clínica
   { href: "/erp",              label: "Agenda",              icon: "LayoutDashboard", section: "Clínica",       roles: ["admin", "recepcionista"] },
+  { href: "/erp/dashboard",    label: "Resumen y Métricas",  icon: "TrendingUp",      section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/calendario",   label: "Calendario",          icon: "CalendarDays",    section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/pacientes",    label: "Pacientes",           icon: "Users",           section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/horarios",     label: "Horarios",            icon: "Clock",           section: "Clínica",       roles: ["admin"] },
@@ -196,7 +198,7 @@ export const NAV_ITEMS: NavItemDef[] = [
 
   // Cursos
   { href: "/erp/cursos",              label: "Cursos",              icon: "GraduationCap",   section: "Cursos",        roles: ["admin"] },
-  { href: "/erp/cursos/profesores",   label: "Profesores",          icon: "Award",           section: "Cursos",        roles: ["admin"] },
+  { href: "/erp/cursos/profesores",   label: "Especialistas",       icon: "Award",           section: "Cursos",        roles: ["admin"] },
   { href: "/erp/cursos/alumnos",      label: "Alumnos",             icon: "Users",           section: "Cursos",        roles: ["admin", "recepcionista"] },
   { href: "/erp/cursos/clases",       label: "Clases y Asistencia", icon: "Presentation",      section: "Cursos",        roles: ["admin", "recepcionista"] },
 

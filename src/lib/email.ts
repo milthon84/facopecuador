@@ -89,6 +89,7 @@ interface ApptEmailData {
   startsAt: string;
   reason?: string | null;
   appointmentId: string;
+  doctorName?: string | null;
 }
 
 export async function sendConfirmationEmail(d: ApptEmailData) {
@@ -110,6 +111,17 @@ export async function sendConfirmationEmail(d: ApptEmailData) {
         </td>
       </tr>
     </table>
+
+    ${d.doctorName ? `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
+      <tr>
+        <td style="background:#f0f7ff; border-left:4px solid #3b82f6; padding:16px 20px; border-radius:0 8px 8px 0;">
+          <div style="font-size:11px; font-weight:700; color:#1d4ed8; letter-spacing:0.8px; margin-bottom:6px; text-transform:uppercase;">👨‍⚕️ Profesional Asignado</div>
+          <div style="font-size:16px; font-weight:700; color:#1a1a1a;">${d.doctorName}</div>
+        </td>
+      </tr>
+    </table>
+    ` : ""}
 
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
       <tr>
@@ -161,6 +173,17 @@ export async function sendReminderEmail(d: ApptEmailData) {
         </td>
       </tr>
     </table>
+
+    ${d.doctorName ? `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
+      <tr>
+        <td style="background:#f0f7ff; border-left:4px solid #3b82f6; padding:16px 20px; border-radius:0 8px 8px 0;">
+          <div style="font-size:11px; font-weight:700; color:#1d4ed8; letter-spacing:0.8px; margin-bottom:6px; text-transform:uppercase;">👨‍⚕️ Profesional Asignado</div>
+          <div style="font-size:16px; font-weight:700; color:#1a1a1a;">${d.doctorName}</div>
+        </td>
+      </tr>
+    </table>
+    ` : ""}
 
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
       <tr>

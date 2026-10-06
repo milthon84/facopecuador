@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Award, AlertCircle, Loader2, FileText } from "lucide-react";
+import { Plus, Award, AlertCircle, Loader2, FileText, Stethoscope, GraduationCap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import StandardModal from "@/components/StandardModal";
 
@@ -13,6 +13,8 @@ export default function NuevoProfesorModal({ action }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isDoctor, setIsDoctor] = useState(true);
+  const [isTeacher, setIsTeacher] = useState(true);
   const router = useRouter();
 
   function handleClose() {
@@ -22,6 +24,10 @@ export default function NuevoProfesorModal({ action }: Props) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!isDoctor && !isTeacher) {
+      setErrorMsg("Debes seleccionar al menos un rol (Atención a Pacientes o Profesor / Cursos).");
+      return;
+    }
     setLoading(true);
     setErrorMsg(null);
 
@@ -31,7 +37,7 @@ export default function NuevoProfesorModal({ action }: Props) {
       setIsOpen(false);
       router.refresh();
     } catch (err: any) {
-      setErrorMsg(err?.message || "No se pudo registrar el profesor.");
+      setErrorMsg(err?.message || "No se pudo registrar el especialista.");
     } finally {
       setLoading(false);
     }
@@ -43,19 +49,21 @@ export default function NuevoProfesorModal({ action }: Props) {
         type="button"
         onClick={() => {
           setErrorMsg(null);
+          setIsDoctor(true);
+          setIsTeacher(true);
           setIsOpen(true);
         }}
         className="inline-flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
       >
         <Plus size={16} />
-        <span>Registrar Nuevo Profesor</span>
+        <span>Registrar Especialista</span>
       </button>
 
       <StandardModal
         isOpen={isOpen}
         onClose={handleClose}
-        title="Registrar Nuevo Profesor"
-        subtitle="Ingresa los datos personales y especialidad del docente"
+        title="Registrar Nuevo Especialista"
+        subtitle="Ingresa los datos personales, especialidad y asigna sus roles clínicos/académicos"
         icon={<Award size={20} className="text-lilac-600" />}
         loading={loading}
         maxWidth="max-w-lg"
@@ -68,13 +76,71 @@ export default function NuevoProfesorModal({ action }: Props) {
             </div>
           )}
 
+          {/* Roles / Checks de Especialista */}
+          <div>
+            <label className="block text-xs font-semibold text-ink-700 mb-1.5">
+              Roles y Áreas de Participación *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label
+                className={`flex items-start gap-2.5 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                  isDoctor
+                    ? "border-teal-400 bg-teal-50/50 text-teal-950 shadow-2xs"
+                    : "border-lilac-100 bg-white hover:bg-lilac-50/30 text-ink-700"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  name="is_doctor"
+                  checked={isDoctor}
+                  onChange={(e) => setIsDoctor(e.target.checked)}
+                  className="mt-0.5 rounded text-teal-600 focus:ring-teal-500 h-4 w-4 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <div className="font-bold flex items-center gap-1">
+                    <Stethoscope size={13} className="text-teal-600 shrink-0" />
+                    <span>Atención a Pacientes</span>
+                  </div>
+                  <p className="text-[11px] text-ink-500 mt-0.5 leading-tight">
+                    Habilitado para atender consultas y citas en clínica.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-2.5 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                  isTeacher
+                    ? "border-lilac-400 bg-lilac-50/50 text-lilac-950 shadow-2xs"
+                    : "border-lilac-100 bg-white hover:bg-lilac-50/30 text-ink-700"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  name="is_teacher"
+                  checked={isTeacher}
+                  onChange={(e) => setIsTeacher(e.target.checked)}
+                  className="mt-0.5 rounded text-lilac-600 focus:ring-lilac-500 h-4 w-4 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <div className="font-bold flex items-center gap-1">
+                    <GraduationCap size={13} className="text-lilac-600 shrink-0" />
+                    <span>Profesor / Cursos</span>
+                  </div>
+                  <p className="text-[11px] text-ink-500 mt-0.5 leading-tight">
+                    Habilitado para impartir cursos y clases académicas.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">Nombre completo *</label>
             <input
               name="fullName"
               required
               disabled={loading}
-              placeholder="Ej: Alejandro Peralta"
+              placeholder="Ej: Dr. Alejandro Peralta"
               className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
             />
           </div>
@@ -84,7 +150,7 @@ export default function NuevoProfesorModal({ action }: Props) {
             <input
               name="specialty"
               disabled={loading}
-              placeholder="Ej: Implantología, Ortodoncia"
+              placeholder="Ej: Implantología Oral, Ortodoncia"
               className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
             />
           </div>
@@ -105,7 +171,7 @@ export default function NuevoProfesorModal({ action }: Props) {
                 name="email"
                 type="email"
                 disabled={loading}
-                placeholder="Ej: profesor@facop.com"
+                placeholder="Ej: especialista@facop.com"
                 className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
               />
             </div>
@@ -144,7 +210,7 @@ export default function NuevoProfesorModal({ action }: Props) {
                   <span>Guardando...</span>
                 </>
               ) : (
-                <span>Registrar Profesor</span>
+                <span>Registrar Especialista</span>
               )}
             </button>
           </div>

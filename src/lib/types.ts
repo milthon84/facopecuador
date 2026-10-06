@@ -12,9 +12,22 @@ export interface Patient {
   updated_at: string;
 }
 
+export interface Doctor {
+  id: string;
+  full_name: string;
+  specialty?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  photo_url?: string | null;
+  cv_url?: string | null;
+  is_doctor?: boolean;
+  is_teacher?: boolean;
+}
+
 export interface Appointment {
   id: string;
   patient_id: string;
+  doctor_id?: string | null;
   starts_at: string;
   ends_at: string;
   status: AppointmentStatus;
@@ -26,6 +39,7 @@ export interface Appointment {
   reminder_sent_at: string | null;
   created_at: string;
   updated_at: string;
+  doctor?: Doctor | null;
 }
 
 export interface AppointmentWithPatient extends Appointment {

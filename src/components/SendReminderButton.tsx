@@ -13,6 +13,7 @@ interface Props {
   patientPhone?: string | null;
   startsAt?: string | null;
   reason?: string | null;
+  doctorName?: string | null;
 }
 
 /** Normaliza un teléfono ecuatoriano al formato 593XXXXXXXXX */
@@ -34,7 +35,8 @@ function buildWhatsAppUrl(
   phone: string,
   name: string,
   startsAt: string,
-  reason: string
+  reason: string,
+  doctorName?: string | null
 ): string {
   const date = new Date(startsAt);
 
@@ -52,18 +54,22 @@ function buildWhatsAppUrl(
   });
 
   // String.fromCodePoint garantiza el caracter emoji correcto en runtime
-  const HAND  = String.fromCodePoint(0x1F44B);          // 👋
-  const CHECK = String.fromCodePoint(0x2705);            // ✅
-  const CAL   = String.fromCodePoint(0x1F4C5);           // 📅
-  const PIN   = String.fromCodePoint(0x1F4CD);           // 📍
-  const MAP   = String.fromCodePoint(0x1F5FA, 0xFE0F);  // 🗺️
-  const TOOTH = String.fromCodePoint(0x1F9B7);           // 🦷
-  const CLOCK = String.fromCodePoint(0x23F0);            // ⏰
+  const HAND   = String.fromCodePoint(0x1F44B);          // 👋
+  const CHECK  = String.fromCodePoint(0x2705);            // ✅
+  const CAL    = String.fromCodePoint(0x1F4C5);           // 📅
+  const PIN    = String.fromCodePoint(0x1F4CD);           // 📍
+  const MAP    = String.fromCodePoint(0x1F5FA, 0xFE0F);  // 🗺️
+  const TOOTH  = String.fromCodePoint(0x1F9B7);           // 🦷
+  const CLOCK  = String.fromCodePoint(0x23F0);            // ⏰
+  const DOCTOR = "👨‍⚕️";
+
+  const doctorLine = doctorName ? `${DOCTOR} *Profesional a cargo:* ${doctorName}\n\n` : "";
 
   const mensaje =
     `Hola *${name}* ${HAND}\n\n` +
     `Le recordamos su cita en *Facop Quito Clinica* ${CHECK}\n\n` +
     `${CAL} *Fecha y hora:*\n${fechaFormateada}, ${horaFormateada}\n\n` +
+    doctorLine +
     `${PIN} *Ubicacion:*\nJuan Leon Mera y La Pinta, Edificio Opladen, 3er piso - Quito\n` +
     `${MAP} Ver en Google Maps: https://maps.app.goo.gl/rG2VKyLm5N4yr7s67\n\n` +
     `${TOOTH} *Motivo:* ${reason || "consulta odontológica"}\n\n` +
@@ -81,6 +87,7 @@ export default function SendReminderButton({
   patientPhone,
   startsAt,
   reason,
+  doctorName,
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -132,7 +139,8 @@ export default function SendReminderButton({
           ecPhone!,
           patientName,
           startsAt,
-          reason || "consulta odontológica"
+          reason || "consulta odontológica",
+          doctorName
         );
       }
 

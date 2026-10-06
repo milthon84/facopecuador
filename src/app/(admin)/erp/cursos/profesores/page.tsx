@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Award, Search, ArrowRight, UserCheck, FileText, Download } from "lucide-react";
+import { Award, Search, ArrowRight, UserCheck, FileText, Stethoscope, GraduationCap, Users } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { parseDbError } from "@/lib/db-error-parser";
@@ -52,10 +52,10 @@ async function uploadTeacherFile(file: File, prefix: string): Promise<string | n
       const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
       return data.publicUrl;
     } else {
-      console.error("Error al subir archivo de profesor:", uploadError.message);
+      console.error("Error al subir archivo de especialista:", uploadError.message);
     }
   } catch (err) {
-    console.error("Excepción al subir archivo de profesor:", err);
+    console.error("Excepción al subir archivo de especialista:", err);
   }
   return null;
 }
@@ -72,6 +72,9 @@ async function addTeacher(formData: FormData) {
   const photoFile = formData.get("photoFile") as File;
   const cvFile = formData.get("cvFile") as File;
 
+  const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
+  const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
+
   if (!fullName) return;
 
   const photoUrl = await uploadTeacherFile(photoFile, "teacher_photo");
@@ -82,6 +85,8 @@ async function addTeacher(formData: FormData) {
     specialty: specialty || null,
     phone: phone || null,
     email: email || null,
+    is_doctor: isDoctor,
+    is_teacher: isTeacher,
   };
 
   if (photoUrl) insertPayload.photo_url = photoUrl;
@@ -114,6 +119,9 @@ async function updateTeacher(formData: FormData) {
   const photoFile = formData.get("photoFile") as File;
   const cvFile = formData.get("cvFile") as File;
 
+  const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
+  const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
+
   if (!id || !fullName) return;
 
   const newPhotoUrl = await uploadTeacherFile(photoFile, "teacher_photo");
@@ -124,6 +132,8 @@ async function updateTeacher(formData: FormData) {
     specialty: specialty || null,
     phone: phone || null,
     email: email || null,
+    is_doctor: isDoctor,
+    is_teacher: isTeacher,
     photo_url: newPhotoUrl || existingPhotoUrl,
     cv_url: newCvUrl || existingCvUrl,
     updated_at: new Date().toISOString(),
@@ -142,13 +152,18 @@ async function deleteTeacher(formData: FormData) {
   const id = formData.get("id") as string;
 
   const supabase = createAdminClient();
-  const [courseAssoc, classAssoc] = await Promise.all([
+  const [courseAssoc, classAssoc, apptAssoc] = await Promise.all([
     supabase.from("curso_profesores").select("id").eq("teacher_id", id).limit(1),
     supabase.from("curso_clases").select("id").eq("teacher_id", id).limit(1),
+    supabase.from("appointments").select("id").eq("doctor_id", id).limit(1),
   ]);
 
   if ((courseAssoc.data || []).length > 0 || (classAssoc.data || []).length > 0) {
     redirect("/erp/cursos/profesores?error=assigned");
+  }
+
+  if ((apptAssoc.data || []).length > 0) {
+    redirect("/erp/cursos/profesores?error=appointments");
   }
 
   await supabase.from("profesores").delete().eq("id", id);
@@ -158,7 +173,7 @@ async function deleteTeacher(formData: FormData) {
 export default async function ProfesoresPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ id?: string; q?: string; edit?: string; error?: string }>;
+  searchParams: Promise<{ id?: string; q?: string; edit?: string; role?: string; error?: string }>;
 }) {
   await assertPermission("/erp/cursos/profesores");
   const canEdit = await hasWritePermission("/erp/cursos/profesores");
@@ -166,14 +181,15 @@ export default async function ProfesoresPage({
   
   const teacherId = searchParams.id;
   const searchQuery = searchParams.q || "";
+  const roleFilter = searchParams.role || "all";
   const editMode = searchParams.edit === "true";
   const errorParam = searchParams.error;
 
   const supabase = createAdminClient();
 
-  // === VISTA DE DETALLE DEL PROFESOR ===
+  // === VISTA DE DETALLE DEL ESPECIALISTA ===
   if (teacherId) {
-    const [teacherRes, assignedCoursesRes, assignedClassesRes] = await Promise.all([
+    const [teacherRes, assignedCoursesRes, assignedClassesRes, assignedAppointmentsRes] = await Promise.all([
       supabase.from("profesores").select("*").eq("id", teacherId).single(),
       supabase
         .from("curso_profesores")
@@ -184,6 +200,11 @@ export default async function ProfesoresPage({
         .select("id, title, date, start_time, end_time, classroom, curso_modulos(id, number, name, cursos(id, name))")
         .eq("teacher_id", teacherId)
         .order("date", { ascending: false }),
+      supabase
+        .from("appointments")
+        .select("id, starts_at, ends_at, status, reason, patient:patients(id, full_name, phone, document_number), dental_consultation:dental_consultations(id)")
+        .eq("doctor_id", teacherId)
+        .order("starts_at", { ascending: false }),
     ]);
 
     const teacher = teacherRes.data;
@@ -191,12 +212,45 @@ export default async function ProfesoresPage({
 
     const assignedCourses = assignedCoursesRes.data || [];
     const assignedClasses = assignedClassesRes.data || [];
+    const rawAppointments = assignedAppointmentsRes.data || [];
+
+    // Facturas enlazadas a las citas del doctor (a través de xml_url = appointment_id)
+    const apptIds = rawAppointments.map((a) => a.id);
+    const { data: matchedInvoices } = apptIds.length > 0
+      ? await supabase
+          .from("invoices")
+          .select("id, xml_url, invoice_number, total, sri_status")
+          .in("xml_url", apptIds)
+      : { data: [] };
+
+    const apptInvoiceMap: Record<string, { id: string; invoice_number: string; total: number; sri_status: string }> = {};
+    let billedTotal = 0;
+    matchedInvoices?.forEach((inv) => {
+      if (inv.xml_url) {
+        apptInvoiceMap[inv.xml_url] = {
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          total: Number(inv.total) || 0,
+          sri_status: inv.sri_status,
+        };
+        if (inv.sri_status === "authorized" || inv.sri_status === "submitted" || inv.sri_status === "draft") {
+          billedTotal += Number(inv.total) || 0;
+        }
+      }
+    });
+
+    const assignedAppointments = rawAppointments.map((a) => ({
+      ...a,
+      invoice: apptInvoiceMap[a.id] || null,
+    }));
 
     return (
       <TeacherDetailClient
         teacher={teacher}
         assignedCourses={assignedCourses}
         assignedClasses={assignedClasses}
+        assignedAppointments={assignedAppointments}
+        billedTotal={billedTotal}
         canEdit={canEdit}
         editMode={editMode}
         updateTeacherAction={updateTeacher}
@@ -204,8 +258,14 @@ export default async function ProfesoresPage({
     );
   }
 
-  // === VISTA GENERAL / DIRECTORIO DE PROFESORES (FULL WIDTH) ===
+  // === VISTA GENERAL / DIRECTORIO DE ESPECIALISTAS ===
   let query = supabase.from("profesores").select("*");
+
+  if (roleFilter === "doctor") {
+    query = query.eq("is_doctor", true);
+  } else if (roleFilter === "teacher") {
+    query = query.eq("is_teacher", true);
+  }
 
   if (searchQuery) {
     query = query.or(
@@ -220,12 +280,12 @@ export default async function ProfesoresPage({
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-gold-600 shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 shrink-0 shadow-2xs">
             <Award size={22} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-ink-900">Directorio de Profesores</h1>
-            <p className="text-sm text-ink-600">Registra profesores, administra especialidades, hojas de vida (CV) y clases asignadas.</p>
+            <h1 className="text-2xl font-bold text-ink-900">Directorio de Especialistas</h1>
+            <p className="text-sm text-ink-600">Registra especialistas, administra roles de atención a pacientes, cursos académicos y hojas de vida.</p>
           </div>
         </div>
 
@@ -236,45 +296,91 @@ export default async function ProfesoresPage({
 
       {errorParam === "assigned" && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm shadow-2xs">
-          <strong>No se puede eliminar el profesor:</strong> Tiene cursos asignados o clases programadas. Desasócialo antes de eliminarlo.
+          <strong>No se puede eliminar el especialista:</strong> Tiene cursos asignados o clases programadas. Desasócialo antes de eliminarlo.
         </div>
       )}
 
-      {/* Barra de Búsqueda */}
-      <form method="GET" action="/erp/cursos/profesores" className="relative flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" size={16} />
-          <input
-            name="q"
-            defaultValue={searchQuery}
-            placeholder="Buscar por nombre, especialidad, correo o teléfono..."
-            className="w-full bg-white border border-lilac-200 rounded-2xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-500 shadow-2xs"
-          />
+      {errorParam === "appointments" && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 text-sm shadow-2xs">
+          <strong>No se puede eliminar el especialista:</strong> Tiene citas médicas o atenciones clínicas registradas a su nombre.
         </div>
-        <button type="submit" className="btn-primary text-xs py-2.5 px-5 shadow-sm shrink-0 cursor-pointer">
-          Buscar
-        </button>
-      </form>
+      )}
 
-      {/* Tabla del Directorio (Full Width) */}
+      {/* Barra de Búsqueda y Filtros de Rol */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Pestañas de filtro por rol */}
+        <div className="flex items-center gap-1.5 bg-white p-1 rounded-2xl border border-lilac-100 shadow-2xs">
+          <Link
+            href={`/erp/cursos/profesores?role=all${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              roleFilter === "all"
+                ? "bg-lilac-600 text-white shadow-2xs"
+                : "text-ink-600 hover:text-ink-900 hover:bg-lilac-50/50"
+            }`}
+          >
+            Todos
+          </Link>
+          <Link
+            href={`/erp/cursos/profesores?role=doctor${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              roleFilter === "doctor"
+                ? "bg-teal-600 text-white shadow-2xs"
+                : "text-teal-700 hover:text-teal-900 hover:bg-teal-50/50"
+            }`}
+          >
+            <Stethoscope size={13} />
+            <span>Atención a Pacientes</span>
+          </Link>
+          <Link
+            href={`/erp/cursos/profesores?role=teacher${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              roleFilter === "teacher"
+                ? "bg-lilac-600 text-white shadow-2xs"
+                : "text-lilac-700 hover:text-lilac-900 hover:bg-lilac-50/50"
+            }`}
+          >
+            <GraduationCap size={13} />
+            <span>Profesor / Cursos</span>
+          </Link>
+        </div>
+
+        {/* Formulario de búsqueda */}
+        <form method="GET" action="/erp/cursos/profesores" className="relative flex gap-2 flex-1 max-w-md">
+          {roleFilter !== "all" && <input type="hidden" name="role" value={roleFilter} />}
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" size={16} />
+            <input
+              name="q"
+              defaultValue={searchQuery}
+              placeholder="Buscar por nombre, especialidad..."
+              className="w-full bg-white border border-lilac-200 rounded-2xl pl-10 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500 shadow-2xs"
+            />
+          </div>
+          <button type="submit" className="btn-primary text-xs py-2 px-4 shadow-sm shrink-0 cursor-pointer">
+            Buscar
+          </button>
+        </form>
+      </div>
+
+      {/* Tabla del Directorio */}
       <div className="bg-white border border-lilac-100 rounded-3xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-lilac-50 bg-lilac-50/10 flex items-center justify-between">
-          <span className="text-sm font-bold text-ink-900">Listado de Profesores Registrados</span>
+          <span className="text-sm font-bold text-ink-900">Listado de Especialistas Registrados</span>
           <span className="text-xs text-ink-500 bg-lilac-50 border border-lilac-100 px-3 py-1 rounded-full font-bold">
-            {profesores?.length ?? 0} profesores
+            {profesores?.length ?? 0} {profesores?.length === 1 ? "especialista" : "especialistas"}
           </span>
         </div>
 
         {!profesores || profesores.length === 0 ? (
           <div className="p-12 text-center text-sm text-ink-500 italic">
-            {searchQuery ? "No se encontraron profesores con el criterio de búsqueda." : "No hay profesores registrados en el sistema."}
+            {searchQuery ? "No se encontraron especialistas con el criterio de búsqueda." : "No hay especialistas registrados en el sistema."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-lilac-50/50 text-[10px] font-bold text-ink-500 uppercase tracking-wider border-b border-lilac-100">
                 <tr>
-                  <th className="text-left px-6 py-3.5">Profesor & Especialidad</th>
+                  <th className="text-left px-6 py-3.5">Especialista & Roles</th>
                   <th className="text-left px-6 py-3.5">Teléfono</th>
                   <th className="text-left px-6 py-3.5">Correo Electrónico</th>
                   <th className="text-left px-6 py-3.5">Hoja de Vida (CV)</th>
@@ -282,74 +388,91 @@ export default async function ProfesoresPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-50">
-                {profesores.map((prof) => (
-                  <tr key={prof.id} className="hover:bg-lilac-50/20 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {prof.photo_url ? (
-                          <img
-                            src={proxyStorageUrl(prof.photo_url)}
-                            alt={prof.full_name}
-                            loading="lazy"
-                            className="w-10 h-10 rounded-full object-cover border border-lilac-200 shadow-2xs shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0">
-                            <UserCheck size={18} />
+                {profesores.map((prof) => {
+                  const isDoc = prof.is_doctor ?? true;
+                  const isTeach = prof.is_teacher ?? true;
+
+                  return (
+                    <tr key={prof.id} className="hover:bg-lilac-50/20 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          {prof.photo_url ? (
+                            <img
+                              src={proxyStorageUrl(prof.photo_url)}
+                              alt={prof.full_name}
+                              loading="lazy"
+                              className="w-10 h-10 rounded-full object-cover border border-lilac-200 shadow-2xs shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-600 font-bold shrink-0">
+                              <UserCheck size={18} />
+                            </div>
+                          )}
+                          <div className="space-y-1">
+                            <Link href={`/erp/cursos/profesores?id=${prof.id}`} className="font-bold text-ink-950 hover:text-lilac-700">
+                              {prof.full_name}
+                            </Link>
+                            {prof.specialty && (
+                              <div className="text-[11px] text-ink-600 font-medium">{prof.specialty}</div>
+                            )}
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              {isDoc && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md">
+                                  <Stethoscope size={10} /> Atención Pacientes
+                                </span>
+                              )}
+                              {isTeach && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-lilac-800 bg-lilac-50 border border-lilac-200 px-2 py-0.5 rounded-md">
+                                  <GraduationCap size={10} /> Profesor / Cursos
+                                </span>
+                              )}
+                            </div>
                           </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-xs text-ink-800 font-medium">
+                        {prof.phone || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-ink-700">
+                        {prof.email || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-xs">
+                        {prof.cv_url ? (
+                          <a
+                            href={proxyStorageUrl(prof.cv_url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 bg-lilac-50 text-lilac-700 hover:bg-lilac-100 font-bold text-xs px-2.5 py-1 rounded-xl border border-lilac-200 shadow-2xs transition"
+                          >
+                            <FileText size={12} />
+                            <span>Ver CV</span>
+                          </a>
+                        ) : (
+                          <span className="text-ink-400 italic text-xs">No subido</span>
                         )}
-                        <div>
-                          <Link href={`/erp/cursos/profesores?id=${prof.id}`} className="font-bold text-ink-950 hover:text-lilac-700">
-                            {prof.full_name}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/erp/cursos/profesores?id=${prof.id}`}
+                            className="inline-flex items-center justify-center gap-1.5 bg-lilac-700 hover:bg-lilac-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                          >
+                            <span>Gestionar</span>
+                            <ArrowRight size={13} />
                           </Link>
-                          {prof.specialty && (
-                            <div className="text-[11px] text-lilac-800 font-semibold mt-0.5">{prof.specialty}</div>
+
+                          {canEdit && (
+                            <ConfirmDeleteButton
+                              action={deleteTeacher}
+                              idValue={prof.id}
+                              confirmMessage="¿Estás seguro de que deseas eliminar este especialista?"
+                            />
                           )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-ink-800 font-medium">
-                      {prof.phone || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-ink-700">
-                      {prof.email || "-"}
-                    </td>
-                    <td className="px-6 py-4 text-xs">
-                      {prof.cv_url ? (
-                        <a
-                          href={proxyStorageUrl(prof.cv_url)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 bg-lilac-50 text-lilac-700 hover:bg-lilac-100 font-bold text-xs px-2.5 py-1 rounded-xl border border-lilac-200 shadow-2xs transition"
-                        >
-                          <FileText size={12} />
-                          <span>Ver CV</span>
-                        </a>
-                      ) : (
-                        <span className="text-ink-400 italic text-xs">No subido</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          href={`/erp/cursos/profesores?id=${prof.id}`}
-                          className="inline-flex items-center justify-center gap-1.5 bg-lilac-700 hover:bg-lilac-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                        >
-                          <span>Gestionar</span>
-                          <ArrowRight size={13} />
-                        </Link>
-
-                        {canEdit && (
-                          <ConfirmDeleteButton
-                            action={deleteTeacher}
-                            idValue={prof.id}
-                            confirmMessage="¿Estás seguro de que deseas eliminar este profesor?"
-                          />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

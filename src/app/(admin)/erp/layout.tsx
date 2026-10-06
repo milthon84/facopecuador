@@ -4,7 +4,8 @@ import {
   Package, FileText, UserCog, ShieldCheck, ChevronRight,
   Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
-  Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper
+  Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
+  TrendingUp, BarChart3
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -19,6 +20,8 @@ export const dynamic = "force-dynamic";
 
 const ICONS: Record<string, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
+  TrendingUp:      <TrendingUp size={16} />,
+  BarChart3:       <BarChart3 size={16} />,
   CalendarDays:    <CalendarDays size={16} />,
   Users:           <Users size={16} />,
   Clock:           <Clock size={16} />,
@@ -115,9 +118,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   });
 
   return (
-    <div className="min-h-screen bg-lilac-50/30 text-ink-900">
+    <div className="min-h-screen bg-lilac-50/30 text-ink-900 print:bg-white print:min-h-0">
       {/* Header móvil */}
-      <header className="sticky top-0 z-40 shadow-sm">
+      <header className="sticky top-0 z-40 shadow-sm print:hidden">
         <div className="md:hidden bg-white border-b border-gray-100">
           <div className="px-4 py-2.5 flex items-center gap-3">
             <Link href="/erp" className="flex-1">
@@ -156,9 +159,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row print:max-w-full print:block">
         {/* Sidebar — solo desktop */}
-        <nav className="hidden md:block md:w-60 md:min-h-[calc(100vh-52px)] border-r border-lilac-100 bg-white shadow-sm">
+        <nav className="hidden md:block md:w-60 md:min-h-[calc(100vh-52px)] border-r border-lilac-100 bg-white shadow-sm print:hidden">
           <div className="p-3 flex flex-col gap-1">
             {NAV_SECTIONS.map(section => {
               const items = visibleNav.filter(i => i.section === section);
@@ -176,18 +179,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </nav>
 
-        <main className="flex-1 p-4 sm:p-6 min-w-0 pb-24 md:pb-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 min-w-0 pb-24 md:pb-6 print:p-0 print:m-0 print:w-full">{children}</main>
       </div>
 
       {/* Navegación inferior — solo móvil */}
-      <AdminMobileNav
-        role={role}
-        roleLabel={roleLabel}
-        roleColor={roleColor}
-        displayName={displayName}
-        allowedPaths={allowedPaths}
-      />
-      <GlobalLoadingOverlay />
+      <div className="print:hidden">
+        <AdminMobileNav
+          role={role}
+          roleLabel={roleLabel}
+          roleColor={roleColor}
+          displayName={displayName}
+          allowedPaths={allowedPaths}
+        />
+        <GlobalLoadingOverlay />
+      </div>
     </div>
   );
 }

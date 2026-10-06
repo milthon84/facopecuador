@@ -44,7 +44,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
       .maybeSingle(),
     supabase
       .from("appointments")
-      .select("id, starts_at, ends_at, status, reason")
+      .select("id, starts_at, ends_at, status, reason, doctor:profesores(id, full_name, specialty)")
       .eq("patient_id", id)
       .order("starts_at", { ascending: false }),
     supabase
@@ -381,6 +381,16 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
                               <span className="font-semibold">Motivo:</span> {a.reason}
                             </div>
                           )}
+                          {(() => {
+                            const doc = Array.isArray(a.doctor) ? a.doctor[0] : a.doctor;
+                            if (!doc) return null;
+                            return (
+                              <div className="text-[11px] text-lilac-800 font-semibold mt-1 flex items-center gap-1">
+                                <span>👨‍⚕️ Atendido por: {doc.full_name}</span>
+                                {doc.specialty && <span className="text-ink-500 font-normal">({doc.specialty})</span>}
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <StatusBadge status={a.status} />

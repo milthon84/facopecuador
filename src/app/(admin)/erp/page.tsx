@@ -38,6 +38,9 @@ import {
   ChevronRight,
   Plus,
   ShieldAlert,
+  Stethoscope,
+  Filter,
+  TrendingUp,
 } from "lucide-react";
 import SendReminderButton from "@/components/SendReminderButton";
 import QuickAppointmentActions from "@/components/QuickAppointmentActions";
@@ -49,7 +52,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminDashboard({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ date?: string; denied?: string }>;
+  searchParams: Promise<{ date?: string; denied?: string; doctor?: string }>;
 }) {
   const searchParams = await searchParamsPromise;
 
@@ -106,11 +109,11 @@ export default async function AdminDashboard({
         weekday: "long",
       });
 
-  // Ejecutar consulta de citas de hoy
+  // Ejecutar consulta de citas del día
   const todayRes = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, reason, reminder_sent_at, patient:patients(id, full_name, phone, document_number, email), dental_consultation:dental_consultations(id)"
+      "id, starts_at, ends_at, status, reason, reminder_sent_at, patient:patients(id, full_name, phone, document_number, email), dental_consultation:dental_consultations(id), doctor:profesores(id, full_name, specialty, photo_url)"
     )
     .gte("starts_at", startOfDay)
     .lte("starts_at", endOfDay)
@@ -119,10 +122,8 @@ export default async function AdminDashboard({
   const canModify = hasPermission(role, "/erp/modificar", allowedPaths);
   const canModifyBilling = hasPermission(role, "/erp/facturacion/modificar", allowedPaths);
 
-  const todayAppts = todayRes.data;
+  const appts = todayRes.data || [];
   const targetDateStr = targetEcDate;
-
-  const appts = todayAppts || [];
   const apptIds = appts.map((a) => a.id);
 
   // Consultar facturas enlazadas a las citas de este día (usando la columna xml_url que guarda el appointment_id)
@@ -230,20 +231,16 @@ export default async function AdminDashboard({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 shrink-0">
-          {total > 0 && (
-            <div className="shrink-0 text-right hidden sm:block">
-              <div className="w-36 bg-lilac-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-lilac-500 h-2 rounded-full"
-                  style={{ width: `${processPct}%` }}
-                />
-              </div>
-              <div className="text-xs font-medium text-lilac-700 mt-1">
-                {processPct}% del día completado
-              </div>
-            </div>
-          )}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Link
+            href="/erp/dashboard"
+            className="flex items-center gap-1.5 bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 text-xs sm:text-sm px-3 py-2 rounded-xl transition font-semibold shadow-sm"
+            title="Ver resumen y estadísticas de citas y atenciones"
+          >
+            <TrendingUp size={15} className="text-lilac-600" />
+            <span className="hidden sm:inline">Métricas y</span> Resumen
+          </Link>
+
           {canModify && (
             <Link
               href={`/erp/citas/nueva?date=${targetDateStr}`}
@@ -275,13 +272,19 @@ export default async function AdminDashboard({
 
       {/* Lista de citas */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-lilac-100 flex items-center justify-between">
-          <h2 className="font-semibold">
-            {isTargetToday ? "Citas de hoy" : `Citas del ${new Date(targetEcDate + "T12:00:00-05:00").toLocaleDateString("es-EC", { day: "numeric", month: "long" })}`}
-          </h2>
+        <div className="px-5 py-4 border-b border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-base text-ink-900">
+              {isTargetToday ? "Citas de hoy" : `Citas del ${new Date(targetEcDate + "T12:00:00-05:00").toLocaleDateString("es-EC", { day: "numeric", month: "long" })}`}
+            </h2>
+            <p className="text-xs text-ink-500">
+              {appts.length} {appts.length === 1 ? "cita en total" : "citas en total"}
+            </p>
+          </div>
+
           <Link
             href="/erp/calendario"
-            className="text-sm text-lilac-700 hover:underline"
+            className="text-sm text-lilac-700 hover:underline shrink-0"
           >
             Ver calendario →
           </Link>
@@ -297,6 +300,9 @@ export default async function AdminDashboard({
               const p = Array.isArray(appt.patient)
                 ? appt.patient[0]
                 : appt.patient;
+              const doc = Array.isArray(appt.doctor)
+                ? appt.doctor[0]
+                : appt.doctor;
               const dt = new Date(appt.starts_at);
               const hasFicha = Array.isArray(appt.dental_consultation)
                 ? appt.dental_consultation.length > 0
@@ -319,7 +325,7 @@ export default async function AdminDashboard({
                       </div>
                     </div>
 
-                    {/* Info paciente */}
+                    {/* Info paciente y Doctor */}
                     <div className="flex-1 min-w-[200px]">
                       <div className="font-medium text-sm text-ink-900 truncate">
                         {p?.full_name}
@@ -336,6 +342,24 @@ export default async function AdminDashboard({
                           </span>
                         )}
                       </div>
+
+                      {/* Doctor asignado */}
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {doc ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-lilac-50 text-lilac-800 border border-lilac-200">
+                            <Stethoscope size={11} className="text-lilac-600 shrink-0" />
+                            <span>{doc.full_name}</span>
+                            {doc.specialty && (
+                              <span className="text-[10px] text-lilac-500 font-normal">· {doc.specialty}</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                            <span>⚠️ Sin doctor asignado</span>
+                          </span>
+                        )}
+                      </div>
+
                       {appt.reason && (
                         <div className="text-xs text-ink-600 mt-0.5 line-clamp-1 italic">
                           {appt.reason}
@@ -364,6 +388,7 @@ export default async function AdminDashboard({
                           patientPhone={p?.phone}
                           startsAt={appt.starts_at}
                           reason={appt.reason}
+                          doctorName={doc?.full_name}
                         />
                       )}
                       {(appt.status === "scheduled" || appt.status === "attended") && (

@@ -3,14 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Calendar, Clock, Loader2, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, Clock, Loader2, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Stethoscope, UserCheck } from "lucide-react";
 import { validateDocumento, validateEmail, validateTelefono, isPassportDocument } from "@/lib/validators";
 import type { TimeSlot } from "@/lib/types";
 import { formatDateLocal, formatTimeLocal } from "@/lib/availability";
 
 type Step = "date" | "slot" | "data" | "submitting";
 
-export default function NewAppointmentForm({ initialDate }: { initialDate: string }) {
+interface DoctorOption {
+  id: string;
+  full_name: string;
+  specialty?: string | null;
+  photo_url?: string | null;
+}
+
+interface NewAppointmentFormProps {
+  initialDate: string;
+  doctors?: DoctorOption[];
+}
+
+export default function NewAppointmentForm({ initialDate, doctors = [] }: NewAppointmentFormProps) {
   const router = useRouter();
 
   // Parsing initialDate if present to preset selectedDate
@@ -51,7 +63,8 @@ export default function NewAppointmentForm({ initialDate }: { initialDate: strin
     setCustomEnd(endStr);
   };
 
-  // Paciente
+  // Paciente y Doctor
+  const [selectedDoctorId, setSelectedDoctorId] = useState("");
   const [documentNumber, setDocumentNumber] = useState("");
   const [isPassport, setIsPassport] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -161,6 +174,7 @@ export default function NewAppointmentForm({ initialDate }: { initialDate: strin
           starts_at,
           ends_at,
           reason: reason.trim() || null,
+          doctor_id: selectedDoctorId ? selectedDoctorId : null,
         }),
       });
 
@@ -457,6 +471,32 @@ export default function NewAppointmentForm({ initialDate }: { initialDate: strin
                 />
                 {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
               </div>
+            </div>
+
+            {/* Asignación de Doctor / Especialista */}
+            <div className="space-y-1.5 p-3.5 rounded-xl bg-lilac-50/40 border border-lilac-100">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-ink-800 flex items-center gap-1.5">
+                  <Stethoscope size={14} className="text-lilac-600" />
+                  Doctor / Odontólogo asignado (Opcional)
+                </label>
+                <span className="text-[11px] text-ink-400">Asistente</span>
+              </div>
+              <select
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(e.target.value)}
+                className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-medium text-ink-800"
+              >
+                <option value="">— Sin asignar (Asignar más tarde) —</option>
+                {doctors.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
+                    {doc.full_name} {doc.specialty ? `(${doc.specialty})` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-ink-500">
+                Puedes seleccionar el especialista ahora o dejarlo para asignarlo más tarde desde la agenda.
+              </p>
             </div>
 
             {/* Motivo */}

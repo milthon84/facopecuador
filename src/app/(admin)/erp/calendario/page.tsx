@@ -2,13 +2,13 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatTimeLocal } from "@/lib/availability";
-import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, Plus, Stethoscope } from "lucide-react";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 
 export const dynamic = "force-dynamic";
 
-interface SearchParams { view?: string; date?: string }
+interface SearchParams { view?: string; date?: string; doctor?: string }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -73,24 +73,24 @@ export default async function CalendarioPage({
       .replace(/^./, s => s.toUpperCase());
   }
 
-  // ── Cargar citas y permisos en paralelo ──────────────────────────────────
+  // ── Cargar citas y permisos en paralelo ─────────────────────────
   const [authData, apptsRes] = await Promise.all([
     getCachedUserAndPermissions(),
     supabase
       .from("appointments")
-      .select("id, starts_at, status, patient:patients(full_name), dental_consultation:dental_consultations(id)")
+      .select("id, starts_at, status, patient:patients(full_name), dental_consultation:dental_consultations(id), doctor:profesores(id, full_name, specialty)")
       .gte("starts_at", rangeStart.toISOString())
       .lte("starts_at", rangeEnd.toISOString())
-      .order("starts_at")
+      .order("starts_at"),
   ]);
 
   const { role, allowedPaths } = authData;
   const canModify = hasPermission(role, "/erp/calendario/modificar", allowedPaths);
-  const appts = apptsRes.data;
+  const appts = apptsRes.data || [];
 
   // Agrupar por YYYY-MM-DD local
   const byDay = new Map<string, typeof appts>();
-  for (const a of appts || []) {
+  for (const a of appts) {
     const d = new Date(a.starts_at);
     const key = fmtDate(d);
     if (!byDay.has(key)) byDay.set(key, [] as any);
@@ -110,12 +110,15 @@ export default async function CalendarioPage({
       <ul className="space-y-0.5 mt-1">
         {(shown as any[]).map((a) => {
           const p = Array.isArray(a.patient) ? a.patient[0] : a.patient;
+          const doc = Array.isArray(a.doctor) ? a.doctor[0] : a.doctor;
           const color = STATUS_COLOR[a.status] ?? STATUS_COLOR.scheduled;
+          const docLabel = doc ? ` · ${doc.full_name.split(" ")[0]}` : "";
           return (
             <li key={a.id}>
               <Link href={`/erp/citas/${a.id}`}
-                className={`block rounded px-1.5 py-0.5 text-[11px] leading-tight truncate ${color} hover:opacity-80`}>
-                {formatTimeLocal(new Date(a.starts_at))} {p?.full_name}
+                className={`block rounded px-1.5 py-0.5 text-[11px] leading-tight truncate ${color} hover:opacity-80`}
+                title={`${formatTimeLocal(new Date(a.starts_at))} ${p?.full_name}${doc ? ` (Dr. ${doc.full_name})` : " (Sin doctor)"}`}>
+                {formatTimeLocal(new Date(a.starts_at))} {p?.full_name}{docLabel}
               </Link>
             </li>
           );
@@ -226,7 +229,9 @@ export default async function CalendarioPage({
     <div className="max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-ink-900 capitalize">{title}</h1>
+        <div>
+          <h1 className="text-xl font-bold text-ink-900 capitalize">{title}</h1>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Toggle vista */}

@@ -35,6 +35,12 @@ interface Appointment {
   ends_at: string;
   status: string;
   reason?: string | null;
+  doctor?: {
+    id: string;
+    full_name: string;
+    specialty?: string | null;
+    photo_url?: string | null;
+  } | null;
 }
 
 interface AtencionClientPageProps {
@@ -418,6 +424,14 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
             <p className="text-xs text-lilac-200 mt-0.5">
               Cédula: {patient.document_number || "No registrada"} · Tel: {patient.phone || "No registrado"}
             </p>
+            {appointment.doctor && (
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-ink-800 border border-gold-900/50 text-gold-400">
+                <span>👨‍⚕️ Atendido por: {appointment.doctor.full_name}</span>
+                {appointment.doctor.specialty && (
+                  <span className="text-[10px] text-lilac-300 font-normal">({appointment.doctor.specialty})</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="bg-ink-800/80 border border-gold-900/50 rounded-xl px-4 py-2 text-right">
             <div className="text-[10px] text-gold-400 uppercase font-semibold">Cita Actual</div>

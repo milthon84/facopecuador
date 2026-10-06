@@ -2,10 +2,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatTimeLocal } from "@/lib/availability";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Mail, Phone, IdCard, Calendar, CheckCircle2, Receipt } from "lucide-react";
+import { ArrowLeft, Mail, Phone, IdCard, Calendar, CheckCircle2, Receipt, Stethoscope, UserCheck } from "lucide-react";
 import AppointmentActions from "@/components/AppointmentActions";
 import SendReminderButton from "@/components/SendReminderButton";
 import EditPatientModal from "@/components/EditPatientModal";
+import AssignDoctorModal from "@/components/AssignDoctorModal";
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
@@ -17,11 +18,11 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const supabase = createAdminClient();
 
-  // Ejecutar consultas de cita, permisos, consulta y factura en paralelo
-  const [apptRes, authData, consultationRes, invoiceRes] = await Promise.all([
+  // Ejecutar consultas de cita, permisos, consulta, factura y doctores en paralelo
+  const [apptRes, authData, consultationRes, invoiceRes, doctorsRes] = await Promise.all([
     supabase
       .from("appointments")
-      .select("*, patient:patients(*)")
+      .select("*, patient:patients(*), doctor:profesores(*)")
       .eq("id", id)
       .single(),
     getCachedUserAndPermissions(),
@@ -34,12 +35,19 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
       .from("invoices")
       .select("id, invoice_number, sri_status, created_at")
       .eq("xml_url", id)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profesores")
+      .select("id, full_name, specialty, photo_url")
+      .eq("is_doctor", true)
+      .order("full_name")
   ]);
 
   const appt = apptRes.data;
   if (!appt) return notFound();
   const patient = Array.isArray(appt.patient) ? appt.patient[0] : appt.patient;
+  const doctor = Array.isArray(appt.doctor) ? appt.doctor[0] : appt.doctor;
+  const allDoctors = doctorsRes.data || [];
 
   const { role, allowedPaths } = authData;
   const canModifyPatient = hasPermission(role, "/erp/pacientes/modificar", allowedPaths);
@@ -109,9 +117,58 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
                 patientPhone={patient.phone}
                 startsAt={appt.starts_at}
                 reason={appt.reason}
+                doctorName={doctor?.full_name}
               />
             )}
           </div>
+        </div>
+
+        {/* Sección: Doctor / Odontólogo Asignado */}
+        <div className="mb-5 p-4 rounded-2xl bg-gradient-to-r from-lilac-50/70 to-indigo-50/40 border border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            {doctor?.photo_url ? (
+              <img
+                src={doctor.photo_url}
+                alt={doctor.full_name}
+                className="w-11 h-11 rounded-full object-cover border-2 border-lilac-200 shadow-sm"
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-lilac-100 text-lilac-700 flex items-center justify-center font-bold text-sm shadow-sm">
+                <Stethoscope size={20} className="text-lilac-600" />
+              </div>
+            )}
+            <div>
+              <div className="text-[11px] font-bold text-lilac-700 uppercase tracking-wider">
+                Doctor / Odontólogo a cargo
+              </div>
+              {doctor ? (
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-ink-950 text-sm sm:text-base">{doctor.full_name}</span>
+                  {doctor.specialty && (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-lilac-100/80 text-lilac-800 border border-lilac-200">
+                      {doctor.specialty}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mt-0.5">
+                  <span>Pendiente de asignación</span>
+                  <span className="text-[10px] text-ink-400 font-normal">(Asignado por asistente)</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {canModifyCalendar && (
+            <div className="shrink-0 self-end sm:self-center">
+              <AssignDoctorModal
+                appointmentId={appt.id}
+                currentDoctor={doctor}
+                doctors={allDoctors}
+                canModify={canModifyCalendar}
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3 mb-4">

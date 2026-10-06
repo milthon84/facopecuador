@@ -12,7 +12,7 @@ export default async function AtencionPage({ params }: { params: Promise<{ id: s
 
   const { data: appt } = await supabase
     .from("appointments")
-    .select("*, patient:patients(*)")
+    .select("*, patient:patients(*), doctor:profesores(*)")
     .eq("id", id)
     .single();
 
