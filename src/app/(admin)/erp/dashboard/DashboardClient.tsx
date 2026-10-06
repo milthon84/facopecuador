@@ -93,10 +93,6 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
   const [customStart, setCustomStart] = useState<string>(todayStr);
   const [customEnd, setCustomEnd] = useState<string>(todayStr);
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-
   // Helper date calculations
   const { dateRange, periodLabel } = useMemo(() => {
     if (period === "day") {
@@ -342,29 +338,6 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
     return days;
   }, [periodAppointments]);
 
-  // Final table list with search and status filter
-  const displayTableList = useMemo(() => {
-    return periodAppointments.filter((a) => {
-      if (statusFilter !== "all" && a.status !== statusFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const pName = a.patient?.full_name?.toLowerCase() || "";
-        const pDoc = a.patient?.document_number?.toLowerCase() || "";
-        const pPhone = a.patient?.phone?.toLowerCase() || "";
-        const dName = a.doctor?.full_name?.toLowerCase() || "";
-        const reason = a.reason?.toLowerCase() || "";
-        return (
-          pName.includes(q) ||
-          pDoc.includes(q) ||
-          pPhone.includes(q) ||
-          dName.includes(q) ||
-          reason.includes(q)
-        );
-      }
-      return true;
-    });
-  }, [periodAppointments, statusFilter, searchQuery]);
-
   // Navigation handlers
   const handlePrevPeriod = () => {
     if (period === "day") {
@@ -406,7 +379,7 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
 
   // Export to CSV
   const handleExportCSV = () => {
-    if (displayTableList.length === 0) return;
+    if (periodAppointments.length === 0) return;
 
     const headers = [
       "Fecha",
@@ -422,7 +395,7 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
       "Facturado"
     ];
 
-    const rows = displayTableList.map((a) => {
+    const rows = periodAppointments.map((a) => {
       const dt = new Date(a.starts_at);
       const dateStr = dt.toLocaleDateString("es-EC");
       const timeStr = formatTimeLocal(dt);
@@ -872,177 +845,6 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
           </div>
         </div>
       </div>
-
-      {/* Tabla Detallada de Citas y Atenciones */}
-      <div className="bg-white rounded-3xl border border-lilac-100 shadow-sm overflow-hidden">
-        <div className="p-5 sm:p-6 border-b border-lilac-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-ink-950">Registro Detallado del Periodo</h2>
-            <p className="text-xs text-ink-500">
-              Mostrando {displayTableList.length} de {periodAppointments.length} citas registradas
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap print:hidden">
-            {/* Buscador */}
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input
-                type="text"
-                placeholder="Buscar paciente, cédula o doctor..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="text-xs pl-8 pr-3 py-2 border border-lilac-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-lilac-400 w-56 sm:w-64"
-              />
-            </div>
-
-            {/* Filtro por estado */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs px-3 py-2 border border-lilac-200 rounded-xl bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-lilac-400"
-            >
-              <option value="all">Todos los estados</option>
-              <option value="attended">Solo Atendidas</option>
-              <option value="scheduled">Solo Agendadas</option>
-              <option value="no_show">No asistieron</option>
-              <option value="cancelled">Canceladas</option>
-            </select>
-          </div>
-        </div>
-
-        {displayTableList.length === 0 ? (
-          <div className="p-12 text-center text-sm text-ink-500 bg-lilac-50/20">
-            No se encontraron citas ni atenciones para el período o filtros seleccionados.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-lilac-50/60 text-ink-600 font-bold uppercase text-[10px]">
-                <tr>
-                  <th className="px-5 py-3">Fecha y Hora</th>
-                  <th className="px-5 py-3">Paciente</th>
-                  <th className="px-5 py-3">Doctor Asignado</th>
-                  <th className="px-5 py-3">Motivo</th>
-                  <th className="px-5 py-3">Facturación</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right print:hidden">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-lilac-50">
-                {displayTableList.map((a) => {
-                  const dt = new Date(a.starts_at);
-                  const p = a.patient;
-                  const doc = a.doctor;
-                  const hasConsultation = !!a.dental_consultation;
-
-                  return (
-                    <tr key={a.id} className="hover:bg-lilac-50/30 transition">
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <div className="font-bold text-ink-900">
-                          {dt.toLocaleDateString("es-EC", { day: "2-digit", month: "short" })}
-                        </div>
-                        <div className="text-[11px] text-ink-500 font-medium">
-                          {formatTimeLocal(dt)}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        <Link href={`/erp/pacientes/${p?.id || ""}`} className="font-bold text-ink-900 hover:text-lilac-700 transition">
-                          {p?.full_name || "Paciente no registrado"}
-                        </Link>
-                        <div className="text-[11px] text-ink-500 flex items-center gap-2 mt-0.5">
-                          {p?.document_number && <span>CC {p.document_number}</span>}
-                          {p?.phone && <span>Tel: {p.phone}</span>}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        {doc ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-lilac-50 text-lilac-800 border border-lilac-200">
-                              <Stethoscope size={11} className="text-lilac-600" />
-                              {doc.full_name}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                            ⚠️ Sin doctor
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-3.5 max-w-xs truncate text-ink-600 italic">
-                        {a.reason || "Consulta odontológica general"}
-                      </td>
-
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        {a.invoice ? (
-                          <div className="flex flex-col">
-                            <span className="inline-flex items-center gap-1 font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-lg border border-green-200 text-xs w-fit">
-                              ${Number(a.invoice.total).toFixed(2)}
-                            </span>
-                            <span className="text-[10px] text-ink-400 mt-0.5">
-                              {a.invoice.invoice_number}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-ink-400 italic">
-                            No facturada
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <StatusBadge status={a.status} hasConsultation={hasConsultation} />
-                      </td>
-
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap print:hidden">
-                        <div className="flex items-center justify-end gap-2">
-                          {a.status === "attended" && (
-                            <Link
-                              href={`/erp/citas/${a.id}/atencion`}
-                              className="text-[11px] font-bold text-gold-700 hover:text-gold-900 bg-gold-50 hover:bg-gold-100 border border-gold-200 px-2.5 py-1 rounded-xl transition shadow-sm"
-                            >
-                              Ver Ficha
-                            </Link>
-                          )}
-                          <Link
-                            href={`/erp/citas/${a.id}`}
-                            className="text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2.5 py-1 rounded-xl transition"
-                          >
-                            Detalles →
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
-  );
-}
-
-function StatusBadge({ status, hasConsultation }: { status: string; hasConsultation?: boolean }) {
-  const map: Record<string, string> = {
-    scheduled: "bg-lilac-100 text-lilac-700 border-lilac-200",
-    attended: "bg-green-100 text-green-700 border-green-200",
-    no_show: "bg-amber-100 text-amber-700 border-amber-200",
-    cancelled: "bg-red-100 text-red-700 border-red-200",
-  };
-  const labels: Record<string, string> = {
-    scheduled: "Agendada",
-    attended: hasConsultation ? "Atendida (Ficha OK)" : "Atendida",
-    no_show: "No asistió",
-    cancelled: "Cancelada",
-  };
-  return (
-    <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${map[status] || map.scheduled}`}>
-      {labels[status] || status}
-    </span>
   );
 }
