@@ -42,6 +42,7 @@ async function updateExpense(formData: FormData) {
   const total = Math.round((rawSubtotal + ivaAmount) * 100) / 100;
 
   const category          = formData.get("category") as string;
+  const area              = ((formData.get("area") as string) || "clinica").toLowerCase();
   const payment_method    = formData.get("payment_method") as string;
   const supplier_name     = (formData.get("supplier_name") as string).trim();
   const bank_account_id   = (formData.get("bank_account_id") as string) || null;
@@ -56,6 +57,10 @@ async function updateExpense(formData: FormData) {
     payment_reference = `Tarj: ${card_type} | Lote: ${card_lote} | Baucher: ${card_voucher}`;
   }
 
+  const { data: currentExp } = await supabase.from("expenses").select("notes").eq("id", id).maybeSingle();
+  const cleanNotes = (currentExp?.notes || "").replace(/\[AREA:[a-z]+\]/gi, "").trim();
+  const updatedNotes = cleanNotes ? `[AREA:${area}] ${cleanNotes}` : `[AREA:${area}]`;
+
   const updatePayload: Record<string, any> = {
     supplier_name,
     supplier_ruc:      (formData.get("supplier_ruc") as string)?.trim() || null,
@@ -63,7 +68,9 @@ async function updateExpense(formData: FormData) {
     authorization_number,
     expense_date:      new_expense_date,
     category,
+    area,
     description,
+    notes:             updatedNotes,
     subtotal_0:        subtotal0,
     subtotal_15:       subtotal15,
     iva_amount:        ivaAmount,
@@ -74,6 +81,12 @@ async function updateExpense(formData: FormData) {
   };
 
   let { error } = await supabase.from("expenses").update(updatePayload).eq("id", id);
+
+  if (error && (error.message.includes("area") || error.code === "PGRST204" || error.code === "42703")) {
+    delete updatePayload.area;
+    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
+    error = retry.error;
+  }
 
   if (error && (error.message.includes("authorization_number") || error.code === "PGRST204")) {
     delete updatePayload.authorization_number;

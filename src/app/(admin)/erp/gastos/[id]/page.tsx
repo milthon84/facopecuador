@@ -1,9 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2, Key, Edit, Lock } from "lucide-react";
+import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2, Key, Edit, Lock, Stethoscope, GraduationCap, Building2 } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
+import { resolveExpenseArea, EXPENSE_AREA_CONFIG } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,9 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
   if (!rawExpense) notFound();
   const expense = rawExpense as any;
 
+  const area = resolveExpenseArea(expense);
+  const areaConfig = EXPENSE_AREA_CONFIG[area];
+
   const isClosed = await isMonthClosed(expense.expense_date);
 
   const dateStr = new Date(expense.expense_date + "T12:00:00").toLocaleDateString("es-EC", {
@@ -59,7 +63,15 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${areaConfig.badgeCls}`}>
+              {area === "clinica" && <Stethoscope size={12} />}
+              {area === "cursos" && <GraduationCap size={12} />}
+              {area === "general" && <Building2 size={12} />}
+              {areaConfig.label}
+            </span>
+          </div>
           <p className="text-xs text-ink-500 capitalize mt-0.5">{dateStr}</p>
         </div>
         {expense.status === "void" && (

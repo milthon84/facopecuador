@@ -45,7 +45,8 @@ export interface ExecutiveSummaryPdfData {
 }
 
 /**
- * Genera el documento PDF de Resumen Ejecutivo (Clínica + Cursos) en 1 sola página.
+ * Genera el documento PDF de Resumen Ejecutivo (Clínica + Cursos) en 1 sola página
+ * con diseño ejecutivo de alto impacto para FACOP ECUADOR QUITO.
  */
 export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData): Promise<Buffer> {
   const pdfMake = require("pdfmake");
@@ -74,7 +75,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
   pdfMake.fonts = fontsConfig;
   pdfMakeBuild.fonts = fontsConfig;
 
-  // 1. Tabla de Doctores
+  // 1. Tabla de Doctores (CLÍNICA)
   const doctorTableBody: TableCell[][] = [
     [
       { text: "DOCTOR / ODONTÓLOGO", style: "tableHeader", alignment: "left" },
@@ -94,49 +95,53 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
   } else {
     data.doctorRows.forEach((doc, idx) => {
       const isEven = idx % 2 === 0;
+      const isUnassigned = doc.name.toLowerCase().includes("sin doctor");
+      const rowBg = isUnassigned ? "#fffbeb" : isEven ? "#faf5ff" : "#ffffff";
+
       doctorTableBody.push([
         {
           stack: [
-            { text: doc.name, bold: true, fontSize: 8.5, color: "#1e1b4b" },
-            { text: doc.specialty || "Odontología", fontSize: 7, color: "#64748b" },
+            { text: doc.name, bold: true, fontSize: 8.5, color: isUnassigned ? "#92400e" : "#0f172a" },
+            { text: doc.specialty || "Odontología", fontSize: 7, color: isUnassigned ? "#b45309" : "#64748b" },
           ],
-          fillColor: isEven ? "#faf5ff" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
         {
           text: doc.total.toString(),
           alignment: "center",
           bold: true,
           fontSize: 8.5,
-          fillColor: isEven ? "#faf5ff" : "#ffffff",
-          margin: [0, 2, 0, 0],
+          color: isUnassigned ? "#92400e" : "#1e293b",
+          fillColor: rowBg,
+          margin: [0, 2.5, 0, 0],
         },
         {
           text: doc.attended.toString(),
           alignment: "center",
           bold: true,
           fontSize: 8.5,
-          color: "#059669",
-          fillColor: isEven ? "#faf5ff" : "#ffffff",
-          margin: [0, 2, 0, 0],
+          color: isUnassigned ? "#b45309" : "#059669",
+          fillColor: rowBg,
+          margin: [0, 2.5, 0, 0],
         },
         {
           text: doc.formattedBilled,
           alignment: "right",
           bold: true,
           fontSize: 8.5,
-          color: "#0f172a",
-          fillColor: isEven ? "#faf5ff" : "#ffffff",
-          margin: [0, 2, 0, 0],
+          color: isUnassigned ? "#92400e" : "#0f172a",
+          fillColor: rowBg,
+          margin: [0, 2.5, 0, 0],
         },
       ]);
     });
   }
 
-  // 2. Tabla de Cursos
+  // 2. Tabla de Cursos (CURSOS Y DIPLOMADOS)
   const courseTableBody: TableCell[][] = [
     [
-      { text: "CURSO", style: "tableHeader", alignment: "left" },
+      { text: "CURSO / ESPECIALIDAD", style: "tableHeader", alignment: "left" },
       { text: "ESTADO", style: "tableHeader", alignment: "center" },
       { text: "FECHAS", style: "tableHeader", alignment: "center" },
       { text: "ALUMNOS", style: "tableHeader", alignment: "center" },
@@ -146,7 +151,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
 
   if (data.courseRows.length === 0) {
     courseTableBody.push([
-      { text: "No se registran cursos activos en este período.", colSpan: 5, style: "tableEmpty", alignment: "center" },
+      { text: "No se registran cursos activos ni facturación en este período.", colSpan: 5, style: "tableEmpty", alignment: "center" },
       {},
       {},
       {},
@@ -155,39 +160,43 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
   } else {
     data.courseRows.forEach((c, idx) => {
       const isEven = idx % 2 === 0;
+      const rowBg = isEven ? "#f8fafc" : "#ffffff";
+      const isActive = c.statusLabel.toLowerCase().includes("activo") || c.statusLabel.toLowerCase().includes("progreso");
+
       courseTableBody.push([
         {
           text: c.name,
           bold: true,
           fontSize: 8,
-          color: "#1e1b4b",
-          fillColor: isEven ? "#f8fafc" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          color: "#0f172a",
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
         {
           text: c.statusLabel,
           alignment: "center",
+          bold: true,
           fontSize: 7.5,
-          color: "#475569",
-          fillColor: isEven ? "#f8fafc" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          color: isActive ? "#4338ca" : "#64748b",
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
         {
           text: c.dates,
           alignment: "center",
           fontSize: 7.5,
           color: "#475569",
-          fillColor: isEven ? "#f8fafc" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
         {
           text: c.students.toString(),
           alignment: "center",
           bold: true,
           fontSize: 8,
-          color: "#1e1b4b",
-          fillColor: isEven ? "#f8fafc" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          color: c.students > 0 ? "#1e1b4b" : "#94a3b8",
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
         {
           text: c.formattedBilled,
@@ -195,8 +204,8 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
           bold: true,
           fontSize: 8,
           color: "#0f172a",
-          fillColor: isEven ? "#f8fafc" : "#ffffff",
-          margin: [0, 1, 0, 1],
+          fillColor: rowBg,
+          margin: [0, 1.5, 0, 1.5],
         },
       ]);
     });
@@ -205,22 +214,22 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
   const docDefinition: TDocumentDefinitions = {
     pageSize: "A4",
     pageOrientation: "portrait",
-    pageMargins: [24, 20, 24, 20],
+    pageMargins: [26, 20, 26, 20],
     content: [
       // Encabezado Principal
       {
         columns: [
           {
             stack: [
-              { text: "FACOP ECUADOR", fontSize: 15, bold: true, color: "#6b21a8" },
-              { text: "Reporte Ejecutivo", fontSize: 10, bold: true, color: "#334155" },
+              { text: "FACOP ECUADOR QUITO", fontSize: 16, bold: true, color: "#4c1d95" },
+              { text: "Resumen Ejecutivo de Gestión", fontSize: 9.5, bold: true, color: "#475569", margin: [0, 1, 0, 0] },
             ],
             width: "*",
           },
           {
             stack: [
-              { text: "PERÍODO", fontSize: 7.5, bold: true, color: "#94a3b8", alignment: "right" },
-              { text: data.periodLabel, fontSize: 10, bold: true, color: "#1e293b", alignment: "right" },
+              { text: "PERÍODO", fontSize: 7, bold: true, color: "#94a3b8", alignment: "right" },
+              { text: data.periodLabel, fontSize: 9.5, bold: true, color: "#1e1b4b", alignment: "right" },
             ],
             width: "auto",
           },
@@ -240,7 +249,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
                 bold: true,
                 color: "#581c87",
                 fillColor: "#f3e8ff",
-                margin: [4, 2, 4, 2],
+                margin: [4, 2.5, 4, 2.5],
               },
             ],
           ],
@@ -249,7 +258,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
         margin: [0, 0, 0, 4],
       },
 
-      // 4 KPIs Clínica (Tabla de 4 columnas)
+      // 4 KPIs Clínica (Diseño tarjeta ejecutiva)
       {
         table: {
           widths: ["*", "*", "*", "*"],
@@ -258,38 +267,38 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
               {
                 stack: [
                   { text: "CITAS TOTALES", fontSize: 7, bold: true, color: "#64748b" },
-                  { text: data.clinicMetrics.totalAppointments.toString(), fontSize: 13, bold: true, color: "#0f172a" },
+                  { text: data.clinicMetrics.totalAppointments.toString(), fontSize: 13, bold: true, color: "#0f172a", margin: [0, 1, 0, 0] },
                   { text: `${data.clinicMetrics.scheduledAppointments} agendadas`, fontSize: 6.5, color: "#7c3aed" },
                 ],
                 fillColor: "#f8fafc",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "ATENCIONES", fontSize: 7, bold: true, color: "#065f46" },
-                  { text: data.clinicMetrics.attendedAppointments.toString(), fontSize: 13, bold: true, color: "#059669" },
+                  { text: data.clinicMetrics.attendedAppointments.toString(), fontSize: 13, bold: true, color: "#059669", margin: [0, 1, 0, 0] },
                   { text: "Evoluciones clínicas", fontSize: 6.5, color: "#047857" },
                 ],
                 fillColor: "#ecfdf5",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "FACTURACIÓN", fontSize: 7, bold: true, color: "#581c87" },
-                  { text: data.clinicMetrics.formattedTotalBilled, fontSize: 13, bold: true, color: "#0f172a" },
+                  { text: data.clinicMetrics.formattedTotalBilled, fontSize: 13, bold: true, color: "#0f172a", margin: [0, 1, 0, 0] },
                   { text: "Ingresos clínica", fontSize: 6.5, color: "#6b21a8" },
                 ],
                 fillColor: "#faf5ff",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "GASTOS", fontSize: 7, bold: true, color: "#92400e" },
-                  { text: data.clinicMetrics.formattedTotalExpenses, fontSize: 13, bold: true, color: "#b45309" },
+                  { text: data.clinicMetrics.formattedTotalExpenses, fontSize: 13, bold: true, color: "#b45309", margin: [0, 1, 0, 0] },
                   { text: "Pagos a doctores", fontSize: 6.5, color: "#b45309" },
                 ],
                 fillColor: "#fffbeb",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
             ],
           ],
@@ -334,7 +343,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
                 bold: true,
                 color: "#1e1b4b",
                 fillColor: "#e0e7ff",
-                margin: [4, 2, 4, 2],
+                margin: [4, 2.5, 4, 2.5],
               },
             ],
           ],
@@ -343,7 +352,7 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
         margin: [0, 0, 0, 4],
       },
 
-      // 4 KPIs Cursos (Tabla de 4 columnas)
+      // 4 KPIs Cursos (Diseño tarjeta ejecutiva)
       {
         table: {
           widths: ["*", "*", "*", "*"],
@@ -352,38 +361,38 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
               {
                 stack: [
                   { text: "CURSOS ACTIVOS", fontSize: 7, bold: true, color: "#3730a3" },
-                  { text: data.courseMetrics.activeCoursesCount.toString(), fontSize: 13, bold: true, color: "#1e1b4b" },
+                  { text: data.courseMetrics.activeCoursesCount.toString(), fontSize: 13, bold: true, color: "#1e1b4b", margin: [0, 1, 0, 0] },
                   { text: "En ejecución / abiertos", fontSize: 6.5, color: "#4338ca" },
                 ],
                 fillColor: "#eef2ff",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "ALUMNOS", fontSize: 7, bold: true, color: "#1e40af" },
-                  { text: data.courseMetrics.totalStudents.toString(), fontSize: 13, bold: true, color: "#1d4ed8" },
+                  { text: data.courseMetrics.totalStudents.toString(), fontSize: 13, bold: true, color: "#1d4ed8", margin: [0, 1, 0, 0] },
                   { text: "Matriculados", fontSize: 6.5, color: "#2563eb" },
                 ],
                 fillColor: "#eff6ff",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "FACTURACIÓN", fontSize: 7, bold: true, color: "#065f46" },
-                  { text: data.courseMetrics.formattedTotalBilled, fontSize: 13, bold: true, color: "#059669" },
+                  { text: data.courseMetrics.formattedTotalBilled, fontSize: 13, bold: true, color: "#059669", margin: [0, 1, 0, 0] },
                   { text: "Cobros cursos", fontSize: 6.5, color: "#047857" },
                 ],
                 fillColor: "#ecfdf5",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
               {
                 stack: [
                   { text: "GASTOS", fontSize: 7, bold: true, color: "#92400e" },
-                  { text: data.courseMetrics.formattedTotalExpenses, fontSize: 13, bold: true, color: "#b45309" },
+                  { text: data.courseMetrics.formattedTotalExpenses, fontSize: 13, bold: true, color: "#b45309", margin: [0, 1, 0, 0] },
                   { text: "Egresos cursos", fontSize: 6.5, color: "#b45309" },
                 ],
                 fillColor: "#fffbeb",
-                margin: [2, 2, 2, 2],
+                margin: [3, 2, 3, 2],
               },
             ],
           ],
@@ -420,12 +429,12 @@ export async function generateExecutiveSummaryPdf(data: ExecutiveSummaryPdfData)
       {
         columns: [
           {
-            text: `Generado automáticamente por FACOP ERP — ${data.generatedAt || new Date().toLocaleString("es-EC")}`,
+            text: `Generado automáticamente por FACOP ERP — Quito, Ecuador — ${data.generatedAt || new Date().toLocaleString("es-EC")}`,
             fontSize: 7,
             color: "#94a3b8",
           },
           {
-            text: "Confidencial — Uso Interno",
+            text: "Documento Confidencial — FACOP ECUADOR QUITO",
             fontSize: 7,
             color: "#94a3b8",
             alignment: "right",

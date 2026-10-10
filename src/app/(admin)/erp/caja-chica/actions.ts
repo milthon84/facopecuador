@@ -33,27 +33,31 @@ export async function addCashExpenseAction(data: {
   amount: number;
   date: string;
   description: string;
+  area?: string;
   reference?: string | null;
 }) {
   await assertWritePermission("/erp/caja-chica");
 
-  const { account_id, amount, date, description, reference } = data;
+  const { account_id, amount, date, description, area = "clinica", reference } = data;
   if (!account_id || amount <= 0 || !description?.trim()) {
     throw new Error("Monto y descripción son requeridos.");
   }
 
   const supabase = createAdminClient();
+  const areaTag = `[AREA:${area}]`;
+  const formattedRef = reference?.trim() ? `${areaTag} ${reference.trim()}` : areaTag;
+
   const { error } = await supabase.from("bank_transactions").insert({
     account_id,
     type: "egreso",
     amount,
     date,
     description: description.trim(),
-    reference: reference?.trim() || null,
+    reference: formattedRef,
     payment_method: "efectivo",
     status: "confirmado",
     origin: "manual",
-    categoria: "Retiro en efectivo",
+    categoria: area === "cursos" ? "Gasto Cursos" : area === "general" ? "Gasto General" : "Gasto Clínica",
   });
 
   if (error) throw new Error(error.message || "Error al registrar el gasto.");

@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { ShoppingCart, Plus, TrendingDown, Calendar, Tag } from "lucide-react";
+import { ShoppingCart, Plus, TrendingDown, Calendar, Tag, Stethoscope, GraduationCap, Building2, Filter } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,18 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
+function AreaBadge({ area }: { area: ExpenseArea }) {
+  const cfg = EXPENSE_AREA_CONFIG[area] || EXPENSE_AREA_CONFIG.clinica;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${cfg.badgeCls}`}>
+      {area === "clinica" && <Stethoscope size={10} />}
+      {area === "cursos" && <GraduationCap size={10} />}
+      {area === "general" && <Building2 size={10} />}
+      {cfg.shortLabel}
+    </span>
+  );
+}
+
 const PAYMENT_LABELS: Record<string, string> = {
   efectivo:     "Efectivo",
   transferencia:"Transferencia",
@@ -38,7 +51,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 export default async function GastosPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; area?: string }>;
 }) {
   await assertPermission("/erp/gastos");
   const canEdit = await hasWritePermission("/erp/gastos");
@@ -48,6 +61,7 @@ export default async function GastosPage({
   // Mes activo (default: mes actual)
   const now = new Date();
   const activeMonth = searchParams.month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const activeAreaFilter = (searchParams.area || "all").toLowerCase();
   const [year, month] = activeMonth.split("-").map(Number);
   const from = new Date(year, month - 1, 1).toISOString().split("T")[0];
   const to   = new Date(year, month, 0).toISOString().split("T")[0];
@@ -74,17 +88,28 @@ export default async function GastosPage({
   const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
   const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
-  const items = expenses ?? [];
-  const totalMes    = items.reduce((s, e) => s + Number(e.total), 0);
-  const totalIva    = items.reduce((s, e) => s + Number(e.iva_amount), 0);
-  const totalSinIva = totalMes - totalIva;
+  const rawItems = (expenses ?? []).map((exp) => ({
+    ...exp,
+    resolvedArea: resolveExpenseArea(exp),
+  }));
+
+  const totalMes      = rawItems.reduce((s, e) => s + Number(e.total), 0);
+  const totalClinica  = rawItems.filter((e) => e.resolvedArea === "clinica").reduce((s, e) => s + Number(e.total), 0);
+  const totalCursos   = rawItems.filter((e) => e.resolvedArea === "cursos").reduce((s, e) => s + Number(e.total), 0);
+  const totalGeneral  = rawItems.filter((e) => e.resolvedArea === "general").reduce((s, e) => s + Number(e.total), 0);
+  const totalIva      = rawItems.reduce((s, e) => s + Number(e.iva_amount), 0);
+
+  // Filtrar según área seleccionada
+  const items = activeAreaFilter === "all"
+    ? rawItems
+    : rawItems.filter((e) => e.resolvedArea === activeAreaFilter);
 
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShoppingCart size={20} className="text-lilac-600 shrink-0" />
           <h1 className="text-xl font-bold text-ink-900">Gastos / Compras</h1>
@@ -100,7 +125,7 @@ export default async function GastosPage({
       </div>
 
       {/* Selector de mes */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2">
         <Calendar size={15} className="text-ink-400 shrink-0" />
         <div className="flex gap-1 overflow-x-auto pb-1">
           {months.map((m) => {
@@ -131,7 +156,7 @@ export default async function GastosPage({
             return (
               <Link
                 key={m}
-                href={`/erp/gastos?month=${m}`}
+                href={`/erp/gastos?month=${m}${activeAreaFilter !== "all" ? `&area=${activeAreaFilter}` : ""}`}
                 className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors flex flex-col items-center justify-center leading-tight ${pillStyle}`}
               >
                 {badgeText && (
@@ -148,19 +173,70 @@ export default async function GastosPage({
         </div>
       </div>
 
-      {/* Stats del mes */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="bg-white rounded-xl px-3 py-2.5 border border-lilac-100 shadow-sm">
-          <div className="text-[11px] text-ink-500 mb-1">Total del mes</div>
-          <div className="text-lg font-bold text-red-600 leading-none">${totalMes.toFixed(2)}</div>
+      {/* Tarjetas de Desglose por Destino (Clínica vs Cursos vs General) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="bg-white rounded-2xl p-3 border border-lilac-100 shadow-xs">
+          <div className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Total Mes</div>
+          <div className="text-xl font-black text-red-600 mt-0.5">${totalMes.toFixed(2)}</div>
+          <div className="text-[10px] text-ink-400 mt-0.5">IVA: ${totalIva.toFixed(2)}</div>
         </div>
-        <div className="bg-white rounded-xl px-3 py-2.5 border border-lilac-100 shadow-sm">
-          <div className="text-[11px] text-ink-500 mb-1">Subtotal s/IVA</div>
-          <div className="text-lg font-bold text-ink-900 leading-none">${totalSinIva.toFixed(2)}</div>
+
+        <div className="bg-white rounded-2xl p-3 border border-teal-100 shadow-xs">
+          <div className="text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1">
+            <Stethoscope size={11} /> Clínica Dental
+          </div>
+          <div className="text-xl font-black text-teal-900 mt-0.5">${totalClinica.toFixed(2)}</div>
+          <div className="text-[10px] text-teal-600 mt-0.5">
+            {totalMes > 0 ? `${((totalClinica / totalMes) * 100).toFixed(0)}% del total` : "0%"}
+          </div>
         </div>
-        <div className="bg-white rounded-xl px-3 py-2.5 border border-lilac-100 shadow-sm">
-          <div className="text-[11px] text-ink-500 mb-1">IVA pagado</div>
-          <div className="text-lg font-bold text-ink-900 leading-none">${totalIva.toFixed(2)}</div>
+
+        <div className="bg-white rounded-2xl p-3 border border-indigo-100 shadow-xs">
+          <div className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
+            <GraduationCap size={11} /> Cursos / Educación
+          </div>
+          <div className="text-xl font-black text-indigo-900 mt-0.5">${totalCursos.toFixed(2)}</div>
+          <div className="text-[10px] text-indigo-600 mt-0.5">
+            {totalMes > 0 ? `${((totalCursos / totalMes) * 100).toFixed(0)}% del total` : "0%"}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-3 border border-amber-100 shadow-xs">
+          <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">
+            <Building2 size={11} /> General / Admin
+          </div>
+          <div className="text-xl font-black text-amber-900 mt-0.5">${totalGeneral.toFixed(2)}</div>
+          <div className="text-[10px] text-amber-600 mt-0.5">
+            {totalMes > 0 ? `${((totalGeneral / totalMes) * 100).toFixed(0)}% del total` : "0%"}
+          </div>
+        </div>
+      </div>
+
+      {/* Barra de Filtros por Destino */}
+      <div className="flex items-center justify-between gap-2 flex-wrap bg-white px-3 py-2 rounded-2xl border border-lilac-100 shadow-xs text-xs">
+        <div className="flex items-center gap-1.5 font-bold text-ink-700">
+          <Filter size={13} className="text-lilac-600" />
+          <span>Filtrar por Área:</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {[
+            { id: "all", label: `Todos (${rawItems.length})` },
+            { id: "clinica", label: `Clínica (${rawItems.filter((e) => e.resolvedArea === "clinica").length})` },
+            { id: "cursos", label: `Cursos (${rawItems.filter((e) => e.resolvedArea === "cursos").length})` },
+            { id: "general", label: `General (${rawItems.filter((e) => e.resolvedArea === "general").length})` },
+          ].map((btn) => (
+            <Link
+              key={btn.id}
+              href={`/erp/gastos?month=${activeMonth}&area=${btn.id}`}
+              className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                activeAreaFilter === btn.id
+                  ? "bg-lilac-600 text-white shadow-xs"
+                  : "bg-lilac-50/70 text-ink-600 hover:bg-lilac-100"
+              }`}
+            >
+              {btn.label}
+            </Link>
+          ))}
         </div>
       </div>
 
@@ -169,10 +245,10 @@ export default async function GastosPage({
         {items.length === 0 ? (
           <div className="py-16 text-center text-ink-500">
             <TrendingDown size={36} className="text-lilac-200 mx-auto mb-3" />
-            <p className="text-sm">No hay gastos registrados en {monthLabel}.</p>
+            <p className="text-sm">No hay gastos registrados en {monthLabel} para este filtro.</p>
             {canEdit && (
               <Link href="/erp/gastos/nuevo" className="text-lilac-600 hover:underline text-sm font-medium mt-1 inline-block">
-                Registrar el primero
+                Registrar un gasto
               </Link>
             )}
           </div>
@@ -187,6 +263,7 @@ export default async function GastosPage({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm text-ink-900 truncate">{exp.supplier_name}</span>
+                    <AreaBadge area={exp.resolvedArea} />
                     <CategoryBadge category={exp.category} />
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">

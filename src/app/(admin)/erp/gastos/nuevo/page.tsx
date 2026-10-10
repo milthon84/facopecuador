@@ -39,6 +39,7 @@ async function saveExpense(formData: FormData) {
   const total = Math.round((rawSubtotal + ivaAmount) * 100) / 100;
 
   const category          = formData.get("category") as string;
+  const area              = ((formData.get("area") as string) || "clinica").toLowerCase();
   const payment_method    = formData.get("payment_method") as string;
   const supplier_name     = (formData.get("supplier_name") as string).trim();
   const bank_account_id   = (formData.get("bank_account_id") as string) || null;
@@ -53,6 +54,7 @@ async function saveExpense(formData: FormData) {
 
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   let description = (formData.get("description") as string)?.trim() || null;
+  const notes = `[AREA:${area}]`;
 
   const insertPayload: Record<string, any> = {
     supplier_name,
@@ -61,7 +63,9 @@ async function saveExpense(formData: FormData) {
     authorization_number,
     expense_date,
     category,
+    area,
     description,
+    notes,
     subtotal_0:        subtotal0,
     subtotal_15:       subtotal15,
     iva_amount:        ivaAmount,
@@ -78,6 +82,13 @@ async function saveExpense(formData: FormData) {
     .insert(insertPayload)
     .select()
     .single();
+
+  if (expenseError && (expenseError.message.includes("area") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
+    delete insertPayload.area;
+    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
+    expense = retry.data;
+    expenseError = retry.error;
+  }
 
   if (expenseError && (expenseError.message.includes("authorization_number") || expenseError.code === "PGRST204")) {
     delete insertPayload.authorization_number;

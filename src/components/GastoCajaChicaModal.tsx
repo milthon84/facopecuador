@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TrendingDown, AlertCircle } from "lucide-react";
+import { TrendingDown, AlertCircle, Stethoscope, GraduationCap, Building2 } from "lucide-react";
 import StandardModal from "@/components/StandardModal";
 import { addCashExpenseAction } from "@/app/(admin)/erp/caja-chica/actions";
+import { ExpenseArea } from "@/lib/expense-areas";
 
 interface Props {
   cajaId: string;
@@ -19,12 +20,14 @@ export default function GastoCajaChicaModal({ cajaId }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(today);
+  const [area, setArea] = useState<ExpenseArea>("clinica");
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
 
   function handleOpen() {
     setAmount("");
     setDate(today);
+    setArea("clinica");
     setDescription("");
     setReference("");
     setErrorMsg(null);
@@ -52,6 +55,7 @@ export default function GastoCajaChicaModal({ cajaId }: Props) {
         account_id: cajaId,
         amount: num,
         date,
+        area,
         description: description.trim(),
         reference: reference.trim() || null,
       });
@@ -129,6 +133,52 @@ export default function GastoCajaChicaModal({ cajaId }: Props) {
                 disabled={loading}
                 className="w-full border border-red-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
               />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-ink-700">
+              Destino del Gasto *
+            </label>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setArea("clinica")}
+                className={`p-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1 ${
+                  area === "clinica"
+                    ? "border-teal-500 bg-teal-50 text-teal-900 ring-2 ring-teal-200"
+                    : "border-slate-200 bg-white text-ink-700 hover:bg-slate-50"
+                }`}
+              >
+                <Stethoscope size={13} className={area === "clinica" ? "text-teal-600" : "text-ink-400"} />
+                <span>Clínica</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setArea("cursos")}
+                className={`p-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1 ${
+                  area === "cursos"
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-200"
+                    : "border-slate-200 bg-white text-ink-700 hover:bg-slate-50"
+                }`}
+              >
+                <GraduationCap size={13} className={area === "cursos" ? "text-indigo-600" : "text-ink-400"} />
+                <span>Cursos</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setArea("general")}
+                className={`p-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1 ${
+                  area === "general"
+                    ? "border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-200"
+                    : "border-slate-200 bg-white text-ink-700 hover:bg-slate-50"
+                }`}
+              >
+                <Building2 size={13} className={area === "general" ? "text-amber-600" : "text-ink-400"} />
+                <span>General</span>
+              </button>
             </div>
           </div>
 

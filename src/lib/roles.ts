@@ -24,6 +24,7 @@ const ADMIN_ONLY_ROUTES = [
   "/erp/categorias",
   "/erp/unidades",
   "/erp/servicios",
+  "/erp/configuracion-sistema",
   "/erp/facturacion/config",
   "/erp/usuarios",
   "/erp/roles",
@@ -117,7 +118,7 @@ export interface ResourceDef {
 export const ALL_RESOURCES: readonly ResourceDef[] = [
   // Clínica
   { section: "Clínica",       path: "/erp",              label: "Agenda", hasEdit: true },
-  { section: "Clínica",       path: "/erp/dashboard",    label: "Resumen Clínica", hasEdit: false },
+  { section: "Clínica",       path: "/erp/dashboard",    label: "Dashboard", hasEdit: false },
   { section: "Clínica",       path: "/erp/calendario",   label: "Calendario", hasEdit: true },
   { section: "Clínica",       path: "/erp/pacientes",    label: "Pacientes", hasEdit: true },
   { section: "Clínica",       path: "/erp/horarios",     label: "Horarios", hasEdit: true },
@@ -148,17 +149,11 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "General",       path: "/erp/contabilidad",        label: "Contabilidad", hasEdit: true },
 
   // Sistema
-  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Configuración", hasEdit: true },
-  { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
-  // Publicidad
-  { section: "Publicidad",    path: "/erp/publicidad",          label: "Publicidad y Anuncios", hasEdit: true },
-  { section: "Publicidad",    path: "/erp/sitio-web",           label: "Página Web / CMS", hasEdit: true },
-
-  // Sistema
-  { section: "Sistema",       path: "/erp/facturacion/config",  label: "Configuración", hasEdit: true },
+  { section: "Sistema",       path: "/erp/configuracion-sistema", label: "Configuración del Sistema", hasEdit: true },
   { section: "Sistema",       path: "/erp/usuarios",            label: "Usuarios", hasEdit: true },
   { section: "Sistema",       path: "/erp/roles",               label: "Roles", hasEdit: true },
-  { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría", hasEdit: false },
+  { section: "Sistema",       path: "/erp/auditoria",           label: "Auditoría del Sistema", hasEdit: false },
+  { section: "Sistema",       path: "/erp/auditoria-atencion",  label: "Auditoría Atención al Cliente", hasEdit: true },
 ] as const;
 
 export function getWritePathForResource(path: string): string {
@@ -184,7 +179,7 @@ export const NAV_SECTIONS = ["Clínica", "Cursos", "General", "Publicidad", "Sis
 export const NAV_ITEMS: NavItemDef[] = [
   // Clínica
   { href: "/erp",              label: "Agenda",              icon: "LayoutDashboard", section: "Clínica",       roles: ["admin", "recepcionista"] },
-  { href: "/erp/dashboard",    label: "Resumen y Métricas",  icon: "TrendingUp",      section: "Clínica",       roles: ["admin", "recepcionista"] },
+  { href: "/erp/dashboard",    label: "Dashboard",           icon: "TrendingUp",      section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/calendario",   label: "Calendario",          icon: "CalendarDays",    section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/pacientes",    label: "Pacientes",           icon: "Users",           section: "Clínica",       roles: ["admin", "recepcionista"] },
   { href: "/erp/horarios",     label: "Horarios",            icon: "Clock",           section: "Clínica",       roles: ["admin"] },
@@ -217,7 +212,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/sitio-web",           label: "Página Web / CMS",      icon: "Globe",           section: "Publicidad",    roles: ["admin"] },
 
   // Sistema
-  { href: "/erp/facturacion/config",  label: "Configuración",       icon: "Settings",         section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/auditoria-atencion",  label: "Auditoría Atención",  icon: "Bot",              section: "Sistema",       roles: ["admin"] },
+  { href: "/erp/configuracion-sistema", label: "Configuración",     icon: "Settings",         section: "Sistema",       roles: ["admin"] },
   { href: "/erp/usuarios",            label: "Usuarios",            icon: "UserCog",          section: "Sistema",       roles: ["admin"] },
   { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
   { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },

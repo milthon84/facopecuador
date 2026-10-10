@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { Save, Stethoscope, GraduationCap, Building2 } from "lucide-react";
+import { resolveExpenseArea, ExpenseArea } from "@/lib/expense-areas";
 
 const CATEGORIES = [
   "Insumos dentales", "Equipos", "Arriendo", "Servicios básicos",
@@ -23,6 +24,7 @@ interface Props {
 
 export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, knownSuppliersList = [], initialData, saveExpense }: Props) {
   const isEditing = Boolean(initialData?.id);
+  const [area, setArea] = useState<ExpenseArea>(resolveExpenseArea(initialData || {}));
   const [method, setMethod] = useState(initialData?.payment_method || "efectivo");
   const [docType, setDocType] = useState(
     initialData
@@ -113,6 +115,74 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, kno
           <option value="nota_venta">Nota de Venta</option>
           <option value="sin_documento">Sin Documento / Gasto Directo</option>
         </select>
+      </div>
+
+      {/* Destino del Gasto (Clínica vs Cursos vs General) */}
+      <div className="space-y-1.5 bg-lilac-50/30 p-3 rounded-2xl border border-lilac-100">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-bold text-ink-800">
+            Destino del Gasto / Área *
+          </label>
+          <span className="text-[10px] text-ink-400">
+            Para métricas en Dashboard
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setArea("clinica")}
+            className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between gap-1 ${
+              area === "clinica"
+                ? "border-teal-500 bg-teal-50/90 text-teal-950 ring-2 ring-teal-200 shadow-xs"
+                : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs flex items-center gap-1.5">
+                <Stethoscope size={14} className={area === "clinica" ? "text-teal-600" : "text-ink-400"} />
+                Clínica Dental
+              </span>
+            </div>
+            <span className="text-[10px] text-ink-500">Insumos dentales, honorarios médicos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setArea("cursos")}
+            className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between gap-1 ${
+              area === "cursos"
+                ? "border-indigo-500 bg-indigo-50/90 text-indigo-950 ring-2 ring-indigo-200 shadow-xs"
+                : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs flex items-center gap-1.5">
+                <GraduationCap size={14} className={area === "cursos" ? "text-indigo-600" : "text-ink-400"} />
+                Cursos / Educación
+              </span>
+            </div>
+            <span className="text-[10px] text-ink-500">Docentes, refrigerios, material educativo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setArea("general")}
+            className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between gap-1 ${
+              area === "general"
+                ? "border-amber-500 bg-amber-50/90 text-amber-950 ring-2 ring-amber-200 shadow-xs"
+                : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs flex items-center gap-1.5">
+                <Building2 size={14} className={area === "general" ? "text-amber-600" : "text-ink-400"} />
+                General / Admin
+              </span>
+            </div>
+            <span className="text-[10px] text-ink-500">Arriendo, luz, suministros oficina</span>
+          </button>
+        </div>
+        <input type="hidden" name="area" value={area} />
       </div>
 
       {/* RUC / Cédula (PRIMERO) + Proveedor / Beneficiario */}

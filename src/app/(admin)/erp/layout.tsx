@@ -5,7 +5,7 @@ import {
   Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  TrendingUp, BarChart3
+  TrendingUp, BarChart3, Bot
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,6 +22,7 @@ const ICONS: Record<string, React.ReactNode> = {
   LayoutDashboard: <LayoutDashboard size={16} />,
   TrendingUp:      <TrendingUp size={16} />,
   BarChart3:       <BarChart3 size={16} />,
+  Bot:             <Bot size={16} />,
   CalendarDays:    <CalendarDays size={16} />,
   Users:           <Users size={16} />,
   Clock:           <Clock size={16} />,

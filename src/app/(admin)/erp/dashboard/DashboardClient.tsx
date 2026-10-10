@@ -18,9 +18,14 @@ import {
   Stethoscope,
   DollarSign,
   Wallet,
-  Users
+  Users,
+  Building2,
+  Coins,
+  ArrowDownRight,
+  PieChart
 } from "lucide-react";
 import { formatTimeLocal } from "@/lib/availability";
+import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea } from "@/lib/expense-areas";
 
 export interface AppointmentData {
   id: string;
@@ -87,6 +92,9 @@ export interface DoctorExpenseData {
   supplier_ruc?: string | null;
   description: string | null;
   category: string | null;
+  area?: string | null;
+  notes?: string | null;
+  resolvedArea?: ExpenseArea;
 }
 
 type PeriodType = "day" | "week" | "month" | "year" | "custom";
@@ -402,12 +410,48 @@ export default function DashboardClient({
     };
   }, [periodAppointments, periodExpenses, doctors]);
 
-  // Ganancia de Clínica (Facturación Clínica - Pagos a Doctores)
-  const clinicProfit = stats.totalBilled - doctorStats.totalDoctorExpenses;
-  const formattedClinicProfit = new Intl.NumberFormat("es-EC", {
-    style: "currency",
-    currency: "USD",
-  }).format(clinicProfit);
+  // Desglose de Gastos por Área (Clínica, Cursos, General)
+  const expenseAreaStats = useMemo(() => {
+    let clinicaTotal = 0;
+    let clinicaCount = 0;
+    let cursosTotal = 0;
+    let cursosCount = 0;
+    let generalTotal = 0;
+    let generalCount = 0;
+
+    periodExpenses.forEach((exp) => {
+      const area = exp.resolvedArea || resolveExpenseArea(exp);
+      const amt = Number(exp.total || 0);
+      if (area === "clinica") {
+        clinicaTotal += amt;
+        clinicaCount++;
+      } else if (area === "cursos") {
+        cursosTotal += amt;
+        cursosCount++;
+      } else {
+        generalTotal += amt;
+        generalCount++;
+      }
+    });
+
+    const totalExpenses = clinicaTotal + cursosTotal + generalTotal;
+    const totalCount = clinicaCount + cursosCount + generalCount;
+
+    return {
+      clinicaTotal,
+      clinicaCount,
+      cursosTotal,
+      cursosCount,
+      generalTotal,
+      generalCount,
+      totalExpenses,
+      totalCount,
+      formattedClinicaTotal: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(clinicaTotal),
+      formattedCursosTotal: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(cursosTotal),
+      formattedGeneralTotal: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(generalTotal),
+      formattedTotalExpenses: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(totalExpenses),
+    };
+  }, [periodExpenses]);
 
   // Aggregate Metrics for Courses
   const courseStats = useMemo(() => {
@@ -416,18 +460,8 @@ export default function DashboardClient({
     const totalBilledCourses = courses.reduce((acc, c) => acc + (c.billed_amount || 0), 0);
     const totalCourseInvoices = courses.reduce((acc, c) => acc + (c.invoices_count || 0), 0);
 
-    // Identificar gastos relacionados a cursos
-    let totalCourseExpenses = 0;
-    let courseExpensesCount = 0;
-    periodExpenses.forEach((exp) => {
-      const desc = (exp.description || "").toLowerCase();
-      const cat = (exp.category || "").toLowerCase();
-      if (desc.includes("curso") || desc.includes("modulo") || desc.includes("módulo") || desc.includes("diplomado") || cat.includes("curso")) {
-        totalCourseExpenses += Number(exp.total || 0);
-        courseExpensesCount++;
-      }
-    });
-
+    const totalCourseExpenses = expenseAreaStats.cursosTotal;
+    const courseExpensesCount = expenseAreaStats.cursosCount;
     const courseProfit = totalBilledCourses - totalCourseExpenses;
 
     return {
@@ -452,7 +486,32 @@ export default function DashboardClient({
         currency: "USD",
       }).format(courseProfit),
     };
-  }, [courses, periodExpenses]);
+  }, [courses, expenseAreaStats]);
+
+  // Consolidado Financiero Global (Clínica + Cursos + General)
+  const globalFinancials = useMemo(() => {
+    const totalBilled = stats.totalBilled + courseStats.totalBilledCourses;
+    const totalExpenses = expenseAreaStats.totalExpenses;
+    const netProfit = totalBilled - totalExpenses;
+
+    // Utilidad Clínica (Facturación Clínica - Gastos de Clínica)
+    const clinicNetProfit = stats.totalBilled - expenseAreaStats.clinicaTotal;
+    // Utilidad Cursos (Facturación Cursos - Gastos de Cursos)
+    const coursesNetProfit = courseStats.totalBilledCourses - expenseAreaStats.cursosTotal;
+
+    return {
+      totalBilled,
+      totalExpenses,
+      netProfit,
+      clinicNetProfit,
+      coursesNetProfit,
+      formattedTotalBilled: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(totalBilled),
+      formattedTotalExpenses: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(totalExpenses),
+      formattedNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(netProfit),
+      formattedClinicNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(clinicNetProfit),
+      formattedCoursesNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(coursesNetProfit),
+    };
+  }, [stats.totalBilled, courseStats.totalBilledCourses, expenseAreaStats]);
 
   // Navigation handlers
   const handlePrevPeriod = () => {
@@ -547,10 +606,15 @@ export default function DashboardClient({
     <div className="max-w-7xl mx-auto space-y-3 pb-6 print:space-y-2 print:pb-0 print:max-w-full">
       {/* Barra Superior Compacta: Resumen */}
       <div className="bg-white px-4 py-2 sm:py-2.5 rounded-2xl border border-lilac-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-2 print:border-none print:shadow-none print:p-0 print:mb-1">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">
-            Resumen
-          </h1>
+        <div className="flex items-center justify-between gap-2 w-full md:w-auto">
+          <div>
+            <div className="hidden print:block text-xs font-black text-lilac-800 tracking-wider uppercase">
+              FACOP ECUADOR QUITO
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">
+              Dashboard
+            </h1>
+          </div>
           <span className="hidden print:inline-block text-[11px] font-semibold text-ink-600 border px-2 py-0.5 rounded-md">
             {periodLabel}
           </span>
@@ -649,6 +713,81 @@ export default function DashboardClient({
         </div>
       </div>
 
+      {/* RESUMEN FINANCIERO CONSOLIDADO (CLÍNICA + CURSOS + GENERAL) */}
+      <div className="bg-gradient-to-r from-ink-950 via-slate-900 to-ink-900 text-white p-3.5 sm:p-4 rounded-2xl border border-ink-800 shadow-md space-y-3">
+        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-lilac-500/20 text-lilac-300 flex items-center justify-center font-bold">
+              <PieChart size={16} />
+            </div>
+            <div>
+              <h2 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase flex items-center gap-2">
+                <span>Resumen Financiero Consolidado</span>
+                <span className="text-[10px] px-2 py-0.2 rounded-full font-bold bg-white/10 text-white/80 border border-white/15">
+                  {periodLabel}
+                </span>
+              </h2>
+            </div>
+          </div>
+          <Link
+            href="/erp/gastos"
+            className="text-[11px] text-lilac-300 hover:text-white font-bold flex items-center gap-1 transition print:hidden"
+          >
+            <span>Ver Todos los Gastos</span>
+            <ArrowUpRight size={13} />
+          </Link>
+        </div>
+
+        {/* 3 Métricas Principales: Facturación Total, Gastos Totales, Utilidad Neta */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* Facturación Global */}
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-ink-300 uppercase tracking-wider">Facturación Total</span>
+              <TrendingUp size={14} className="text-emerald-400" />
+            </div>
+            <div className="text-2xl font-black text-white mt-1">{globalFinancials.formattedTotalBilled}</div>
+            <div className="text-[10px] text-ink-400 mt-1 flex items-center justify-between">
+              <span>🏥 Clínica: {stats.formattedTotalBilled}</span>
+              <span>🎓 Cursos: {courseStats.formattedTotalBilledCourses}</span>
+            </div>
+          </div>
+
+          {/* Gastos Globales con Desglose */}
+          <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Gastos Totales ({expenseAreaStats.totalCount})</span>
+              <DollarSign size={14} className="text-amber-400" />
+            </div>
+            <div className="text-2xl font-black text-amber-300 mt-1">{globalFinancials.formattedTotalExpenses}</div>
+            <div className="text-[10px] text-ink-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
+              <span className="text-teal-300">🏥 {expenseAreaStats.formattedClinicaTotal}</span>
+              <span className="text-indigo-300">🎓 {expenseAreaStats.formattedCursosTotal}</span>
+              <span className="text-amber-300">🏢 {expenseAreaStats.formattedGeneralTotal}</span>
+            </div>
+          </div>
+
+          {/* Utilidad Neta Operativa */}
+          <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+            globalFinancials.netProfit >= 0
+              ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-100"
+              : "bg-rose-950/40 border-rose-500/30 text-rose-100"
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">Utilidad Neta del Período</span>
+              <Coins size={14} className={globalFinancials.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"} />
+            </div>
+            <div className={`text-2xl font-black mt-1 ${globalFinancials.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              {globalFinancials.formattedNetProfit}
+            </div>
+            <div className="text-[10px] text-white/70 mt-1 flex items-center justify-between">
+              <span>🏥 Clínica: {globalFinancials.formattedClinicNetProfit}</span>
+              <span>🎓 Cursos: {globalFinancials.formattedCoursesNetProfit}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* BLOQUE 1: CLÍNICA */}
       <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-lilac-100 shadow-xs space-y-2.5 print:border-gray-300 print:shadow-none print:p-2">
         <div className="flex items-center justify-between border-b border-lilac-50 pb-1.5">
@@ -703,13 +842,13 @@ export default function DashboardClient({
             </div>
           </div>
 
-          {/* Gastos */}
+          {/* Gastos de Clínica */}
           <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Gastos</div>
-              <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{doctorStats.formattedTotalDoctorExpenses}</div>
-              <div className="text-[10px] text-amber-700 font-medium">
-                Pagos a doctores
+              <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Gastos Clínica</div>
+              <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{expenseAreaStats.formattedClinicaTotal}</div>
+              <div className="text-[10px] text-amber-700 font-medium truncate">
+                Utilidad: <b className="text-emerald-800">{globalFinancials.formattedClinicNetProfit}</b>
               </div>
             </div>
             <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
@@ -856,10 +995,10 @@ export default function DashboardClient({
           {/* Gastos Cursos */}
           <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">Gastos</div>
+              <div className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">Gastos Cursos</div>
               <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{courseStats.formattedTotalCourseExpenses}</div>
-              <div className="text-[10px] text-amber-700 font-medium">
-                Egresos cursos
+              <div className="text-[10px] text-amber-700 font-medium truncate">
+                Utilidad: <b className="text-emerald-800">{globalFinancials.formattedCoursesNetProfit}</b>
               </div>
             </div>
             <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">

@@ -68,7 +68,7 @@ export default async function DashboardPage() {
       .select("id, enrollment_id, module_id, invoice_id, billing_status, invoices:invoices(id, total, sri_status), curso_modulos:curso_modulos(course_id, cost)"),
     supabase
       .from("expenses")
-      .select("id, expense_date, total, supplier_name, supplier_ruc, description, category, status")
+      .select("id, expense_date, total, supplier_name, supplier_ruc, description, category, status, notes")
       .eq("status", "registered"),
   ]);
 
@@ -77,13 +77,35 @@ export default async function DashboardPage() {
   const rawCursos = cursosRes.data || [];
   const rawEnrollments = enrolRes.data || [];
   const rawModuloInscriptions = moduloInscripcionesRes.data || [];
-  const rawExpenses = expensesRes.data || [];
+  const { resolveExpenseArea } = await import("@/lib/expense-areas");
+  const rawExpenses = (expensesRes.data || []).map((e: any) => ({
+    ...e,
+    resolvedArea: resolveExpenseArea(e),
+  }));
 
-  // Mapear inscritos por curso
-  const studentCountMap: Record<string, number> = {};
+  // Mapear cantidad de alumnos únicos por curso
+  const studentCountMap: Record<string, Set<string>> = {};
+  rawCursos.forEach((c: any) => {
+    studentCountMap[c.id] = new Set();
+  });
+
   rawEnrollments.forEach((e: any) => {
-    if (e.status === "enrolled" || e.status === "completed") {
-      studentCountMap[e.course_id] = (studentCountMap[e.course_id] || 0) + 1;
+    if (e.course_id && e.status !== "dropped" && e.status !== "cancelled") {
+      const studentId = e.student_id || e.id;
+      if (!studentCountMap[e.course_id]) {
+        studentCountMap[e.course_id] = new Set();
+      }
+      studentCountMap[e.course_id].add(studentId);
+    }
+  });
+
+  rawModuloInscriptions.forEach((mi: any) => {
+    const courseId = mi.curso_modulos?.course_id;
+    if (courseId && mi.enrollment_id) {
+      if (!studentCountMap[courseId]) {
+        studentCountMap[courseId] = new Set();
+      }
+      studentCountMap[courseId].add(mi.enrollment_id);
     }
   });
 
@@ -160,7 +182,19 @@ export default async function DashboardPage() {
     });
   });
 
-  const courses: CourseSummaryData[] = rawCursos.map((c: any) => {
+  // Filtrar cursos no relevantes (cancelados/eliminados, o finalizados/borrador sin alumnos ni facturación)
+  const relevantRawCursos = rawCursos.filter((c: any) => {
+    if (c.status === "cancelled" || c.status === "deleted") return false;
+    const billed = courseBilledMap[c.id]?.total || 0;
+    const students = studentCountMap[c.id]?.size || 0;
+    if (billed > 0) return true;
+    if (c.status === "completed") return false;
+    if (c.status === "draft" && students === 0 && billed === 0) return false;
+    if (c.status === "active" || c.status === "in_progress") return true;
+    return students > 0;
+  });
+
+  const courses: CourseSummaryData[] = relevantRawCursos.map((c: any) => {
     const billedInfo = courseBilledMap[c.id] || { total: 0, invoiceIds: new Set() };
     return {
       id: c.id,
@@ -170,7 +204,7 @@ export default async function DashboardPage() {
       end_date: c.end_date || "",
       max_students: c.max_students ?? null,
       total_cost: Number(c.total_cost) || 0,
-      enrolled_count: studentCountMap[c.id] || 0,
+      enrolled_count: studentCountMap[c.id]?.size || 0,
       modules_count: Array.isArray(c.curso_modulos) ? c.curso_modulos.length : 0,
       billed_amount: billedInfo.total,
       formatted_billed: new Intl.NumberFormat("es-EC", {

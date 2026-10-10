@@ -16,7 +16,7 @@ export const revalidate = 0;
 export function getSmartPeriodRange(
   customStart?: string | null,
   customEnd?: string | null,
-  forceMode?: string | null
+  forcePeriod?: string | null
 ) {
   if (customStart && customEnd) {
     const [sy, sm, sd] = customStart.split("-").map(Number);
@@ -28,23 +28,20 @@ export function getSmartPeriodRange(
     return { start, end, label, filenameLabel, mode: "custom" as const };
   }
 
-  // Fecha actual en hora Ecuador (UTC-5)
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const ecNow = new Date(utc - 5 * 3600000);
 
   const currentYear = ecNow.getFullYear();
-  const currentMonth = ecNow.getMonth(); // 0 = Enero, 1 = Feb, ..., 9 = Oct
+  const currentMonth = ecNow.getMonth(); // 0 = Enero, ..., 9 = Oct
   const currentDay = ecNow.getDate();
 
-  // Si se fuerza 'quincena' o si hoy es del día 16 en adelante (ej. día 16)
   const isFirstHalfExecution =
-    forceMode === "quincena" ||
-    forceMode === "first_half" ||
-    (forceMode !== "month" && forceMode !== "mes" && currentDay >= 16);
+    forcePeriod === "quincena" ||
+    forcePeriod === "first_half" ||
+    (forcePeriod !== "month" && forcePeriod !== "mes" && currentDay >= 16);
 
   if (isFirstHalfExecution) {
-    // 1ra Quincena del mes en curso: del 1 al 15
     const start = new Date(Date.UTC(currentYear, currentMonth, 1, 5, 0, 0));
     const end = new Date(Date.UTC(currentYear, currentMonth, 15 + 1, 4, 59, 59));
 
@@ -56,8 +53,6 @@ export function getSmartPeriodRange(
 
     return { start, end, label, filenameLabel, mode: "quincena" as const };
   } else {
-    // Mes anterior completo: del 1 al último día del mes anterior
-    // Si currentMonth es 0 (Enero), prevMonthDate será Diciembre del año anterior.
     const prevMonthDate = new Date(Date.UTC(currentYear, currentMonth, 0));
     const prevYear = prevMonthDate.getFullYear();
     const prevMonth = prevMonthDate.getMonth();
@@ -76,9 +71,6 @@ export function getSmartPeriodRange(
   }
 }
 
-/**
- * Valida la autorización por Token Secreto (para n8n / cron) o por sesión de usuario administrador
- */
 export async function isAuthorized(req: NextRequest): Promise<boolean> {
   const authHeader = req.headers.get("authorization") || "";
   const token =
@@ -93,32 +85,26 @@ export async function isAuthorized(req: NextRequest): Promise<boolean> {
     process.env.ADMIN_API_KEY,
   ].filter(Boolean) as string[];
 
-  // Si se configuró un secreto y coincide con el token recibido
   if (token && validSecrets.length > 0 && validSecrets.includes(token)) {
     return true;
   }
 
-  // Token de desarrollo o clave pública
   if (token && (token === "facop_cron_secure_token" || token === process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
     return true;
   }
 
-  // Validar si es un usuario con sesión iniciada y permisos
   try {
     const authData = await getCachedUserAndPermissions();
     if (authData?.user && hasPermission(authData.role, "/erp/dashboard", authData.allowedPaths)) {
       return true;
     }
-  } catch {
-    // Sin sesión activa
-  }
+  } catch {}
 
   return false;
 }
 
 export async function handleExecutiveSummaryRequest(req: NextRequest) {
   try {
-    // 1. Validar autorización
     const authorized = await isAuthorized(req);
     if (!authorized) {
       return NextResponse.json(
@@ -132,11 +118,10 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const customStart = searchParams.get("start");
     const customEnd = searchParams.get("end");
-    const forcePeriod = searchParams.get("period"); // 'quincena' | 'month' | null
-    const format = searchParams.get("format") || "pdf"; // "pdf" o "json"
+    const forcePeriod = searchParams.get("period");
+    const format = searchParams.get("format") || "pdf";
     const disposition = searchParams.get("disposition") || "attachment";
 
-    // 2. Calcular Rango de Fecha Inteligente
     const { start, end, label: periodLabel, filenameLabel, mode } = getSmartPeriodRange(
       customStart,
       customEnd,
@@ -145,7 +130,7 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 3. Consultar Citas, Doctores, Facturas, Cursos, Inscripciones y Gastos
+    // Consultar Citas, Doctores, Facturas, Cursos, Inscripciones y Gastos
     const [apptsRes, doctorsRes, invoicesRes, cursosRes, enrolRes, moduloInscripcionesRes, expensesRes] = await Promise.all([
       supabase
         .from("appointments")
@@ -159,7 +144,7 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
         .order("full_name"),
       supabase
         .from("invoices")
-        .select("id, xml_url, invoice_number, total, sri_status, created_at, invoice_items(description, total)")
+        .select("id, xml_url, invoice_number, total, sri_status, created_at, client_document, invoice_items(description, total)")
         .neq("sri_status", "cancelled")
         .neq("sri_status", "rejected"),
       supabase
@@ -168,10 +153,10 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
         .order("start_date", { ascending: false }),
       supabase
         .from("curso_inscripciones")
-        .select("id, course_id, status, invoice_id, invoices:invoices(id, total, sri_status)"),
+        .select("id, course_id, status, student_id, invoice_id, invoices:invoices(id, total, sri_status, created_at)"),
       supabase
         .from("curso_modulo_inscripciones")
-        .select("id, enrollment_id, module_id, invoice_id, billing_status, invoices:invoices(id, total, sri_status), curso_modulos:curso_modulos(course_id, cost)"),
+        .select("id, enrollment_id, module_id, invoice_id, billing_status, invoices:invoices(id, total, sri_status, created_at), curso_modulos:curso_modulos(course_id, cost)"),
       supabase
         .from("expenses")
         .select("id, expense_date, total, supplier_name, supplier_ruc, description, category, status")
@@ -183,14 +168,21 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
     const periodAppointments = apptsRes.data || [];
     const doctors = doctorsRes.data || [];
     const rawInvoices = invoicesRes.data || [];
-    const courses = cursosRes.data || [];
+    const allCourses = cursosRes.data || [];
     const rawEnrollments = enrolRes.data || [];
     const rawModuloInscriptions = moduloInscripcionesRes.data || [];
     const periodExpenses = expensesRes.data || [];
 
-    // 4. Mapear Facturas por Cita
+    // Facturas del período
+    const periodInvoices = rawInvoices.filter((inv: any) => {
+      if (!inv.created_at) return true;
+      const invDate = new Date(inv.created_at);
+      return invDate >= start && invDate <= end;
+    });
+
+    // Mapear Facturas por Cita
     const invoiceMap = new Map<string, { id: string; total: number }>();
-    rawInvoices.forEach((inv: any) => {
+    periodInvoices.forEach((inv: any) => {
       if (inv.xml_url) {
         const current = invoiceMap.get(inv.xml_url);
         const amount = Number(inv.total) || 0;
@@ -202,7 +194,7 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
       }
     });
 
-    // 5. Métricas de Clínica
+    // Métricas de Clínica
     const totalAppointments = periodAppointments.length;
     const scheduledAppointments = periodAppointments.filter((a) => a.status === "scheduled").length;
     const attendedAppointments = periodAppointments.filter((a) => a.status === "attended").length;
@@ -284,36 +276,120 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
       });
     }
 
-    // 6. Métricas de Cursos
-    const studentCountMap: Record<string, number> = {};
+    // 6. Conteo de Alumnos por Curso (Mapeo robusto sin omitir registros)
+    const studentCountMap: Record<string, Set<string>> = {};
+    allCourses.forEach((c) => {
+      studentCountMap[c.id] = new Set();
+    });
+
     rawEnrollments.forEach((e: any) => {
-      if (e.status === "enrolled" || e.status === "completed") {
-        studentCountMap[e.course_id] = (studentCountMap[e.course_id] || 0) + 1;
+      if (e.course_id && e.status !== "dropped" && e.status !== "cancelled") {
+        const studentId = e.student_id || e.id;
+        if (!studentCountMap[e.course_id]) {
+          studentCountMap[e.course_id] = new Set();
+        }
+        studentCountMap[e.course_id].add(studentId);
       }
     });
 
-    const courseBilledMap: Record<string, number> = {};
-    courses.forEach((c) => {
-      courseBilledMap[c.id] = 0;
-    });
-
+    // También asociar si se inscribieron por módulos
     rawModuloInscriptions.forEach((mi: any) => {
       const courseId = mi.curso_modulos?.course_id;
-      if (courseId && mi.invoices?.total && mi.invoices.sri_status !== "cancelled" && mi.invoices.sri_status !== "rejected") {
-        courseBilledMap[courseId] = (courseBilledMap[courseId] || 0) + Number(mi.invoices.total);
+      if (courseId && mi.enrollment_id) {
+        if (!studentCountMap[courseId]) {
+          studentCountMap[courseId] = new Set();
+        }
+        studentCountMap[courseId].add(mi.enrollment_id);
       }
     });
 
+    // 7. Facturación de Cursos en el Período
+    const courseBilledMap: Record<string, { total: number; invoiceIds: Set<string> }> = {};
+    allCourses.forEach((c) => {
+      courseBilledMap[c.id] = { total: 0, invoiceIds: new Set() };
+    });
+
+    // Facturación por módulos
+    rawModuloInscriptions.forEach((mi: any) => {
+      const courseId = mi.curso_modulos?.course_id;
+      if (courseId && courseBilledMap[courseId] && mi.invoice_id) {
+        if (!courseBilledMap[courseId].invoiceIds.has(mi.invoice_id)) {
+          const inv = mi.invoices;
+          if (inv && inv.sri_status !== "cancelled" && inv.sri_status !== "rejected") {
+            const invDate = inv.created_at ? new Date(inv.created_at) : null;
+            if (!invDate || (invDate >= start && invDate <= end)) {
+              courseBilledMap[courseId].invoiceIds.add(mi.invoice_id);
+              courseBilledMap[courseId].total += Number(inv.total || 0);
+            }
+          }
+        }
+      }
+    });
+
+    // Facturación por inscripciones directas
     rawEnrollments.forEach((e: any) => {
       const courseId = e.course_id;
-      if (courseId && e.invoices?.total && e.invoices.sri_status !== "cancelled" && e.invoices.sri_status !== "rejected") {
-        courseBilledMap[courseId] = (courseBilledMap[courseId] || 0) + Number(e.invoices.total);
+      if (courseId && courseBilledMap[courseId] && e.invoice_id) {
+        if (!courseBilledMap[courseId].invoiceIds.has(e.invoice_id)) {
+          const inv = e.invoices;
+          if (inv && inv.sri_status !== "cancelled" && inv.sri_status !== "rejected") {
+            const invDate = inv.created_at ? new Date(inv.created_at) : null;
+            if (!invDate || (invDate >= start && invDate <= end)) {
+              courseBilledMap[courseId].invoiceIds.add(e.invoice_id);
+              courseBilledMap[courseId].total += Number(inv.total || 0);
+            }
+          }
+        }
       }
     });
 
-    const activeCourses = courses.filter((c) => c.status === "active" || c.status === "in_progress");
-    const totalStudents = courses.reduce((acc, c) => acc + (studentCountMap[c.id] || 0), 0);
-    const totalBilledCourses = Object.values(courseBilledMap).reduce((acc, b) => acc + b, 0);
+    // Facturación por coincidencia de texto en facturas del período
+    periodInvoices.forEach((inv: any) => {
+      const items = inv.invoice_items || [];
+      items.forEach((item: any) => {
+        const desc = (item.description || "").toLowerCase();
+        allCourses.forEach((c: any) => {
+          const courseName = (c.name || "").toLowerCase();
+          if (courseName && desc.includes(courseName)) {
+            if (!courseBilledMap[c.id].invoiceIds.has(inv.id)) {
+              courseBilledMap[c.id].invoiceIds.add(inv.id);
+              courseBilledMap[c.id].total += Number(item.total || inv.total || 0);
+            }
+          }
+        });
+      });
+    });
+
+    // 8. FILTRADO ESTRICTO DE CURSOS RELEVANTES:
+    // Cursos eliminados/cancelados o finalizados/borrador SIN actividad en este período se excluyen.
+    const relevantCourses = allCourses.filter((c: any) => {
+      const isCancelled = c.status === "cancelled" || c.status === "deleted";
+      if (isCancelled) return false;
+
+      const billedInPeriod = courseBilledMap[c.id]?.total || 0;
+      const enrolledCount = studentCountMap[c.id]?.size || 0;
+
+      // Si tiene facturación en este período, debe aparecer
+      if (billedInPeriod > 0) return true;
+
+      // Si está finalizado pero no tuvo facturación en este mes, NO debe aparecer
+      if (c.status === "completed") return false;
+
+      // Si es borrador sin alumnos ni facturación, NO debe aparecer
+      if (c.status === "draft" && enrolledCount === 0 && billedInPeriod === 0) return false;
+
+      // Cursos activos o en progreso
+      if (c.status === "active" || c.status === "in_progress") return true;
+
+      return enrolledCount > 0;
+    });
+
+    const activeCourses = relevantCourses.filter((c) => c.status === "active" || c.status === "in_progress");
+    const totalStudentsInRelevantCourses = relevantCourses.reduce(
+      (acc, c) => acc + (studentCountMap[c.id]?.size || 0),
+      0
+    );
+    const totalBilledCourses = Object.values(courseBilledMap).reduce((acc, b) => acc + b.total, 0);
 
     let totalCourseExpenses = 0;
     periodExpenses.forEach((exp) => {
@@ -339,12 +415,12 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
       return `${parts[2]}/${parts[1]}/${parts[0].slice(2)}`;
     };
 
-    const courseRows = courses.map((c) => ({
+    const courseRows = relevantCourses.map((c) => ({
       name: c.name,
       statusLabel: statusLabels[c.status] || c.status,
       dates: `${formatDateShort(c.start_date)} - ${formatDateShort(c.end_date)}`,
-      students: studentCountMap[c.id] || 0,
-      formattedBilled: formatUSD(courseBilledMap[c.id] || 0),
+      students: studentCountMap[c.id]?.size || 0,
+      formattedBilled: formatUSD(courseBilledMap[c.id]?.total || 0),
     }));
 
     const pdfData: ExecutiveSummaryPdfData = {
@@ -361,7 +437,7 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
       doctorRows,
       courseMetrics: {
         activeCoursesCount: activeCourses.length,
-        totalStudents,
+        totalStudents: totalStudentsInRelevantCourses,
         totalBilled: totalBilledCourses,
         formattedTotalBilled: formatUSD(totalBilledCourses),
         totalExpenses: totalCourseExpenses,
@@ -391,7 +467,7 @@ export async function handleExecutiveSummaryRequest(req: NextRequest) {
     }
 
     const pdfBuffer = await generateExecutiveSummaryPdf(pdfData);
-    const safeFilename = `Resumen_Facop_${filenameLabel}.pdf`;
+    const safeFilename = `Resumen_FACOP_QUITO_${filenameLabel}.pdf`;
 
     return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,
