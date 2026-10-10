@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import DashboardClient from "./DashboardClient";
-import type { AppointmentData, DoctorOption } from "./DashboardClient";
+import type { AppointmentData, DoctorOption, CourseSummaryData, DoctorExpenseData } from "./DashboardClient";
 import { ShieldAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +39,8 @@ export default async function DashboardPage() {
 
   const supabase = createAdminClient();
 
-  // 2. Cargar catálogo de doctores, citas históricas y facturas emitidas
-  const [apptsRes, doctorsRes, invoicesRes] = await Promise.all([
+  // 2. Cargar doctores, citas históricas, facturas emitidas, cursos, inscripciones, módulos y gastos
+  const [apptsRes, doctorsRes, invoicesRes, cursosRes, enrolRes, moduloInscripcionesRes, expensesRes] = await Promise.all([
     supabase
       .from("appointments")
       .select(
@@ -53,13 +53,39 @@ export default async function DashboardPage() {
       .order("full_name"),
     supabase
       .from("invoices")
-      .select("id, xml_url, invoice_number, total, sri_status, created_at")
+      .select("id, xml_url, invoice_number, total, sri_status, created_at, invoice_items(description, total)")
       .neq("sri_status", "cancelled")
       .neq("sri_status", "rejected"),
+    supabase
+      .from("cursos")
+      .select("id, name, status, start_date, end_date, max_students, total_cost, curso_modulos(id, cost)")
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("curso_inscripciones")
+      .select("id, course_id, status, invoice_id, invoices:invoices(id, total, sri_status)"),
+    supabase
+      .from("curso_modulo_inscripciones")
+      .select("id, enrollment_id, module_id, invoice_id, billing_status, invoices:invoices(id, total, sri_status), curso_modulos:curso_modulos(course_id, cost)"),
+    supabase
+      .from("expenses")
+      .select("id, expense_date, total, supplier_name, supplier_ruc, description, category, status")
+      .eq("status", "registered"),
   ]);
 
   const rawAppointments = apptsRes.data || [];
   const rawInvoices = invoicesRes.data || [];
+  const rawCursos = cursosRes.data || [];
+  const rawEnrollments = enrolRes.data || [];
+  const rawModuloInscriptions = moduloInscripcionesRes.data || [];
+  const rawExpenses = expensesRes.data || [];
+
+  // Mapear inscritos por curso
+  const studentCountMap: Record<string, number> = {};
+  rawEnrollments.forEach((e: any) => {
+    if (e.status === "enrolled" || e.status === "completed") {
+      studentCountMap[e.course_id] = (studentCountMap[e.course_id] || 0) + 1;
+    }
+  });
 
   // Mapear facturas por appointment_id (guardado en xml_url)
   const invoiceMap = new Map<string, { id: string; total: number; invoice_number: string; sri_status: string }>();
@@ -78,6 +104,81 @@ export default async function DashboardPage() {
         current.total += amount;
       }
     }
+  });
+
+  // Calcular montos facturados por cada curso
+  const courseBilledMap: Record<string, { total: number; invoiceIds: Set<string> }> = {};
+  rawCursos.forEach((c: any) => {
+    courseBilledMap[c.id] = { total: 0, invoiceIds: new Set() };
+  });
+
+  // 1. Por módulos facturados con invoice_id
+  rawModuloInscriptions.forEach((mi: any) => {
+    const courseId = mi.curso_modulos?.course_id;
+    if (courseId && courseBilledMap[courseId] && mi.invoice_id) {
+      if (!courseBilledMap[courseId].invoiceIds.has(mi.invoice_id)) {
+        courseBilledMap[courseId].invoiceIds.add(mi.invoice_id);
+        const invTotal = Number(mi.invoices?.total || 0);
+        if (invTotal > 0 && mi.invoices?.sri_status !== "cancelled" && mi.invoices?.sri_status !== "rejected") {
+          courseBilledMap[courseId].total += invTotal;
+        }
+      }
+    }
+  });
+
+  // 2. Por inscripciones completas con invoice_id
+  rawEnrollments.forEach((e: any) => {
+    const courseId = e.course_id;
+    if (courseId && courseBilledMap[courseId] && e.invoice_id) {
+      if (!courseBilledMap[courseId].invoiceIds.has(e.invoice_id)) {
+        courseBilledMap[courseId].invoiceIds.add(e.invoice_id);
+        const invTotal = Number(e.invoices?.total || 0);
+        if (invTotal > 0 && e.invoices?.sri_status !== "cancelled" && e.invoices?.sri_status !== "rejected") {
+          courseBilledMap[courseId].total += invTotal;
+        }
+      }
+    }
+  });
+
+  // 3. Por ítems de facturas cuyo texto coincida con el nombre del curso
+  rawInvoices.forEach((inv: any) => {
+    const items = inv.invoice_items || [];
+    items.forEach((item: any) => {
+      const desc = (item.description || "").toLowerCase();
+      rawCursos.forEach((c: any) => {
+        const courseName = (c.name || "").toLowerCase();
+        if (courseName && desc.includes(courseName)) {
+          if (!courseBilledMap[c.id].invoiceIds.has(inv.id)) {
+            courseBilledMap[c.id].invoiceIds.add(inv.id);
+            const itemTotal = Number(item.total || inv.total || 0);
+            if (itemTotal > 0) {
+              courseBilledMap[c.id].total += itemTotal;
+            }
+          }
+        }
+      });
+    });
+  });
+
+  const courses: CourseSummaryData[] = rawCursos.map((c: any) => {
+    const billedInfo = courseBilledMap[c.id] || { total: 0, invoiceIds: new Set() };
+    return {
+      id: c.id,
+      name: c.name,
+      status: c.status || "draft",
+      start_date: c.start_date || "",
+      end_date: c.end_date || "",
+      max_students: c.max_students ?? null,
+      total_cost: Number(c.total_cost) || 0,
+      enrolled_count: studentCountMap[c.id] || 0,
+      modules_count: Array.isArray(c.curso_modulos) ? c.curso_modulos.length : 0,
+      billed_amount: billedInfo.total,
+      formatted_billed: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(billedInfo.total),
+      invoices_count: billedInfo.invoiceIds.size,
+    };
   });
 
   const doctors: DoctorOption[] = (doctorsRes.data || []).map((d: any) => ({
@@ -111,6 +212,8 @@ export default async function DashboardPage() {
     <DashboardClient
       initialAppointments={appointments}
       doctors={doctors}
+      courses={courses}
+      expenses={rawExpenses}
     />
   );
 }

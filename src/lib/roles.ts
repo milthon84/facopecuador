@@ -117,7 +117,7 @@ export interface ResourceDef {
 export const ALL_RESOURCES: readonly ResourceDef[] = [
   // Clínica
   { section: "Clínica",       path: "/erp",              label: "Agenda", hasEdit: true },
-  { section: "Clínica",       path: "/erp/dashboard",    label: "Resumen de Citas y Atenciones", hasEdit: false },
+  { section: "Clínica",       path: "/erp/dashboard",    label: "Resumen Clínica", hasEdit: false },
   { section: "Clínica",       path: "/erp/calendario",   label: "Calendario", hasEdit: true },
   { section: "Clínica",       path: "/erp/pacientes",    label: "Pacientes", hasEdit: true },
   { section: "Clínica",       path: "/erp/horarios",     label: "Horarios", hasEdit: true },

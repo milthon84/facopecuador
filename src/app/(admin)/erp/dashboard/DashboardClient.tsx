@@ -4,26 +4,21 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Calendar,
-  Clock,
   CheckCircle2,
-  XCircle,
-  AlertCircle,
   TrendingUp,
-  Users,
-  Stethoscope,
   ChevronLeft,
   ChevronRight,
-  Filter,
-  Download,
   Printer,
-  Search,
-  ArrowRight,
-  Activity,
   CalendarDays,
-  Sparkles,
-  Percent,
   FileSpreadsheet,
-  Award
+  Award,
+  GraduationCap,
+  BookOpen,
+  ArrowUpRight,
+  Stethoscope,
+  DollarSign,
+  Wallet,
+  Users
 } from "lucide-react";
 import { formatTimeLocal } from "@/lib/availability";
 
@@ -69,17 +64,74 @@ export interface DoctorOption {
   photo_url?: string | null;
 }
 
+export interface CourseSummaryData {
+  id: string;
+  name: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  max_students?: number | null;
+  total_cost?: number;
+  enrolled_count: number;
+  modules_count: number;
+  billed_amount: number;
+  formatted_billed: string;
+  invoices_count: number;
+}
+
+export interface DoctorExpenseData {
+  id: string;
+  expense_date: string;
+  total: number;
+  supplier_name: string | null;
+  supplier_ruc?: string | null;
+  description: string | null;
+  category: string | null;
+}
+
 type PeriodType = "day" | "week" | "month" | "year" | "custom";
 
 interface Props {
   initialAppointments: AppointmentData[];
   doctors: DoctorOption[];
+  courses?: CourseSummaryData[];
+  expenses?: DoctorExpenseData[];
 }
 
-export default function DashboardClient({ initialAppointments, doctors }: Props) {
+const COURSE_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
+  draft:       { label: "Borrador", cls: "bg-gray-100 text-gray-700 border-gray-200" },
+  active:      { label: "Abierto", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  in_progress: { label: "En Curso", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  completed:   { label: "Finalizado", cls: "bg-lilac-50 text-lilac-700 border-lilac-200" },
+  cancelled:   { label: "Cancelado", cls: "bg-rose-50 text-rose-700 border-rose-200" },
+};
+
+const formatDateShort = (d: string) => {
+  if (!d) return "—";
+  try {
+    const parts = d.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0].slice(2)}`;
+    }
+    return new Date(d + "T12:00:00").toLocaleDateString("es-EC", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+  } catch {
+    return d;
+  }
+};
+
+export default function DashboardClient({
+  initialAppointments,
+  doctors,
+  courses = [],
+  expenses = []
+}: Props) {
   // Period Mode
   const [period, setPeriod] = useState<PeriodType>("month");
-  
+
   // Date anchors (Ecuador UTC-5 base)
   const todayStr = useMemo(() => {
     return new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
@@ -88,7 +140,7 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
   const [selectedDay, setSelectedDay] = useState<string>(todayStr);
   const [selectedMonth, setSelectedMonth] = useState<string>(todayStr.slice(0, 7)); // YYYY-MM
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  
+
   // Custom range
   const [customStart, setCustomStart] = useState<string>(todayStr);
   const [customEnd, setCustomEnd] = useState<string>(todayStr);
@@ -100,9 +152,9 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
       const start = new Date(Date.UTC(y, m - 1, d, 5, 0, 0));
       const end = new Date(Date.UTC(y, m - 1, d + 1, 4, 59, 59));
       const label = new Date(selectedDay + "T12:00:00-05:00").toLocaleDateString("es-EC", {
-        weekday: "long",
+        weekday: "short",
         day: "numeric",
-        month: "long",
+        month: "short",
         year: "numeric"
       });
       return { dateRange: { start, end }, periodLabel: label };
@@ -113,27 +165,30 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
       const cur = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
       const dayOfWeek = cur.getUTCDay(); // 0 is Sun, 1 is Mon
       const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      
+
       const mon = new Date(cur);
       mon.setUTCDate(cur.getUTCDate() + diffToMon);
-      
+
       const sun = new Date(mon);
       sun.setUTCDate(mon.getUTCDate() + 6);
 
       const start = new Date(Date.UTC(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate(), 5, 0, 0));
       const end = new Date(Date.UTC(sun.getUTCFullYear(), sun.getUTCMonth(), sun.getUTCDate() + 1, 4, 59, 59));
 
-      const label = `Semana del ${mon.getUTCDate()} ${mon.toLocaleDateString("es-EC", { month: "short" })} al ${sun.getUTCDate()} ${sun.toLocaleDateString("es-EC", { month: "short", year: "numeric" })}`;
+      const label = `${mon.getUTCDate()} ${mon.toLocaleDateString("es-EC", { month: "short" })} - ${sun.getUTCDate()} ${sun.toLocaleDateString("es-EC", { month: "short", year: "numeric" })}`;
       return { dateRange: { start, end }, periodLabel: label };
     }
 
     if (period === "month") {
       const [y, m] = selectedMonth.split("-").map(Number);
       const start = new Date(Date.UTC(y, m - 1, 1, 5, 0, 0));
-      const lastDay = new Date(y, m, 0).getDate();
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
       const end = new Date(Date.UTC(y, m - 1, lastDay + 1, 4, 59, 59));
-      const label = new Date(y, m - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
-      return { dateRange: { start, end }, periodLabel: label.charAt(0).toUpperCase() + label.slice(1) };
+      const label = new Date(Date.UTC(y, m - 1, 1, 12, 0, 0)).toLocaleDateString("es-EC", {
+        month: "long",
+        year: "numeric",
+      });
+      return { dateRange: { start, end }, periodLabel: label };
     }
 
     if (period === "year") {
@@ -147,27 +202,32 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
     const [ey, em, ed] = customEnd.split("-").map(Number);
     const start = new Date(Date.UTC(sy, sm - 1, sd, 5, 0, 0));
     const end = new Date(Date.UTC(ey, em - 1, ed + 1, 4, 59, 59));
-    return { dateRange: { start, end }, periodLabel: `${customStart} a ${customEnd}` };
+    const label = `${customStart} al ${customEnd}`;
+    return { dateRange: { start, end }, periodLabel: label };
   }, [period, selectedDay, selectedMonth, selectedYear, customStart, customEnd]);
 
-  // Filtered appointments by dateRange
+  // Filter Appointments by Selected Range
   const periodAppointments = useMemo(() => {
-    const sTime = dateRange.start.getTime();
-    const eTime = dateRange.end.getTime();
-
     return initialAppointments.filter((a) => {
-      const t = new Date(a.starts_at).getTime();
-      return t >= sTime && t <= eTime;
+      const apptDate = new Date(a.starts_at);
+      return apptDate >= dateRange.start && apptDate <= dateRange.end;
     });
   }, [initialAppointments, dateRange]);
 
-  // Key Metrics for Period
+  // Filter Expenses by Selected Range
+  const periodExpenses = useMemo(() => {
+    return expenses.filter((e) => {
+      if (!e.expense_date) return false;
+      const expDate = new Date(e.expense_date + "T12:00:00-05:00");
+      return expDate >= dateRange.start && expDate <= dateRange.end;
+    });
+  }, [expenses, dateRange]);
+
+  // Aggregate Metrics for Clinic
   const stats = useMemo(() => {
     const total = periodAppointments.length;
     const attended = periodAppointments.filter((a) => a.status === "attended").length;
     const scheduled = periodAppointments.filter((a) => a.status === "scheduled").length;
-    const noShow = periodAppointments.filter((a) => a.status === "no_show").length;
-    const cancelled = periodAppointments.filter((a) => a.status === "cancelled").length;
 
     const completedConsultations = periodAppointments.filter((a) => {
       return a.status === "attended" && a.dental_consultation;
@@ -189,154 +249,210 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
       currency: "USD",
     }).format(totalBilled);
 
-    const attendedPct = total > 0 ? Math.round((attended / total) * 100) : 0;
-    const lossPct = total > 0 ? Math.round(((noShow + cancelled) / total) * 100) : 0;
-
-    // Unique Patients
-    const uniquePatientIds = new Set(periodAppointments.map((a) => a.patient_id).filter(Boolean));
-    const uniquePatientsCount = uniquePatientIds.size;
-
     return {
       total,
       attended,
       scheduled,
-      noShow,
-      cancelled,
       completedConsultations,
       totalBilled,
       billedInvoicesCount,
       formattedTotalBilled,
-      attendedPct,
-      lossPct,
-      uniquePatientsCount,
     };
   }, [periodAppointments]);
 
-  // Doctor Breakdown Stats (Only doctors with appointments in this period)
+  // Doctor Breakdown Stats & Doctor Expenses
   const doctorStats = useMemo(() => {
     const map = new Map<string, {
       doctor: DoctorOption;
       total: number;
       attended: number;
-      scheduled: number;
-      noShow: number;
-      cancelled: number;
-      consultations: number;
       billedTotal: number;
+      formattedBilled: string;
+      expensesPaid: number;
+      formattedExpensesPaid: string;
+      netTotal: number;
+      formattedNetTotal: string;
+      expensesCount: number;
     }>();
 
     let unassignedTotal = 0;
     let unassignedAttended = 0;
     let unassignedBilled = 0;
 
+    // Inicializar doctores
     periodAppointments.forEach((a) => {
       const billed = Number(a.billed_amount || a.invoice?.total || 0);
 
-      if (a.doctor_id) {
-        if (!map.has(a.doctor_id)) {
-          const docObj: DoctorOption = a.doctor || doctors.find((d) => d.id === a.doctor_id) || {
-            id: a.doctor_id,
-            full_name: "Doctor asignado",
-            specialty: "Odontología",
-          };
-          map.set(a.doctor_id, {
-            doctor: docObj,
-            total: 0,
-            attended: 0,
-            scheduled: 0,
-            noShow: 0,
-            cancelled: 0,
-            consultations: 0,
-            billedTotal: 0,
-          });
-        }
-        const item = map.get(a.doctor_id)!;
-        item.total++;
-        item.billedTotal += billed;
-        if (a.status === "attended") {
-          item.attended++;
-          if (a.dental_consultation) item.consultations++;
-        }
-        if (a.status === "scheduled") item.scheduled++;
-        if (a.status === "no_show") item.noShow++;
-        if (a.status === "cancelled") item.cancelled++;
-      } else {
+      if (!a.doctor_id) {
         unassignedTotal++;
-        unassignedBilled += billed;
         if (a.status === "attended") unassignedAttended++;
+        unassignedBilled += billed;
+        return;
+      }
+
+      const docObj = a.doctor || doctors.find((d) => d.id === a.doctor_id) || {
+        id: a.doctor_id,
+        full_name: "Doctor Desconocido",
+        specialty: "",
+        photo_url: null,
+      };
+
+      const curr = map.get(a.doctor_id) || {
+        doctor: docObj,
+        total: 0,
+        attended: 0,
+        billedTotal: 0,
+        formattedBilled: "$0.00",
+        expensesPaid: 0,
+        formattedExpensesPaid: "$0.00",
+        netTotal: 0,
+        formattedNetTotal: "$0.00",
+        expensesCount: 0,
+      };
+
+      curr.total++;
+      if (a.status === "attended") curr.attended++;
+      curr.billedTotal += billed;
+
+      map.set(a.doctor_id, curr);
+    });
+
+    // Mapear gastos asignados a cada doctor
+    periodExpenses.forEach((exp) => {
+      const sName = (exp.supplier_name || "").toLowerCase().trim();
+      const desc = (exp.description || "").toLowerCase().trim();
+      const expAmount = Number(exp.total || 0);
+
+      for (const doc of doctors) {
+        const docName = (doc.full_name || "").toLowerCase().trim();
+        const parts = docName.split(" ").filter((p) => p.length > 2);
+
+        let matches = false;
+        if (sName && docName && sName.includes(docName)) matches = true;
+        else if (desc && docName && desc.includes(docName)) matches = true;
+        else if (parts.length >= 2) {
+          if (sName.includes(parts[0]) && sName.includes(parts[parts.length - 1])) matches = true;
+          else if (desc.includes(parts[0]) && desc.includes(parts[parts.length - 1])) matches = true;
+        }
+
+        if (matches) {
+          let curr = map.get(doc.id);
+          if (!curr) {
+            curr = {
+              doctor: doc,
+              total: 0,
+              attended: 0,
+              billedTotal: 0,
+              formattedBilled: "$0.00",
+              expensesPaid: 0,
+              formattedExpensesPaid: "$0.00",
+              netTotal: 0,
+              formattedNetTotal: "$0.00",
+              expensesCount: 0,
+            };
+            map.set(doc.id, curr);
+          }
+          curr.expensesPaid += expAmount;
+          curr.expensesCount++;
+          break;
+        }
       }
     });
 
-    // Solo los doctores que tienen citas / atenciones en este periodo
-    const list = Array.from(map.values())
-      .filter((item) => item.total > 0)
-      .map((item) => ({
+    const list = Array.from(map.values()).map((item) => {
+      const net = item.billedTotal - item.expensesPaid;
+      return {
         ...item,
+        netTotal: net,
         formattedBilled: new Intl.NumberFormat("es-EC", {
           style: "currency",
           currency: "USD",
         }).format(item.billedTotal),
-      }));
+        formattedExpensesPaid: new Intl.NumberFormat("es-EC", {
+          style: "currency",
+          currency: "USD",
+        }).format(item.expensesPaid),
+        formattedNetTotal: new Intl.NumberFormat("es-EC", {
+          style: "currency",
+          currency: "USD",
+        }).format(net),
+      };
+    });
 
-    // Sort by total billed descending (or total appointments if equal)
-    list.sort((a, b) => b.billedTotal - a.billedTotal || b.total - a.total);
+    list.sort((a, b) => b.billedTotal - a.billedTotal || b.netTotal - a.netTotal || b.attended - a.attended || b.total - a.total);
+
+    const totalDoctorExpenses = list.reduce((acc, d) => acc + d.expensesPaid, 0);
+    const totalDoctorExpensesCount = list.reduce((acc, d) => acc + d.expensesCount, 0);
 
     return {
       list,
       unassignedTotal,
       unassignedAttended,
       unassignedBilled,
+      totalDoctorExpenses,
+      totalDoctorExpensesCount,
+      formattedTotalDoctorExpenses: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(totalDoctorExpenses),
       formattedUnassignedBilled: new Intl.NumberFormat("es-EC", {
         style: "currency",
         currency: "USD",
       }).format(unassignedBilled),
     };
-  }, [periodAppointments, doctors]);
+  }, [periodAppointments, periodExpenses, doctors]);
 
-  // Time Slot Distribution (Morning, Midday, Afternoon)
-  const timeDistribution = useMemo(() => {
-    let morning = 0; // 07:00 - 11:59
-    let midday = 0;  // 12:00 - 14:59
-    let afternoon = 0; // 15:00 - 20:00
+  // Ganancia de Clínica (Facturación Clínica - Pagos a Doctores)
+  const clinicProfit = stats.totalBilled - doctorStats.totalDoctorExpenses;
+  const formattedClinicProfit = new Intl.NumberFormat("es-EC", {
+    style: "currency",
+    currency: "USD",
+  }).format(clinicProfit);
 
-    periodAppointments.forEach((a) => {
-      const dt = new Date(a.starts_at);
-      // In Ecuador timezone UTC-5
-      const hours = dt.getUTCHours() - 5;
-      const normalizedHours = hours < 0 ? hours + 24 : hours;
-      if (normalizedHours < 12) morning++;
-      else if (normalizedHours < 15) midday++;
-      else afternoon++;
-    });
+  // Aggregate Metrics for Courses
+  const courseStats = useMemo(() => {
+    const activeOrProgress = courses.filter((c) => c.status === "active" || c.status === "in_progress");
+    const totalStudents = courses.reduce((acc, c) => acc + (c.enrolled_count || 0), 0);
+    const totalBilledCourses = courses.reduce((acc, c) => acc + (c.billed_amount || 0), 0);
+    const totalCourseInvoices = courses.reduce((acc, c) => acc + (c.invoices_count || 0), 0);
 
-    return { morning, midday, afternoon };
-  }, [periodAppointments]);
-
-  // Weekday Activity Distribution
-  const weekdayDistribution = useMemo(() => {
-    const days = [
-      { name: "Lun", count: 0, attended: 0 },
-      { name: "Mar", count: 0, attended: 0 },
-      { name: "Mié", count: 0, attended: 0 },
-      { name: "Jue", count: 0, attended: 0 },
-      { name: "Vie", count: 0, attended: 0 },
-      { name: "Sáb", count: 0, attended: 0 },
-      { name: "Dom", count: 0, attended: 0 },
-    ];
-
-    periodAppointments.forEach((a) => {
-      const dt = new Date(a.starts_at);
-      const ecDate = new Date(dt.toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
-      const day = ecDate.getDay(); // 0 is Sun, 1 is Mon
-      const idx = day === 0 ? 6 : day - 1;
-      if (days[idx]) {
-        days[idx].count++;
-        if (a.status === "attended") days[idx].attended++;
+    // Identificar gastos relacionados a cursos
+    let totalCourseExpenses = 0;
+    let courseExpensesCount = 0;
+    periodExpenses.forEach((exp) => {
+      const desc = (exp.description || "").toLowerCase();
+      const cat = (exp.category || "").toLowerCase();
+      if (desc.includes("curso") || desc.includes("modulo") || desc.includes("módulo") || desc.includes("diplomado") || cat.includes("curso")) {
+        totalCourseExpenses += Number(exp.total || 0);
+        courseExpensesCount++;
       }
     });
 
-    return days;
-  }, [periodAppointments]);
+    const courseProfit = totalBilledCourses - totalCourseExpenses;
+
+    return {
+      totalCourses: courses.length,
+      activeCoursesCount: activeOrProgress.length,
+      totalStudents,
+      totalBilledCourses,
+      totalCourseInvoices,
+      totalCourseExpenses,
+      courseExpensesCount,
+      courseProfit,
+      formattedTotalBilledCourses: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(totalBilledCourses),
+      formattedTotalCourseExpenses: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(totalCourseExpenses),
+      formattedCourseProfit: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(courseProfit),
+    };
+  }, [courses, periodExpenses]);
 
   // Navigation handlers
   const handlePrevPeriod = () => {
@@ -421,428 +537,398 @@ export default function DashboardClient({ initialAppointments, doctors }: Props)
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `resumen_citas_atenciones_${periodLabel.replace(/\s+/g, "_")}.csv`);
+    link.setAttribute("download", `resumen_${periodLabel.replace(/\s+/g, "_")}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      {/* Header & Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-lilac-100 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-lilac-700 uppercase tracking-wider mb-1">
-            <TrendingUp size={16} className="text-lilac-600" />
-            Panel Ejecutivo y Estadísticas
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-ink-950 tracking-tight">
-            Resumen de Citas y Atenciones
+    <div className="max-w-7xl mx-auto space-y-3 pb-6 print:space-y-2 print:pb-0 print:max-w-full">
+      {/* Barra Superior Compacta: Resumen */}
+      <div className="bg-white px-4 py-2 sm:py-2.5 rounded-2xl border border-lilac-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-2 print:border-none print:shadow-none print:p-0 print:mb-1">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">
+            Resumen
           </h1>
-          <p className="text-xs sm:text-sm text-ink-500 mt-0.5">
-            Métricas de productividad clínica, efectividad de turnos y desempeño por doctor.
-          </p>
+          <span className="hidden print:inline-block text-[11px] font-semibold text-ink-600 border px-2 py-0.5 rounded-md">
+            {periodLabel}
+          </span>
         </div>
 
-        {/* Acciones de exportar e imprimir */}
-        <div className="flex items-center gap-2 self-start md:self-center print:hidden">
+        {/* Filtros y Acciones */}
+        <div className="flex items-center gap-2 flex-wrap print:hidden">
+          {/* Tabs Periodo */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-lilac-50/80 rounded-xl border border-lilac-100">
+            {(["day", "week", "month", "year", "custom"] as const).map((p) => {
+              const labels: Record<string, string> = {
+                day: "Día",
+                week: "Sem",
+                month: "Mes",
+                year: "Año",
+                custom: "Personalizado"
+              };
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriod(p)}
+                  className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    period === p
+                      ? "bg-lilac-600 text-white shadow-xs"
+                      : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
+                  }`}
+                >
+                  {labels[p]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Navegador de Fecha */}
+          {period !== "custom" ? (
+            <div className="flex items-center bg-white border border-lilac-200 rounded-xl overflow-hidden p-0.5 shadow-xs text-xs">
+              <button
+                type="button"
+                onClick={handlePrevPeriod}
+                className="p-1 hover:bg-lilac-50 rounded-lg text-ink-700 transition"
+                title="Período anterior"
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <div className="px-2 font-bold text-ink-900 flex items-center gap-1 capitalize whitespace-nowrap text-xs">
+                <Calendar size={11} className="text-lilac-600" />
+                <span>{periodLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleNextPeriod}
+                className="p-1 hover:bg-lilac-50 rounded-lg text-ink-700 transition"
+                title="Período siguiente"
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-xs">
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="px-1.5 py-0.5 border border-lilac-200 rounded-lg bg-white font-medium text-xs"
+              />
+              <span className="text-ink-400 font-semibold">-</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="px-1.5 py-0.5 border border-lilac-200 rounded-lg bg-white font-medium text-xs"
+              />
+            </div>
+          )}
+
+          {/* Botones de acción */}
           <button
             type="button"
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 transition-colors shadow-xs"
             title="Descargar reporte en formato Excel/CSV"
           >
-            <FileSpreadsheet size={15} className="text-green-600" />
-            <span className="hidden sm:inline">Exportar</span> CSV
+            <FileSpreadsheet size={13} className="text-emerald-600" />
+            <span className="hidden sm:inline">CSV</span>
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 transition-colors shadow-xs"
             title="Imprimir resumen ejecutivo"
           >
-            <Printer size={15} className="text-lilac-600" />
+            <Printer size={13} className="text-lilac-600" />
             <span className="hidden sm:inline">Imprimir</span>
           </button>
         </div>
       </div>
 
-      {/* Selector de Período */}
-      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-lilac-100 shadow-sm space-y-4 print:hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Tabs de Periodo */}
-          <div className="flex items-center gap-1 p-1 bg-lilac-50/70 rounded-2xl border border-lilac-100 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => setPeriod("day")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                period === "day"
-                  ? "bg-lilac-600 text-white shadow-sm"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              Día
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("week")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                period === "week"
-                  ? "bg-lilac-600 text-white shadow-sm"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              Semana
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("month")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                period === "month"
-                  ? "bg-lilac-600 text-white shadow-sm"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              Mes
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("year")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                period === "year"
-                  ? "bg-lilac-600 text-white shadow-sm"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              Año
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriod("custom")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                period === "custom"
-                  ? "bg-lilac-600 text-white shadow-sm"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              Personalizado
-            </button>
+      {/* BLOQUE 1: CLÍNICA */}
+      <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-lilac-100 shadow-xs space-y-2.5 print:border-gray-300 print:shadow-none print:p-2">
+        <div className="flex items-center justify-between border-b border-lilac-50 pb-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-lilac-900 uppercase tracking-wider">
+            <Stethoscope size={15} className="text-lilac-600" />
+            <span>CLÍNICA</span>
+          </div>
+          <span className="text-[11px] text-ink-500 font-medium">{periodLabel}</span>
+        </div>
+
+        {/* 4 KPIs de Clínica: Citas, Atenciones, Facturación y Gastos */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 print:grid-cols-4 print:gap-1.5">
+          {/* Citas Totales */}
+          <div className="bg-lilac-50/40 p-2.5 rounded-xl border border-lilac-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-ink-500 uppercase tracking-wider">Citas Totales</div>
+              <div className="text-xl font-black text-ink-950 leading-tight mt-0.5">{stats.total}</div>
+              <div className="text-[10px] text-ink-500">
+                <span className="text-lilac-700 font-semibold">{stats.scheduled} agendadas</span>
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-lilac-100 text-lilac-700 flex items-center justify-center shrink-0">
+              <CalendarDays size={13} />
+            </div>
           </div>
 
-          {/* Navegación y Fecha Seleccionada */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {period !== "custom" ? (
-              <div className="flex items-center bg-lilac-50/50 border border-lilac-200 rounded-2xl overflow-hidden p-1 shadow-sm">
-                <button
-                  type="button"
-                  onClick={handlePrevPeriod}
-                  className="p-1.5 hover:bg-white rounded-xl text-ink-700 transition"
-                  title="Período anterior"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <div className="px-3 text-xs font-bold text-ink-900 flex items-center gap-1.5 capitalize">
-                  <Calendar size={13} className="text-lilac-600" />
-                  <span>{periodLabel}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleNextPeriod}
-                  className="p-1.5 hover:bg-white rounded-xl text-ink-700 transition"
-                  title="Período siguiente"
-                >
-                  <ChevronRight size={16} />
-                </button>
+          {/* Atenciones */}
+          <div className="bg-emerald-50/40 p-2.5 rounded-xl border border-emerald-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Atenciones</div>
+              <div className="text-xl font-black text-emerald-700 leading-tight mt-0.5">{stats.attended}</div>
+              <div className="text-[10px] text-emerald-800 font-medium">
+                {stats.completedConsultations} con evolución
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className="text-xs px-2.5 py-1.5 border border-lilac-200 rounded-xl bg-white font-medium"
-                />
-                <span className="text-xs text-ink-400">a</span>
-                <input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className="text-xs px-2.5 py-1.5 border border-lilac-200 rounded-xl bg-white font-medium"
-                />
-              </div>
-            )}
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={13} />
+            </div>
           </div>
+
+          {/* Facturación */}
+          <div className="bg-purple-50/40 p-2.5 rounded-xl border border-purple-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-purple-800 uppercase tracking-wider">Facturación</div>
+              <div className="text-xl font-black text-ink-950 leading-tight mt-0.5">{stats.formattedTotalBilled}</div>
+              <div className="text-[10px] text-ink-500">
+                <span className="text-purple-700 font-semibold">{stats.billedInvoicesCount} facturas</span>
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+              <TrendingUp size={13} />
+            </div>
+          </div>
+
+          {/* Gastos */}
+          <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Gastos</div>
+              <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{doctorStats.formattedTotalDoctorExpenses}</div>
+              <div className="text-[10px] text-amber-700 font-medium">
+                Pagos a doctores
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <DollarSign size={13} />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla Desempeño por Doctor */}
+        <div className="overflow-x-auto pt-1">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-lilac-100 text-ink-400 font-bold uppercase text-[10px]">
+                <th className="pb-1 font-semibold">Doctor / Odontólogo</th>
+                <th className="pb-1 text-center font-semibold">Citas Asignadas</th>
+                <th className="pb-1 text-center font-semibold">Atenciones</th>
+                <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-lilac-50/70">
+              {doctorStats.list.map((item) => (
+                <tr key={item.doctor.id} className="hover:bg-lilac-50/30 transition">
+                  <td className="py-1.5 pr-2">
+                    <div className="flex items-center gap-2">
+                      {item.doctor.photo_url ? (
+                        <img
+                          src={item.doctor.photo_url}
+                          alt={item.doctor.full_name}
+                          className="w-5 h-5 rounded-full object-cover border border-lilac-200 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-lilac-100 text-lilac-700 flex items-center justify-center font-bold text-[9px] shrink-0">
+                          {item.doctor.full_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-bold text-ink-900 leading-tight text-xs">{item.doctor.full_name}</div>
+                        <div className="text-[10px] text-ink-400 leading-tight">{item.doctor.specialty || "Odontología General"}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-1.5 text-center font-bold text-ink-900">{item.total}</td>
+                  <td className="py-1.5 text-center">
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px]">
+                      {item.attended}
+                    </span>
+                  </td>
+                  <td className="py-1.5 text-right font-extrabold text-ink-950 text-xs">
+                    {item.formattedBilled}
+                  </td>
+                </tr>
+              ))}
+
+              {doctorStats.unassignedTotal > 0 && (
+                <tr className="bg-amber-50/30">
+                  <td className="py-1.5 pr-2 font-medium text-amber-800 flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-[9px] shrink-0">
+                      ?
+                    </div>
+                    <div>
+                      <div className="font-bold text-amber-900 leading-tight text-xs">Sin doctor asignado</div>
+                      <div className="text-[10px] text-amber-700 leading-tight">Pendientes de asignación</div>
+                    </div>
+                  </td>
+                  <td className="py-1.5 text-center font-bold text-amber-900">{doctorStats.unassignedTotal}</td>
+                  <td className="py-1.5 text-center font-bold text-emerald-700">{doctorStats.unassignedAttended}</td>
+                  <td className="py-1.5 text-right font-extrabold text-amber-900 text-xs">
+                    {doctorStats.formattedUnassignedBilled}
+                  </td>
+                </tr>
+              )}
+
+              {doctorStats.list.length === 0 && doctorStats.unassignedTotal === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-3 text-center text-xs text-ink-400 italic">
+                    No hay registro de citas ni doctores en este período ({periodLabel}).
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Layout Principal: Columna Izquierda (KPIs + Desempeño por Doctor) y Columna Derecha (Estado de Citas & Distribución) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Columna Izquierda (2 spans) */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            {/* Total Citas */}
-            <div className="bg-white p-5 rounded-3xl border border-lilac-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="text-xs font-bold text-ink-500 uppercase tracking-wider">Total Citas</span>
-                <div className="w-8 h-8 rounded-xl bg-lilac-100 text-lilac-700 flex items-center justify-center">
-                  <CalendarDays size={16} />
-                </div>
-              </div>
-              <div>
-                <div className="text-3xl font-black text-ink-950">{stats.total}</div>
-                <div className="text-xs text-ink-500 mt-1 flex items-center gap-1.5">
-                  <span className="text-lilac-600 font-semibold">{stats.scheduled} agendadas</span>
-                  <span>·</span>
-                  <span>{stats.uniquePatientsCount} pacientes</span>
-                </div>
-              </div>
-              <div className="absolute right-0 bottom-0 w-24 h-24 bg-lilac-50/50 rounded-full blur-2xl pointer-events-none" />
-            </div>
+      {/* BLOQUE 2: CURSOS */}
+      <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-indigo-100 shadow-xs space-y-2.5 print:border-gray-300 print:shadow-none print:p-2">
+        <div className="flex items-center justify-between border-b border-indigo-50 pb-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 uppercase tracking-wider">
+            <GraduationCap size={15} className="text-indigo-600" />
+            <span>CURSOS</span>
+          </div>
+          <Link
+            href="/erp/cursos"
+            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5 print:hidden"
+          >
+            Gestionar cursos <ArrowUpRight size={12} />
+          </Link>
+        </div>
 
-            {/* Total Atenciones Realizadas */}
-            <div className="bg-white p-5 rounded-3xl border border-green-200 shadow-sm relative overflow-hidden flex flex-col justify-between bg-gradient-to-br from-white to-green-50/20">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="text-xs font-bold text-green-800 uppercase tracking-wider">Atenciones Realizadas</span>
-                <div className="w-8 h-8 rounded-xl bg-green-100 text-green-700 flex items-center justify-center">
-                  <CheckCircle2 size={16} />
-                </div>
-              </div>
-              <div>
-                <div className="text-3xl font-black text-green-700">{stats.attended}</div>
-                <div className="text-xs text-green-800 font-medium mt-1 flex items-center gap-1">
-                  <span>{stats.completedConsultations} con evolución clínica guardada</span>
-                </div>
+        {/* 4 KPIs de Cursos: Activos, Alumnos, Facturación y Gastos */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 print:grid-cols-4 print:gap-1.5">
+          {/* Cursos Activos */}
+          <div className="bg-indigo-50/40 p-2.5 rounded-xl border border-indigo-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider">Cursos Activos</div>
+              <div className="text-xl font-black text-indigo-950 leading-tight mt-0.5">{courseStats.activeCoursesCount}</div>
+              <div className="text-[10px] text-indigo-700 font-medium">
+                En ejecución / abiertos
               </div>
             </div>
-
-            {/* Total Facturado */}
-            <div className="bg-white p-5 rounded-3xl border border-lilac-100 shadow-sm relative overflow-hidden flex flex-col justify-between">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="text-xs font-bold text-ink-500 uppercase tracking-wider">Total Facturado</span>
-                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                  <TrendingUp size={16} />
-                </div>
-              </div>
-              <div>
-                <div className="text-3xl font-black text-ink-950">{stats.formattedTotalBilled}</div>
-                <div className="text-xs text-ink-500 mt-1 flex items-center gap-1.5">
-                  <span className="text-purple-700 font-semibold">{stats.billedInvoicesCount} facturas</span>
-                  <span>·</span>
-                  <span>{stats.attended} atenciones</span>
-                </div>
-              </div>
+            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+              <GraduationCap size={13} />
             </div>
           </div>
 
-          {/* Desglose y Ranking por Doctor */}
-          <div className="bg-white p-6 rounded-3xl border border-lilac-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-lilac-50 pb-3">
-              <div className="flex items-center gap-2">
-                <Award size={18} className="text-lilac-600" />
-                <h2 className="text-base font-bold text-ink-950">Desempeño y Facturación por Doctor</h2>
+          {/* Alumnos Matriculados */}
+          <div className="bg-blue-50/40 p-2.5 rounded-xl border border-blue-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-blue-900 uppercase tracking-wider">Alumnos</div>
+              <div className="text-xl font-black text-blue-950 leading-tight mt-0.5">{courseStats.totalStudents}</div>
+              <div className="text-[10px] text-blue-700 font-medium">
+                Matriculados
               </div>
-              <span className="text-xs text-ink-500">{periodLabel}</span>
             </div>
+            <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+              <Users size={13} />
+            </div>
+          </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-lilac-100 text-ink-400 font-bold uppercase text-[10px]">
-                    <th className="pb-2.5">Doctor / Odontólogo</th>
-                    <th className="pb-2.5 text-center">Citas Asignadas</th>
-                    <th className="pb-2.5 text-center">Atenciones</th>
-                    <th className="pb-2.5 text-center">Inasistencias</th>
-                    <th className="pb-2.5 text-right font-bold text-ink-900">Total Facturado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-lilac-50">
-                  {doctorStats.list.map((item) => (
-                    <tr key={item.doctor.id} className="hover:bg-lilac-50/40 transition">
-                      <td className="py-3 pr-2">
-                        <div className="flex items-center gap-2.5">
-                          {item.doctor.photo_url ? (
-                            <img
-                              src={item.doctor.photo_url}
-                              alt={item.doctor.full_name}
-                              className="w-7 h-7 rounded-full object-cover border border-lilac-200 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-lilac-100 text-lilac-700 flex items-center justify-center font-bold text-[11px] shrink-0">
-                              {item.doctor.full_name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-bold text-ink-900">{item.doctor.full_name}</div>
-                            <div className="text-[10px] text-ink-500">{item.doctor.specialty || "Odontología General"}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 text-center font-bold text-ink-900">{item.total}</td>
-                      <td className="py-3 text-center">
-                        <span className="inline-flex items-center gap-1 font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
-                          {item.attended}
-                        </span>
-                      </td>
-                      <td className="py-3 text-center text-amber-700 font-medium">
-                        {item.noShow + item.cancelled}
-                      </td>
-                      <td className="py-3 text-right">
-                        <div className="font-extrabold text-ink-950 text-sm">
-                          {item.formattedBilled}
-                        </div>
-                        <div className="text-[10px] text-ink-400 font-medium">
-                          {item.attended > 0
-                            ? `Prom. $${(item.billedTotal / item.attended).toFixed(2)}/atención`
-                            : "Sin atenciones"}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+          {/* Facturación Cursos */}
+          <div className="bg-emerald-50/40 p-2.5 rounded-xl border border-emerald-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider">Facturación</div>
+              <div className="text-xl font-black text-emerald-700 leading-tight mt-0.5">{courseStats.formattedTotalBilledCourses}</div>
+              <div className="text-[10px] text-emerald-800 font-medium">
+                {courseStats.totalCourseInvoices} cobros
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <TrendingUp size={13} />
+            </div>
+          </div>
 
-                  {doctorStats.unassignedTotal > 0 && (
-                    <tr className="bg-amber-50/30">
-                      <td className="py-3 pr-2 font-medium text-amber-800 flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          ?
-                        </div>
-                        <div>
-                          <div className="font-bold text-amber-900">Sin doctor asignado</div>
-                          <div className="text-[10px] text-amber-700">Pendientes de asignación</div>
-                        </div>
-                      </td>
-                      <td className="py-3 text-center font-bold text-amber-900">{doctorStats.unassignedTotal}</td>
-                      <td className="py-3 text-center font-bold text-green-700">{doctorStats.unassignedAttended}</td>
-                      <td className="py-3 text-center text-amber-700">—</td>
-                      <td className="py-3 text-right font-extrabold text-amber-900 text-sm">
-                        {doctorStats.formattedUnassignedBilled}
-                      </td>
-                    </tr>
-                  )}
-
-                  {doctorStats.list.length === 0 && doctorStats.unassignedTotal === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-xs text-ink-500 italic bg-lilac-50/20">
-                        No hay registro de citas ni atenciones para ningún doctor en este período ({periodLabel}).
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          {/* Gastos Cursos */}
+          <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">Gastos</div>
+              <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{courseStats.formattedTotalCourseExpenses}</div>
+              <div className="text-[10px] text-amber-700 font-medium">
+                Egresos cursos
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <DollarSign size={13} />
             </div>
           </div>
         </div>
 
-        {/* Columna Derecha (1 span): Distribución por Estado y Horarios alineada con KPIs */}
-        <div className="lg:col-span-1 bg-white p-6 rounded-3xl border border-lilac-100 shadow-sm space-y-6">
-          {/* Distribución por Estado */}
-          <div>
-            <div className="flex items-center justify-between border-b border-lilac-50 pb-2.5 mb-3">
-              <h3 className="text-sm font-bold text-ink-950">Estado de Citas</h3>
-              <span className="text-[11px] text-ink-400">{stats.total} en total</span>
-            </div>
+        {/* Tabla Resumen de Cursos */}
+        <div className="overflow-x-auto pt-1">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-indigo-100 text-ink-400 font-bold uppercase text-[10px]">
+                <th className="pb-1 font-semibold">Curso</th>
+                <th className="pb-1 text-center font-semibold">Estado</th>
+                <th className="pb-1 text-center font-semibold">Fechas (Inicio - Fin)</th>
+                <th className="pb-1 text-center font-semibold">Alumnos</th>
+                <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-indigo-50/60">
+              {courses.map((c) => {
+                const badge = COURSE_STATUS_CONFIG[c.status] || COURSE_STATUS_CONFIG.draft;
 
-            <div className="space-y-2 text-xs">
-              <div>
-                <div className="flex justify-between font-semibold mb-1">
-                  <span className="text-green-700 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-green-500" /> Atendidas
-                  </span>
-                  <span className="text-ink-900">{stats.attended} ({stats.attendedPct}%)</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                  <div className="bg-green-500 h-full rounded-full" style={{ width: `${stats.attendedPct}%` }} />
-                </div>
-              </div>
+                return (
+                  <tr key={c.id} className="hover:bg-indigo-50/20 transition">
+                    <td className="py-1 pr-2">
+                      <div className="font-bold text-ink-900 leading-tight flex items-center gap-1.5 text-xs">
+                        <BookOpen size={11} className="text-indigo-600 shrink-0" />
+                        <span>{c.name}</span>
+                      </div>
+                      <div className="text-[10px] text-ink-400 pl-4">
+                        {c.modules_count > 0 ? `${c.modules_count} módulos programados` : "Módulos por definir"}
+                      </div>
+                    </td>
+                    <td className="py-1 text-center">
+                      <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold border ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    </td>
+                    <td className="py-1 text-center text-ink-600 font-medium text-[11px] whitespace-nowrap">
+                      {formatDateShort(c.start_date)} - {formatDateShort(c.end_date)}
+                    </td>
+                    <td className="py-1 text-center">
+                      <span className="font-bold text-xs text-ink-900">
+                        {c.enrolled_count}
+                      </span>
+                    </td>
+                    <td className="py-1 text-right">
+                      <div className="font-extrabold text-ink-950 text-xs">
+                        {c.formatted_billed}
+                      </div>
+                      <div className="text-[10px] text-ink-400">
+                        {c.invoices_count > 0 ? `${c.invoices_count} factura(s)` : "Sin facturas"}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
-              <div>
-                <div className="flex justify-between font-semibold mb-1">
-                  <span className="text-lilac-700 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-lilac-500" /> Agendadas pendientes
-                  </span>
-                  <span className="text-ink-900">
-                    {stats.scheduled} ({stats.total > 0 ? Math.round((stats.scheduled / stats.total) * 100) : 0}%)
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-lilac-500 h-full rounded-full"
-                    style={{ width: `${stats.total > 0 ? Math.round((stats.scheduled / stats.total) * 100) : 0}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between font-semibold mb-1">
-                  <span className="text-amber-700 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" /> No Asistieron
-                  </span>
-                  <span className="text-ink-900">
-                    {stats.noShow} ({stats.total > 0 ? Math.round((stats.noShow / stats.total) * 100) : 0}%)
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-amber-500 h-full rounded-full"
-                    style={{ width: `${stats.total > 0 ? Math.round((stats.noShow / stats.total) * 100) : 0}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between font-semibold mb-1">
-                  <span className="text-red-700 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-red-500" /> Canceladas
-                  </span>
-                  <span className="text-ink-900">
-                    {stats.cancelled} ({stats.total > 0 ? Math.round((stats.cancelled / stats.total) * 100) : 0}%)
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-red-500 h-full rounded-full"
-                    style={{ width: `${stats.total > 0 ? Math.round((stats.cancelled / stats.total) * 100) : 0}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Franjas Horarias */}
-          <div className="pt-4 border-t border-lilac-50">
-            <h3 className="text-sm font-bold text-ink-950 mb-3">Franjas Horarias con Mayor Afluencia</h3>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="p-3 bg-lilac-50/50 rounded-2xl border border-lilac-100">
-                <div className="text-[10px] text-ink-500 font-bold uppercase">Mañana</div>
-                <div className="text-lg font-black text-ink-900 mt-0.5">{timeDistribution.morning}</div>
-                <div className="text-[10px] text-ink-400">07:00 - 12:00</div>
-              </div>
-              <div className="p-3 bg-lilac-50/50 rounded-2xl border border-lilac-100">
-                <div className="text-[10px] text-ink-500 font-bold uppercase">Mediodía</div>
-                <div className="text-lg font-black text-ink-900 mt-0.5">{timeDistribution.midday}</div>
-                <div className="text-[10px] text-ink-400">12:00 - 15:00</div>
-              </div>
-              <div className="p-3 bg-lilac-50/50 rounded-2xl border border-lilac-100">
-                <div className="text-[10px] text-ink-500 font-bold uppercase">Tarde</div>
-                <div className="text-lg font-black text-ink-900 mt-0.5">{timeDistribution.afternoon}</div>
-                <div className="text-[10px] text-ink-400">15:00 - 20:00</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Días de Mayor Actividad */}
-          <div className="pt-4 border-t border-lilac-50">
-            <h3 className="text-sm font-bold text-ink-950 mb-2">Actividad por Día de la Semana</h3>
-            <div className="grid grid-cols-7 gap-1 text-center">
-              {weekdayDistribution.map((d) => (
-                <div key={d.name} className="bg-gray-50 rounded-xl p-2 border border-gray-100">
-                  <div className="text-[10px] font-bold text-ink-500 uppercase">{d.name}</div>
-                  <div className="text-xs font-black text-ink-900 mt-1">{d.count}</div>
-                  <div className="text-[9px] text-green-700 font-semibold">{d.attended} ok</div>
-                </div>
-              ))}
-            </div>
-          </div>
+              {courses.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-3 text-center text-xs text-ink-400 italic">
+                    No se han registrado cursos en el sistema actualmente.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
