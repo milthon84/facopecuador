@@ -99,7 +99,7 @@ export default function NuevoCursoForm() {
       </div>
 
       <div>
-        <label className="label text-ink-800 font-semibold">Portada del Curso (Imagen)</label>
+        <label className="label text-ink-800 font-semibold">Portada / Propaganda del Curso (Imagen)</label>
         <input
           name="imageFile"
           type="file"
@@ -107,6 +107,19 @@ export default function NuevoCursoForm() {
           disabled={loading}
           className="w-full text-xs text-ink-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none disabled:opacity-50"
         />
+        <p className="text-[11px] text-ink-400 mt-1">Banner o imagen publicitaria para la web y redes.</p>
+      </div>
+
+      <div>
+        <label className="label text-ink-800 font-semibold">Brochure / Temario Digital (PDF o Imagen)</label>
+        <input
+          name="brochureFile"
+          type="file"
+          accept=".pdf,image/*"
+          disabled={loading}
+          className="w-full text-xs text-ink-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none disabled:opacity-50"
+        />
+        <p className="text-[11px] text-ink-400 mt-1">Documento PDF o folleto para que los doctores lo descarguen y el agente de WhatsApp lo envíe.</p>
       </div>
 
       <div>

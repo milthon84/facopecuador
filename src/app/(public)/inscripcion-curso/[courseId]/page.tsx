@@ -17,6 +17,7 @@ import {
   Loader2,
   AlertCircle,
   ArrowRight,
+  Download,
 } from "lucide-react";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 
@@ -28,6 +29,7 @@ interface Course {
   start_date: string;
   end_date: string;
   image_url?: string | null;
+  brochure_url?: string | null;
 }
 
 interface CourseOption {
@@ -304,6 +306,19 @@ export default function InscripcionCursoPage() {
                 </div>
                 {course.description && (
                   <p className="mt-2 text-[11px] text-slate-400 leading-relaxed line-clamp-2">{course.description}</p>
+                )}
+                {course.brochure_url && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <a
+                      href={proxyStorageUrl(course.brochure_url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-lilac-50 hover:bg-lilac-100 text-lilac-700 text-xs font-semibold border border-lilac-200 transition-all shadow-2xs hover:scale-[1.02]"
+                    >
+                      <Download size={13} />
+                      <span>Descargar Brochure / Temario (PDF)</span>
+                    </a>
+                  </div>
                 )}
               </div>
             </div>

@@ -20,6 +20,7 @@ import TeacherMultiSelect from "@/components/TeacherMultiSelect";
 import CreateModuleModal from "@/components/CreateModuleModal";
 
 import CourseStatusSelector from "@/components/CourseStatusSelector";
+import CourseMediaManager from "@/components/CourseMediaManager";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export const dynamic = "force-dynamic";
@@ -253,6 +254,15 @@ export default async function CursoDetallePage({
           )}
         </div>
       </div>
+
+      {/* Gestor de Medios: Portada / Propaganda y Brochure */}
+      <CourseMediaManager
+        courseId={id}
+        courseName={course.name}
+        imageUrl={course.image_url}
+        brochureUrl={course.brochure_url}
+        canEdit={canEdit}
+      />
 
       {/* Tabs */}
       <div className="flex border-b border-lilac-100 mb-6 gap-1 overflow-x-auto pb-px">

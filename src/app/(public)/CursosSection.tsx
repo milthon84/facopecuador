@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { GraduationCap, BookOpen, Award, Users, Sparkles } from "lucide-react";
+import { GraduationCap, BookOpen, Award, Users, Sparkles, FileText } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 import CursosCarousel from "./CursosCarousel";
 
 interface Course {
@@ -13,6 +14,7 @@ interface Course {
   start_date: string;
   end_date: string;
   image_url?: string | null;
+  brochure_url?: string | null;
 }
 
 interface Post {
@@ -102,7 +104,7 @@ export default function CursosSection({ courses, posts = [], whatsappPhone }: Pr
 
         {/* ACCIÓN Y RESERVA */}
         {activeCourse && (
-          <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <Link
               href={`/inscripcion-curso/${activeCourse.id}`}
               className="inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-xl bg-gradient-to-r from-[#3B154C] via-[#4A1C5F] to-[#2E103C] hover:from-[#2E103C] hover:to-[#3E1650] text-white text-xs sm:text-sm font-semibold shadow-xl shadow-purple-950/20 transition-all duration-200 active:scale-[0.98] group"
@@ -111,7 +113,19 @@ export default function CursosSection({ courses, posts = [], whatsappPhone }: Pr
               <span>Inscríbete ahora</span>
             </Link>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+            {activeCourse.brochure_url && (
+              <a
+                href={proxyStorageUrl(activeCourse.brochure_url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl border border-purple-200 hover:border-purple-400 bg-white hover:bg-purple-50 text-purple-900 text-xs sm:text-sm font-semibold transition-all shadow-xs"
+              >
+                <FileText size={16} className="text-purple-600" />
+                <span>Ver Brochure (PDF)</span>
+              </a>
+            )}
+
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium sm:ml-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>Cupos disponibles</span>
             </div>

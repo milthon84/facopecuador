@@ -13,11 +13,21 @@ export async function GET(
     await updateExpiredCourses(supabase);
     const cutoffDate = getPublicCourseVisibilityCutoffDate();
 
-    const { data: course, error } = await supabase
+    let { data: course, error } = await supabase
       .from("cursos")
-      .select("id, name, description, total_cost, start_date, end_date, image_url, status")
+      .select("id, name, description, total_cost, start_date, end_date, image_url, brochure_url, status")
       .eq("id", courseId)
       .single();
+
+    if (error && error.message?.includes("brochure_url")) {
+      const fallback = await supabase
+        .from("cursos")
+        .select("id, name, description, total_cost, start_date, end_date, image_url, status")
+        .eq("id", courseId)
+        .single();
+      course = fallback.data ? { ...fallback.data, brochure_url: null } : null;
+      error = fallback.error;
+    }
 
     if (error || !course) {
       return NextResponse.json({ error: "Curso no encontrado" }, { status: 404 });

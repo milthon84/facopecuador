@@ -53,6 +53,7 @@ export async function copyCourseAction(courseId: string) {
       max_students: origCourse.max_students,
       status: "draft",
       image_url: origCourse.image_url,
+      brochure_url: origCourse.brochure_url || null,
     })
     .select("id")
     .single();
@@ -235,6 +236,63 @@ export async function createModuleAction(payload: {
 
 
 
+async function uploadBrochureFile(supabase: any, file: File): Promise<string | null> {
+  if (!file || file.size === 0) return null;
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_").toLowerCase();
+  const fileName = `brochures/${Date.now()}_${safeName}`;
+  const contentType = file.type || "application/pdf";
+
+  const { error } = await supabase.storage
+    .from("course-banners")
+    .upload(fileName, buffer, {
+      contentType,
+      cacheControl: "31536000",
+      upsert: true,
+    });
+
+  if (error) {
+    console.error("[uploadBrochureFile] Error al subir brochure:", error.message);
+    throw new Error(`Error al subir brochure: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
+async function uploadImageBannerFile(supabase: any, imageFile: File): Promise<string | null> {
+  if (!imageFile || imageFile.size === 0) return null;
+  const arrayBuffer = await imageFile.arrayBuffer();
+  const originalBuffer = Buffer.from(arrayBuffer);
+
+  const { buffer: webpBuffer, contentType, extension } = await optimizeImageForWeb(originalBuffer, {
+    maxWidth: 1280,
+    maxHeight: 1280,
+    quality: 80,
+    format: "webp",
+  });
+
+  const fileName = `${Date.now()}_banner.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from("course-banners")
+    .upload(fileName, webpBuffer, {
+      contentType,
+      cacheControl: "31536000",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error("[uploadImageBannerFile] Error:", uploadError.message);
+    throw new Error(`Error al subir imagen: ${uploadError.message}`);
+  }
+
+  await warmLocalStorageCache("course-banners", fileName, webpBuffer);
+  const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
+  return data.publicUrl;
+}
+
 export async function createCourseAction(formData: FormData) {
   await assertWritePermission("/erp/cursos");
 
@@ -246,6 +304,7 @@ export async function createCourseAction(formData: FormData) {
   const maxStudents = formData.get("maxStudents") ? Number(formData.get("maxStudents")) : null;
   const status = formData.get("status") as string;
   const imageFile = formData.get("imageFile") as File;
+  const brochureFile = formData.get("brochureFile") as File;
 
   if (!name || !startDate || !endDate || isNaN(totalCost)) {
     throw new Error("Por favor completa los campos requeridos.");
@@ -257,53 +316,39 @@ export async function createCourseAction(formData: FormData) {
 
   const supabase = createAdminClient();
   let imageUrl: string | null = null;
+  let brochureUrl: string | null = null;
 
   if (imageFile && imageFile.size > 0) {
     try {
-      const arrayBuffer = await imageFile.arrayBuffer();
-      const originalBuffer = Buffer.from(arrayBuffer);
-
-      // Comprimir y convertir a WebP (máx 1280px, calidad 80%)
-      const { buffer: webpBuffer, contentType, extension } = await optimizeImageForWeb(originalBuffer, {
-        maxWidth: 1280,
-        maxHeight: 1280,
-        quality: 80,
-        format: "webp",
-      });
-
-      const fileName = `${Date.now()}_banner.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from("course-banners")
-        .upload(fileName, webpBuffer, {
-          contentType,
-          cacheControl: "31536000",
-          upsert: true,
-        });
-
-      if (!uploadError) {
-        await warmLocalStorageCache("course-banners", fileName, webpBuffer);
-        const { data } = supabase.storage.from("course-banners").getPublicUrl(fileName);
-        imageUrl = data.publicUrl;
-      } else {
-        console.error("Error al subir el boceto:", uploadError.message);
-      }
-    } catch (err) {
-      console.error("Excepción en la subida del boceto:", err);
+      imageUrl = await uploadImageBannerFile(supabase, imageFile);
+    } catch (err: any) {
+      console.error("Excepción en la subida de imagen:", err);
     }
   }
 
+  if (brochureFile && brochureFile.size > 0) {
+    try {
+      brochureUrl = await uploadBrochureFile(supabase, brochureFile);
+    } catch (err: any) {
+      console.error("Excepción en la subida del brochure:", err);
+    }
+  }
+
+  const insertData: any = {
+    name,
+    description: description || null,
+    total_cost: totalCost,
+    start_date: startDate,
+    end_date: endDate,
+    max_students: maxStudents,
+    status: status || "draft",
+    image_url: imageUrl,
+    brochure_url: brochureUrl,
+  };
+
   const { data: newCourse, error } = await supabase
     .from("cursos")
-    .insert({
-      name,
-      description: description || null,
-      total_cost: totalCost,
-      start_date: startDate,
-      end_date: endDate,
-      max_students: maxStudents,
-      status: status || "draft",
-      image_url: imageUrl,
-    })
+    .insert(insertData)
     .select("id")
     .single();
 
@@ -315,6 +360,50 @@ export async function createCourseAction(formData: FormData) {
   revalidatePath("/cursos");
   revalidatePath("/erp/cursos");
   return { success: true, courseId: newCourse.id };
+}
+
+export async function updateCourseMediaAction(formData: FormData) {
+  await assertWritePermission("/erp/cursos");
+
+  const courseId = formData.get("courseId") as string;
+  if (!courseId) throw new Error("ID de curso no proporcionado.");
+
+  const imageFile = formData.get("imageFile") as File | null;
+  const brochureFile = formData.get("brochureFile") as File | null;
+  const removeImage = formData.get("removeImage") === "true";
+  const removeBrochure = formData.get("removeBrochure") === "true";
+
+  const supabase = createAdminClient();
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (removeImage) {
+    updateData.image_url = null;
+  } else if (imageFile && imageFile.size > 0) {
+    updateData.image_url = await uploadImageBannerFile(supabase, imageFile);
+  }
+
+  if (removeBrochure) {
+    updateData.brochure_url = null;
+  } else if (brochureFile && brochureFile.size > 0) {
+    updateData.brochure_url = await uploadBrochureFile(supabase, brochureFile);
+  }
+
+  const { error } = await supabase
+    .from("cursos")
+    .update(updateData)
+    .eq("id", courseId);
+
+  if (error) {
+    throw new Error(parseDbError(error.message) || "Error al actualizar archivos del curso.");
+  }
+
+  revalidatePath("/");
+  revalidatePath("/cursos");
+  revalidatePath(`/erp/cursos/${courseId}`);
+  revalidatePath("/erp/cursos");
+  return { success: true };
 }
 
 export async function updateCourseAction(payload: {

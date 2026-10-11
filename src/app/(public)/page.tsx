@@ -67,11 +67,23 @@ export default async function HomePage() {
   // 2. Obtener cursos públicos
   const cutoffDate = getPublicCourseVisibilityCutoffDate();
 
-  const { data: rawCourses } = await supabase
+  let rawCourses: any[] | null = null;
+  const { data: initialCourses, error: coursesError } = await supabase
     .from("cursos")
-    .select("id, name, description, total_cost, start_date, end_date, image_url, status")
+    .select("id, name, description, total_cost, start_date, end_date, image_url, brochure_url, status")
     .in("status", ["active", "in_progress", "completed"])
     .order("start_date", { ascending: true });
+
+  if (coursesError && coursesError.message?.includes("brochure_url")) {
+    const fallback = await supabase
+      .from("cursos")
+      .select("id, name, description, total_cost, start_date, end_date, image_url, status")
+      .in("status", ["active", "in_progress", "completed"])
+      .order("start_date", { ascending: true });
+    rawCourses = (fallback.data || []).map((c: any) => ({ ...c, brochure_url: null }));
+  } else {
+    rawCourses = initialCourses;
+  }
 
   const courses = (rawCourses || []).filter((c) => {
     if (c.status === "completed") {
