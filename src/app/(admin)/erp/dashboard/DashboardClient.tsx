@@ -792,9 +792,9 @@ export default function DashboardClient({
             </div>
             <div className="text-2xl font-black text-amber-300 mt-1">{globalFinancials.formattedTotalExpenses}</div>
             <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
-              <span className="text-teal-300">🏥 {expenseAreaStats.formattedClinicaTotal}</span>
-              <span className="text-indigo-300">🎓 {expenseAreaStats.formattedCursosTotal}</span>
-              <span className="text-amber-300">🏢 {expenseAreaStats.formattedGeneralTotal}</span>
+              <span className="text-teal-300">🏥 Clínica: {expenseAreaStats.formattedClinicaTotal}</span>
+              <span className="text-indigo-300">🎓 Cursos: {expenseAreaStats.formattedCursosTotal}</span>
+              <span className="text-amber-300">🏢 Otros: {expenseAreaStats.formattedGeneralTotal}</span>
             </div>
           </div>
 
@@ -814,7 +814,7 @@ export default function DashboardClient({
             <div className="text-[10px] text-white/80 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span>🏥 Clínica: {globalFinancials.formattedClinicNetProfit}</span>
               <span>🎓 Cursos: {globalFinancials.formattedCoursesNetProfit}</span>
-              <span className="text-amber-200">🏢 General: {globalFinancials.formattedOtherNetProfit}</span>
+              <span className="text-amber-200">🏢 Otros: {globalFinancials.formattedOtherNetProfit}</span>
             </div>
           </div>
         </div>
