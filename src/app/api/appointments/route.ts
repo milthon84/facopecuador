@@ -4,12 +4,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendConfirmationEmail, sendAdminNotification } from "@/lib/email";
 
 const schema = z.object({
+  // Puede venir anidado en patient o plano a primer nivel para herramientas como n8n
   patient: z.object({
     document_number: z.string().min(3),
     full_name: z.string().min(3),
     phone: z.string().min(7),
-    email: z.string().email(),
-  }),
+    email: z.string().email().optional().or(z.literal("")),
+  }).optional(),
+  // Campos planos alternativos (ideales para n8n AI Tools):
+  document_number: z.string().min(3).optional(),
+  full_name: z.string().min(3).optional(),
+  phone: z.string().min(7).optional(),
+  email: z.string().optional(),
+
   starts_at: z.string(),
   ends_at: z.string(),
   reason: z.string().nullable().optional(),
@@ -28,7 +35,35 @@ export async function POST(req: Request) {
   if (!parse.success) {
     return NextResponse.json({ error: "Datos inválidos", issues: parse.error.issues }, { status: 400 });
   }
-  const { patient, starts_at, ends_at, reason, doctor_id } = parse.data;
+  
+  const rawData = parse.data;
+  
+  // Normalizar datos del paciente soportando plano o anidado
+  const docNumber = rawData.patient?.document_number || rawData.document_number;
+  const fullName = rawData.patient?.full_name || rawData.full_name;
+  const phone = rawData.patient?.phone || rawData.phone;
+  let email = (rawData.patient?.email || rawData.email || "").trim();
+
+  if (!docNumber || !fullName || !phone) {
+    return NextResponse.json(
+      { error: "Datos del paciente incompletos. Se requiere cédula/documento, nombre completo y teléfono." },
+      { status: 400 }
+    );
+  }
+
+  // Si no se proporcionó email válido, asignar email por defecto para registro
+  if (!email || !email.includes("@")) {
+    email = `${docNumber}@paciente.facop.com.ec`;
+  }
+
+  const patient = {
+    document_number: docNumber,
+    full_name: fullName,
+    phone,
+    email,
+  };
+
+  const { starts_at, ends_at, reason, doctor_id } = rawData;
 
   const startsDate = new Date(starts_at);
   if (isNaN(startsDate.getTime())) {
