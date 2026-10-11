@@ -15,7 +15,7 @@ import {
 
 export default function IaGlobalConfigSection() {
   const [selectedProvider, setSelectedProvider] = useState<"gemini" | "anthropic" | "openai">("gemini");
-  const [selectedModel, setSelectedModel] = useState<string>("gemini-flash-latest");
+  const [selectedModel, setSelectedModel] = useState<string>("gemini-1.5-flash");
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [claudeKeyInput, setClaudeKeyInput] = useState("");
   const [openAiKeyInput, setOpenAiKeyInput] = useState("");
@@ -37,7 +37,13 @@ export default function IaGlobalConfigSection() {
         setClaudeKeyInput(data.claudeKey || "");
         setOpenAiKeyInput(data.openAiKey || "");
         if (data.provider) setSelectedProvider(data.provider);
-        if (data.model) setSelectedModel(data.model);
+        if (data.model) {
+          let mod = data.model;
+          if (mod === "gemini-flash-latest" || mod.includes("3.8") || mod.includes("3.5")) {
+            mod = "gemini-1.5-flash";
+          }
+          setSelectedModel(mod);
+        }
       }
     } catch (err) {
       console.error("Error al cargar configuración de IA:", err);
@@ -202,10 +208,10 @@ export default function IaGlobalConfigSection() {
           {selectedProvider === "gemini" && (
             <div className="space-y-2">
               {[
-                { id: "gemini-flash-latest", name: "Gemini Flash (Automático / Última Versión)", badge: "100% GRATIS • Recomendado", desc: "El más rápido y recomendado. Sin costo en Google AI Studio (hasta 1,500 auditorías/día)." },
-                { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", badge: "100% GRATIS • Alta Precisión", desc: "Excelente comprensión de contexto y detección de cordialidad/rechazos." },
-                { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite", badge: "100% GRATIS • Ultra Rápido", desc: "Tiempo de respuesta ultra veloz para procesamiento masivo de chats." },
-                { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", badge: "100% GRATIS • Razonamiento Avanzado", desc: "Mayor profundidad analítica para diagnósticos exhaustivos." },
+                { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", badge: "100% GRATIS • Recomendado", desc: "El más rápido y estable. Sin costo en Google AI Studio (hasta 1,500 auditorías/día)." },
+                { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", badge: "100% GRATIS • Nueva Generación", desc: "Excelente comprensión de contexto y detección de cordialidad y rechazos." },
+                { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", badge: "100% GRATIS • Alta Precisión", desc: "Tiempo de respuesta veloz y balance de precisión para chats de atención." },
+                { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", badge: "100% GRATIS • Razonamiento Avanzado", desc: "Mayor profundidad analítica para diagnósticos exhaustivos." },
               ].map((m) => (
                 <label
                   key={m.id}

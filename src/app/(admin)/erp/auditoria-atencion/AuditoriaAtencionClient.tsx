@@ -237,9 +237,23 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data: any = null;
+
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        await res.text();
+        if (!res.ok) {
+          throw new Error(
+            `El servidor respondió con código HTTP ${res.status} (${res.statusText || "Error temporal"}). Si el análisis tiene muchos chats, intenta filtrar por un rango más corto o verifica tu API Key de IA.`
+          );
+        }
+        throw new Error("El servidor devolvió un formato no compatible (no es JSON).");
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || "Error al procesar la auditoría con IA.");
+        throw new Error(data?.error || `Error ${res.status} al procesar la auditoría con IA.`);
       }
 
       setCurrentAudit(data.audit);
@@ -260,9 +274,12 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
     setIsRefreshingChats(true);
     try {
       const res = await fetch("/api/admin/auditoria-atencion/chats");
-      const data = await res.json();
-      if (data.chats) {
-        setChats(data.chats);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.chats) {
+          setChats(data.chats);
+        }
       }
     } catch (err) {
       console.error("Error al refrescar chats:", err);
@@ -274,9 +291,12 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
   const fetchHistorial = async () => {
     try {
       const res = await fetch("/api/admin/auditoria-atencion/historial");
-      const data = await res.json();
-      if (data.audits) {
-        setAudits(data.audits);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.audits) {
+          setAudits(data.audits);
+        }
       }
     } catch {}
   };

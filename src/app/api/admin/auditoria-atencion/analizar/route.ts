@@ -5,6 +5,8 @@ import { hasPermission } from "@/lib/roles";
 import { getEffectiveAuditPrompt } from "@/lib/ia-audit-prompt";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 
 interface ChatItemForAnalysis {
   id?: string;
@@ -133,15 +135,25 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Preparar contexto y prompt de auditoría
-    const formattedChats = chatsToAnalyze.map((c, idx) => ({
-      numero_caso: idx + 1,
-      id_chat: c.id || `caso_${idx + 1}`,
-      paciente: c.patient_name || "Paciente",
-      telefono: c.phone || "N/A",
-      asesor: c.agent_name || "Recepción",
-      fecha_hora: c.chat_date || c.started_at || "No especificada",
-      conversacion: c.transcript,
-    }));
+    // Limitamos chats a un máximo de 30 para garantizar velocidad de respuesta y evitar tiempos muertos o timeouts
+    const chatsToProcess = chatsToAnalyze.slice(0, 30);
+
+    const formattedChats = chatsToProcess.map((c, idx) => {
+      let transcriptText = c.transcript || "";
+      // Truncar transcripción si es extremadamente extensa para mantener el prompt ágil y seguro
+      if (transcriptText.length > 2500) {
+        transcriptText = transcriptText.slice(0, 2500) + "\n... [Transcripción truncada para optimización]";
+      }
+      return {
+        numero_caso: idx + 1,
+        id_chat: c.id || `caso_${idx + 1}`,
+        paciente: c.patient_name || "Paciente",
+        telefono: c.phone || "N/A",
+        asesor: c.agent_name || "Recepción",
+        fecha_hora: c.chat_date || c.started_at || "No especificada",
+        conversacion: transcriptText,
+      };
+    });
 
     const systemPrompt = getEffectiveAuditPrompt(body.prompt || customPromptFromDb);
 
@@ -160,19 +172,19 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
 
     // PROVEEDOR 1: GOOGLE GEMINI
     if (selectedProvider === "gemini" && geminiKey) {
-      // Modelos Gemini actualizados (con fallback automático en caso de saturación o deprecación)
-      const requestedModel = selectedModel || "gemini-flash-latest";
-      const candidateGeminiModels = [
-        requestedModel,
-        "gemini-flash-latest",
-        "gemini-3.8-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-2.5-flash",
-      ].filter((m, i, arr) => m && arr.indexOf(m) === i && !m.includes("1.5") && !m.includes("2.0-flash"));
-
-      if (requestedModel.includes("1.5") || requestedModel.includes("2.0")) {
-        candidateGeminiModels.unshift("gemini-flash-latest");
+      let baseRequested = selectedModel || "gemini-1.5-flash";
+      if (baseRequested === "gemini-flash-latest" || baseRequested.includes("3.8") || baseRequested.includes("3.5")) {
+        baseRequested = "gemini-1.5-flash";
       }
+
+      // Modelos oficiales y activos de Google Generative Language API
+      const candidateGeminiModels = [
+        baseRequested,
+        "gemini-1.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-pro",
+      ].filter((m, i, arr) => !!m && arr.indexOf(m) === i);
 
       for (const modelToTry of candidateGeminiModels) {
         if (rawReply) break;
@@ -300,7 +312,7 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
     if (!rawReply && geminiKey) {
       try {
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -314,7 +326,7 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
           const geminiData = await geminiRes.json();
           rawReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           if (rawReply) {
-            modelUsed = "Google gemini-flash-latest (Respaldo)";
+            modelUsed = "Google gemini-1.5-flash (Respaldo)";
           }
         }
       } catch {}

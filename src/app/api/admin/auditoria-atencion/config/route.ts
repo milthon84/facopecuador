@@ -24,7 +24,10 @@ export async function GET() {
     const claudeKey = data?.value?.claudeKey || process.env.ANTHROPIC_API_KEY || "";
     const openAiKey = data?.value?.openAiKey || process.env.OPENAI_API_KEY || "";
     const provider = data?.value?.provider || (geminiKey ? "gemini" : claudeKey ? "anthropic" : openAiKey ? "openai" : "gemini");
-    const model = data?.value?.model || (provider === "anthropic" ? "claude-3-5-haiku-latest" : provider === "openai" ? "gpt-4o-mini" : "gemini-flash-latest");
+    let model = data?.value?.model || (provider === "anthropic" ? "claude-3-5-haiku-latest" : provider === "openai" ? "gpt-4o-mini" : "gemini-1.5-flash");
+    if (model === "gemini-flash-latest" || model.includes("3.8") || model.includes("3.5")) {
+      model = "gemini-1.5-flash";
+    }
     const prompt = data?.value?.prompt || DEFAULT_AUDIT_SYSTEM_PROMPT;
 
     return NextResponse.json({
@@ -69,7 +72,7 @@ export async function POST(req: Request) {
       claudeKey: claudeKey && !claudeKey.includes("...") ? claudeKey.trim() : (currentVal.claudeKey || ""),
       openAiKey: openAiKey && !openAiKey.includes("...") ? openAiKey.trim() : (currentVal.openAiKey || ""),
       provider: provider || currentVal.provider || "gemini",
-      model: model || currentVal.model || "gemini-flash-latest",
+      model: model || currentVal.model || "gemini-1.5-flash",
       prompt: typeof prompt === "string" ? prompt.trim() : (currentVal.prompt || DEFAULT_AUDIT_SYSTEM_PROMPT),
       updated_at: new Date().toISOString(),
       updated_by: authData.user.email,
