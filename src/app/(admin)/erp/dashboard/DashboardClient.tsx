@@ -714,7 +714,7 @@ export default function DashboardClient({
       </div>
 
       {/* RESUMEN FINANCIERO CONSOLIDADO (CLÍNICA + CURSOS + GENERAL) */}
-      <div className="bg-gradient-to-r from-ink-950 via-slate-900 to-ink-900 text-white p-3.5 sm:p-4 rounded-2xl border border-ink-800 shadow-md space-y-3">
+      <div className="bg-slate-900 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-3.5 sm:p-4 rounded-2xl border border-slate-800 shadow-md space-y-3">
         <div className="flex items-center justify-between border-b border-white/10 pb-2">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-lilac-500/20 text-lilac-300 flex items-center justify-center font-bold">
@@ -723,7 +723,7 @@ export default function DashboardClient({
             <div>
               <h2 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase flex items-center gap-2">
                 <span>Resumen Financiero Consolidado</span>
-                <span className="text-[10px] px-2 py-0.2 rounded-full font-bold bg-white/10 text-white/80 border border-white/15">
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/10 text-white/90 border border-white/15">
                   {periodLabel}
                 </span>
               </h2>
@@ -743,11 +743,11 @@ export default function DashboardClient({
           {/* Facturación Global */}
           <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-ink-300 uppercase tracking-wider">Facturación Total</span>
+              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Facturación Total</span>
               <TrendingUp size={14} className="text-emerald-400" />
             </div>
             <div className="text-2xl font-black text-white mt-1">{globalFinancials.formattedTotalBilled}</div>
-            <div className="text-[10px] text-ink-400 mt-1 flex items-center justify-between">
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
               <span>🏥 Clínica: {stats.formattedTotalBilled}</span>
               <span>🎓 Cursos: {courseStats.formattedTotalBilledCourses}</span>
             </div>
@@ -760,7 +760,7 @@ export default function DashboardClient({
               <DollarSign size={14} className="text-amber-400" />
             </div>
             <div className="text-2xl font-black text-amber-300 mt-1">{globalFinancials.formattedTotalExpenses}</div>
-            <div className="text-[10px] text-ink-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span className="text-teal-300">🏥 {expenseAreaStats.formattedClinicaTotal}</span>
               <span className="text-indigo-300">🎓 {expenseAreaStats.formattedCursosTotal}</span>
               <span className="text-amber-300">🏢 {expenseAreaStats.formattedGeneralTotal}</span>
@@ -770,17 +770,17 @@ export default function DashboardClient({
           {/* Utilidad Neta Operativa */}
           <div className={`p-3 rounded-xl border flex flex-col justify-between ${
             globalFinancials.netProfit >= 0
-              ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-100"
-              : "bg-rose-950/40 border-rose-500/30 text-rose-100"
+              ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-100"
+              : "bg-rose-950/60 border-rose-500/40 text-rose-100"
           }`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white/80">Utilidad Neta del Período</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/90">Utilidad Neta del Período</span>
               <Coins size={14} className={globalFinancials.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"} />
             </div>
             <div className={`text-2xl font-black mt-1 ${globalFinancials.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {globalFinancials.formattedNetProfit}
             </div>
-            <div className="text-[10px] text-white/70 mt-1 flex items-center justify-between">
+            <div className="text-[10px] text-white/80 mt-1 flex items-center justify-between">
               <span>🏥 Clínica: {globalFinancials.formattedClinicNetProfit}</span>
               <span>🎓 Cursos: {globalFinancials.formattedCoursesNetProfit}</span>
             </div>

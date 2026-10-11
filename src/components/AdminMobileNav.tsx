@@ -9,7 +9,7 @@ import {
   LogOut, Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  Bot
+  Bot, TrendingUp, BarChart3
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/client";
@@ -20,7 +20,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  Bot
+  Bot, TrendingUp, BarChart3
 };
 
 interface Props {
@@ -35,6 +35,15 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
+  const isAdmin =
+    role === "admin" ||
+    role.toLowerCase().includes("admin") ||
+    allowedPaths === null ||
+    (Array.isArray(allowedPaths) && (
+      allowedPaths.includes("/erp/roles") ||
+      allowedPaths.includes("/erp/configuracion-sistema")
+    ));
+
   const visibleNav = NAV_ITEMS.filter(item => {
     if (role === "admin" || allowedPaths === null) return true;
     if (item.href === "/erp/inventario/transacciones") {
@@ -43,7 +52,17 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
     return allowedPaths.includes(item.href);
   });
 
-  const bottomItems = visibleNav.slice(0, 2);
+  // Si tiene permisos de admin, Dashboard aparece primero
+  const orderedNav = [...visibleNav];
+  if (isAdmin) {
+    const dashIndex = orderedNav.findIndex(item => item.href === "/erp/dashboard");
+    if (dashIndex > -1) {
+      const [dashItem] = orderedNav.splice(dashIndex, 1);
+      orderedNav.unshift(dashItem);
+    }
+  }
+
+  const bottomItems = orderedNav.slice(0, 2);
 
   function isActive(href: string) {
     return href === "/erp" ? pathname === "/erp" : pathname.startsWith(href);
@@ -93,7 +112,7 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
         </div>
 
         <div className="p-3 max-h-[55vh] overflow-y-auto">
-          {visibleNav.map((item) => {
+          {orderedNav.map((item) => {
             const Icon = ICON_MAP[item.icon];
             const active = isActive(item.href);
             return (
