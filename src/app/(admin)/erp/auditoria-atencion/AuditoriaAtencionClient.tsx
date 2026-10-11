@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot,
@@ -22,6 +22,7 @@ import {
   Info,
   Save,
   Check,
+  ExternalLink,
 } from "lucide-react";
 
 export interface ChatItem {
@@ -102,6 +103,28 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
   const [filterSeverity, setFilterSeverity] = useState<string>("all");
   const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
 
+  // Estado del motor de IA activo
+  const [activeAiConfig, setActiveAiConfig] = useState<{ provider: string; model: string } | null>(null);
+
+  useEffect(() => {
+    fetchActiveAiConfig();
+  }, []);
+
+  const fetchActiveAiConfig = async () => {
+    try {
+      const res = await fetch("/api/admin/auditoria-atencion/config");
+      const data = await res.json();
+      if (data.success) {
+        setActiveAiConfig({
+          provider: data.provider || "gemini",
+          model: data.model || "gemini-1.5-flash",
+        });
+        if (data.prompt) setPromptInput(data.prompt);
+        if (data.defaultPrompt) setDefaultPrompt(data.defaultPrompt);
+      }
+    } catch {}
+  };
+
   // Modal de configuración del Prompt
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [promptInput, setPromptInput] = useState("");
@@ -118,6 +141,10 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
       if (data.success) {
         setPromptInput(data.prompt || "");
         setDefaultPrompt(data.defaultPrompt || "");
+        setActiveAiConfig({
+          provider: data.provider || "gemini",
+          model: data.model || "gemini-1.5-flash",
+        });
       }
     } catch (e) {
       console.error("Error al cargar prompt:", e);
@@ -335,6 +362,28 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
 
         {/* Acciones de Cabecera */}
         <div className="flex items-center gap-2 flex-wrap">
+          {activeAiConfig && (
+            <Link
+              href="/erp/configuracion-sistema#ia-config"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs bg-slate-900 text-white hover:bg-slate-800 transition border border-slate-700/60 shadow-xs group"
+              title="Haz clic para ver o cambiar el motor de IA en Configuración del Sistema"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-[11px] text-slate-300">Motor IA:</span>
+              <span className="font-bold text-emerald-300">
+                {activeAiConfig.provider === "gemini"
+                  ? "Google Gemini"
+                  : activeAiConfig.provider === "anthropic"
+                  ? "Anthropic Claude"
+                  : "OpenAI ChatGPT"}
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-white font-semibold border border-white/10">
+                {activeAiConfig.model}
+              </span>
+              <Settings size={12} className="text-slate-400 group-hover:text-white transition" />
+            </Link>
+          )}
+
           <button
             type="button"
             onClick={handleOpenPromptModal}
@@ -913,6 +962,31 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
 
             {/* Cuerpo del Modal */}
             <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 text-xs flex-1">
+              {/* Indicador de motor actual */}
+              <div className="flex items-center justify-between p-3 bg-lilac-50/80 border border-lilac-200 rounded-xl text-xs flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-ink-600 font-medium">Motor de IA activo:</span>
+                  <strong className="text-ink-950 font-black">
+                    {activeAiConfig?.provider === "gemini"
+                      ? "Google Gemini"
+                      : activeAiConfig?.provider === "anthropic"
+                      ? "Anthropic Claude"
+                      : "OpenAI ChatGPT"}
+                  </strong>
+                  <span className="font-mono text-[10px] bg-white border border-lilac-200 px-2 py-0.5 rounded text-lilac-700 font-bold">
+                    {activeAiConfig?.model || "gemini-1.5-flash"}
+                  </span>
+                </div>
+                <Link
+                  href="/erp/configuracion-sistema#ia-config"
+                  className="text-xs text-lilac-700 hover:text-lilac-900 font-bold hover:underline inline-flex items-center gap-1"
+                >
+                  <span>Cambiar en Configuración</span>
+                  <ExternalLink size={12} />
+                </Link>
+              </div>
+
               {promptFeedback && (
                 <div
                   className={`p-3 rounded-xl flex items-center gap-2 text-xs ${
