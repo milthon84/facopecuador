@@ -135,14 +135,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Preparar contexto y prompt de auditoría
-    // Limitamos chats a un máximo de 30 para garantizar velocidad de respuesta y evitar tiempos muertos o timeouts
-    const chatsToProcess = chatsToAnalyze.slice(0, 30);
+    // Limitamos a los 8 chats más representativos/recientes para garantizar análisis instantáneo (<4s) y evitar 504 Timeouts
+    const chatsToProcess = chatsToAnalyze.slice(0, 8);
 
     const formattedChats = chatsToProcess.map((c, idx) => {
-      let transcriptText = c.transcript || "";
-      // Truncar transcripción si es extremadamente extensa para mantener el prompt ágil y seguro
-      if (transcriptText.length > 2500) {
-        transcriptText = transcriptText.slice(0, 2500) + "\n... [Transcripción truncada para optimización]";
+      let transcriptText = (c.transcript || "").trim();
+      // Tomar los últimos mensajes (hasta 1,000 caracteres) donde ocurre la resolución y cierre
+      if (transcriptText.length > 1000) {
+        transcriptText = "..." + transcriptText.slice(-1000);
       }
       return {
         numero_caso: idx + 1,
@@ -161,7 +161,13 @@ export async function POST(req: NextRequest) {
 
 ${JSON.stringify(formattedChats, null, 2)}
 
-Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado según la rúbrica solicitada.`;
+INSTRUCCIÓN DE AGILIDAD: Sé ejecutivo y conciso en los textos del JSON:
+- "executive_summary": máximo 2 oraciones.
+- "strengths": 2 o 3 frases directas.
+- "weaknesses": 2 o 3 frases directas.
+- "recommendations": 2 o 3 frases directas.
+- En cada chat de "chat_evaluations": "resumen_caso" máximo 1 frase y "observaciones" máximo 1 frase directa.
+Responde ÚNICAMENTE con el objeto JSON solicitado.`;
 
     let aiResultJson: any = null;
     let rawReply = "";
@@ -172,18 +178,18 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
 
     // PROVEEDOR 1: GOOGLE GEMINI
     if (selectedProvider === "gemini" && geminiKey) {
-      let baseRequested = selectedModel || "gemini-1.5-flash";
-      if (baseRequested === "gemini-flash-latest" || baseRequested.includes("3.8") || baseRequested.includes("3.5")) {
-        baseRequested = "gemini-1.5-flash";
+      let baseRequested = selectedModel || "gemini-flash-latest";
+      if (baseRequested.includes("1.5") || baseRequested.includes("2.0")) {
+        baseRequested = "gemini-flash-latest";
       }
 
       // Modelos oficiales y activos de Google Generative Language API
       const candidateGeminiModels = [
         baseRequested,
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
+        "gemini-flash-latest",
         "gemini-2.5-flash",
-        "gemini-1.5-pro",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
       ].filter((m, i, arr) => !!m && arr.indexOf(m) === i);
 
       for (const modelToTry of candidateGeminiModels) {
@@ -204,6 +210,7 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
                 generationConfig: {
                   responseMimeType: "application/json",
                   temperature: 0.2,
+                  thinkingConfig: { thinkingBudget: 0 },
                 },
               }),
             }
@@ -230,8 +237,17 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
 
     // PROVEEDOR 2: ANTHROPIC CLAUDE
     if (!rawReply && ((selectedProvider === "anthropic" && claudeKey) || (!geminiKey && claudeKey))) {
-      const targetClaudeModel = selectedModel && selectedModel.includes("claude") ? selectedModel : "claude-3-5-haiku-latest";
-      const claudeCandidates = [targetClaudeModel, "claude-3-5-haiku-latest", "claude-3-5-sonnet-latest", "claude-3-haiku-20240307"].filter((m, i, arr) => arr.indexOf(m) === i);
+      let targetClaudeModel = selectedModel && selectedModel.includes("claude") ? selectedModel : "claude-haiku-5-5";
+      if (targetClaudeModel.includes("3") || targetClaudeModel.includes("haiku-latest")) {
+        targetClaudeModel = "claude-haiku-5-5";
+      }
+
+      const claudeCandidates = [
+        targetClaudeModel,
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-4-5-20251001",
+      ].filter((m, i, arr) => arr.indexOf(m) === i);
 
       for (const m of claudeCandidates) {
         if (rawReply) break;
@@ -245,7 +261,7 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
             },
             body: JSON.stringify({
               model: m,
-              max_tokens: 4000,
+              max_tokens: 2000,
               system: systemPrompt,
               messages: [{ role: "user", content: userPrompt }],
             }),
@@ -312,13 +328,17 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
     if (!rawReply && geminiKey) {
       try {
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-              generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
             }),
           }
         );
@@ -326,7 +346,7 @@ Por favor, realiza la auditoría exhaustiva y devuelve el JSON estructurado seg�
           const geminiData = await geminiRes.json();
           rawReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
           if (rawReply) {
-            modelUsed = "Google gemini-1.5-flash (Respaldo)";
+            modelUsed = "Google gemini-flash-latest (Respaldo)";
           }
         }
       } catch {}

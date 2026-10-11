@@ -17,9 +17,9 @@ import {
 
 export default function IaGlobalConfigSection() {
   const [savedProvider, setSavedProvider] = useState<"gemini" | "anthropic" | "openai">("gemini");
-  const [savedModel, setSavedModel] = useState<string>("gemini-1.5-flash");
+  const [savedModel, setSavedModel] = useState<string>("gemini-flash-latest");
   const [selectedProvider, setSelectedProvider] = useState<"gemini" | "anthropic" | "openai">("gemini");
-  const [selectedModel, setSelectedModel] = useState<string>("gemini-1.5-flash");
+  const [selectedModel, setSelectedModel] = useState<string>("gemini-flash-latest");
 
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [claudeKeyInput, setClaudeKeyInput] = useState("");
@@ -55,9 +55,12 @@ export default function IaGlobalConfigSection() {
         setSavedProvider(prov);
         setSelectedProvider(prov);
 
-        let mod = data.model || (prov === "anthropic" ? "claude-3-5-haiku-latest" : prov === "openai" ? "gpt-4o-mini" : "gemini-1.5-flash");
-        if (mod === "gemini-flash-latest" || mod.includes("3.8") || mod.includes("3.5")) {
-          mod = "gemini-1.5-flash";
+        let mod = data.model || (prov === "anthropic" ? "claude-haiku-5-5" : prov === "openai" ? "gpt-4o-mini" : "gemini-flash-latest");
+        if (mod.includes("1.5") || mod.includes("2.0")) {
+          mod = "gemini-flash-latest";
+        }
+        if (prov === "anthropic" && (mod.includes("3") || mod.includes("haiku-latest"))) {
+          mod = "claude-haiku-5-5";
         }
         setSavedModel(mod);
         setSelectedModel(mod);
@@ -260,7 +263,7 @@ export default function IaGlobalConfigSection() {
               type="button"
               onClick={() => {
                 setSelectedProvider("gemini");
-                if (!selectedModel.startsWith("gemini")) setSelectedModel("gemini-1.5-flash");
+                if (!selectedModel.startsWith("gemini")) setSelectedModel("gemini-flash-latest");
               }}
               className={`p-4 rounded-2xl border text-left transition relative flex flex-col justify-between gap-3 ${
                 selectedProvider === "gemini"
@@ -313,7 +316,7 @@ export default function IaGlobalConfigSection() {
               type="button"
               onClick={() => {
                 setSelectedProvider("anthropic");
-                if (!selectedModel.startsWith("claude")) setSelectedModel("claude-3-5-haiku-latest");
+                if (!selectedModel.startsWith("claude")) setSelectedModel("claude-haiku-5-5");
               }}
               className={`p-4 rounded-2xl border text-left transition relative flex flex-col justify-between gap-3 ${
                 selectedProvider === "anthropic"
@@ -426,28 +429,28 @@ export default function IaGlobalConfigSection() {
             <div className="space-y-2">
               {[
                 {
-                  id: "gemini-1.5-flash",
-                  name: "Gemini 1.5 Flash (Recomendado)",
-                  badge: "100% GRATIS • Rápido y Estable",
-                  desc: "El modelo más equilibrado y recomendado. Hasta 1,500 auditorías diarias sin costo alguno en Google AI Studio.",
-                },
-                {
-                  id: "gemini-2.0-flash",
-                  name: "Gemini 2.0 Flash",
-                  badge: "100% GRATIS • Nueva Generación",
-                  desc: "Excelente comprensión de contexto y detección de cordialidad y rechazos de pacientes.",
+                  id: "gemini-flash-latest",
+                  name: "Gemini Flash (Automático / Más Rápido)",
+                  badge: "100% GRATIS • Recomendado",
+                  desc: "El modelo más veloz y optimizado. Sin costo en Google AI Studio (hasta 1,500 auditorías/día).",
                 },
                 {
                   id: "gemini-2.5-flash",
                   name: "Gemini 2.5 Flash",
                   badge: "100% GRATIS • Alta Precisión",
-                  desc: "Mayor balance de precisión para chats de atención extensos.",
+                  desc: "Excelente comprensión de contexto y detección de cordialidad y rechazos de pacientes.",
                 },
                 {
-                  id: "gemini-1.5-pro",
-                  name: "Gemini 1.5 Pro",
-                  badge: "100% GRATIS • Razonamiento Avanzado",
-                  desc: "Análisis más profundo y exhaustivo para auditorías de alta exigencia.",
+                  id: "gemini-3.5-flash",
+                  name: "Gemini 3.5 Flash",
+                  badge: "100% GRATIS • Ultra Veloz",
+                  desc: "Tiempo de respuesta ultra veloz para procesamiento masivo de chats de WhatsApp.",
+                },
+                {
+                  id: "gemini-3.8-flash",
+                  name: "Gemini 3.8 Flash",
+                  badge: "100% GRATIS • Mayor Profundidad",
+                  desc: "Mayor balance de profundidad analítica para diagnósticos exhaustivos de atención.",
                 },
               ].map((m) => {
                 const isThisModelActive = savedProvider === "gemini" && savedModel === m.id;
@@ -494,16 +497,22 @@ export default function IaGlobalConfigSection() {
             <div className="space-y-2">
               {[
                 {
-                  id: "claude-3-5-haiku-latest",
-                  name: "Claude 3.5 Haiku",
-                  badge: "Ultra Barato (~$0.80 / 1M)",
-                  desc: "El modelo más económico y veloz de Anthropic.",
+                  id: "claude-haiku-5-5",
+                  name: "Claude Haiku 5.5",
+                  badge: "Ultra Rápido y Barato",
+                  desc: "El modelo más veloz y económico de Anthropic. Excelente para auditorías en tiempo real.",
                 },
                 {
-                  id: "claude-3-5-sonnet-latest",
-                  name: "Claude 3.5 Sonnet",
-                  badge: "Calidad Premium (~$3.00 / 1M)",
-                  desc: "Máxima precisión en detección de tono, empatía y errores sutiles.",
+                  id: "claude-sonnet-5-5",
+                  name: "Claude Sonnet 5.5",
+                  badge: "Máxima Inteligencia",
+                  desc: "Máxima precisión en detección de tono, empatía y errores sutiles de asesoría.",
+                },
+                {
+                  id: "claude-haiku-4-5-20251001",
+                  name: "Claude Haiku 4.5",
+                  badge: "Económico y Confiable",
+                  desc: "Modelo balanceado para auditoría conversacional de atención al cliente.",
                 },
               ].map((m) => {
                 const isThisModelActive = savedProvider === "anthropic" && savedModel === m.id;
