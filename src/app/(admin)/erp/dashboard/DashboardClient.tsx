@@ -97,6 +97,14 @@ export interface DoctorExpenseData {
   resolvedArea?: ExpenseArea;
 }
 
+export interface OtherInvoiceData {
+  id: string;
+  invoice_number: string;
+  total: number;
+  created_at: string;
+  description?: string;
+}
+
 type PeriodType = "day" | "week" | "month" | "year" | "custom";
 
 interface Props {
@@ -104,6 +112,7 @@ interface Props {
   doctors: DoctorOption[];
   courses?: CourseSummaryData[];
   expenses?: DoctorExpenseData[];
+  otherInvoices?: OtherInvoiceData[];
 }
 
 const COURSE_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -135,7 +144,8 @@ export default function DashboardClient({
   initialAppointments,
   doctors,
   courses = [],
-  expenses = []
+  expenses = [],
+  otherInvoices = []
 }: Props) {
   // Period Mode
   const [period, setPeriod] = useState<PeriodType>("month");
@@ -230,6 +240,19 @@ export default function DashboardClient({
       return expDate >= dateRange.start && expDate <= dateRange.end;
     });
   }, [expenses, dateRange]);
+
+  // Filter Other Invoices (facturación no vinculada a citas ni a cursos) by Selected Range
+  const periodOtherInvoices = useMemo(() => {
+    return (otherInvoices || []).filter((inv) => {
+      if (!inv.created_at) return false;
+      const invDate = new Date(inv.created_at);
+      return invDate >= dateRange.start && invDate <= dateRange.end;
+    });
+  }, [otherInvoices, dateRange]);
+
+  const otherBilled = useMemo(() => {
+    return periodOtherInvoices.reduce((acc, inv) => acc + (Number(inv.total) || 0), 0);
+  }, [periodOtherInvoices]);
 
   // Aggregate Metrics for Clinic
   const stats = useMemo(() => {
@@ -488,9 +511,9 @@ export default function DashboardClient({
     };
   }, [courses, expenseAreaStats]);
 
-  // Consolidado Financiero Global (Clínica + Cursos + General)
+  // Consolidado Financiero Global (Clínica + Cursos + Otros/General)
   const globalFinancials = useMemo(() => {
-    const totalBilled = stats.totalBilled + courseStats.totalBilledCourses;
+    const totalBilled = stats.totalBilled + courseStats.totalBilledCourses + otherBilled;
     const totalExpenses = expenseAreaStats.totalExpenses;
     const netProfit = totalBilled - totalExpenses;
 
@@ -498,6 +521,8 @@ export default function DashboardClient({
     const clinicNetProfit = stats.totalBilled - expenseAreaStats.clinicaTotal;
     // Utilidad Cursos (Facturación Cursos - Gastos de Cursos)
     const coursesNetProfit = courseStats.totalBilledCourses - expenseAreaStats.cursosTotal;
+    // Utilidad General / Otros (Facturación Otros - Gastos Generales)
+    const otherNetProfit = otherBilled - expenseAreaStats.generalTotal;
 
     return {
       totalBilled,
@@ -505,13 +530,18 @@ export default function DashboardClient({
       netProfit,
       clinicNetProfit,
       coursesNetProfit,
+      otherNetProfit,
+      otherBilled,
+      otherInvoicesCount: periodOtherInvoices.length,
+      formattedOtherBilled: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(otherBilled),
       formattedTotalBilled: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(totalBilled),
       formattedTotalExpenses: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(totalExpenses),
       formattedNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(netProfit),
       formattedClinicNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(clinicNetProfit),
       formattedCoursesNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(coursesNetProfit),
+      formattedOtherNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(otherNetProfit),
     };
-  }, [stats.totalBilled, courseStats.totalBilledCourses, expenseAreaStats]);
+  }, [stats.totalBilled, courseStats.totalBilledCourses, otherBilled, periodOtherInvoices.length, expenseAreaStats]);
 
   // Navigation handlers
   const handlePrevPeriod = () => {
@@ -747,9 +777,10 @@ export default function DashboardClient({
               <TrendingUp size={14} className="text-emerald-400" />
             </div>
             <div className="text-2xl font-black text-white mt-1">{globalFinancials.formattedTotalBilled}</div>
-            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+            <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span>🏥 Clínica: {stats.formattedTotalBilled}</span>
               <span>🎓 Cursos: {courseStats.formattedTotalBilledCourses}</span>
+              <span className="text-amber-200">🏢 Otros: {globalFinancials.formattedOtherBilled}</span>
             </div>
           </div>
 
@@ -780,9 +811,10 @@ export default function DashboardClient({
             <div className={`text-2xl font-black mt-1 ${globalFinancials.netProfit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
               {globalFinancials.formattedNetProfit}
             </div>
-            <div className="text-[10px] text-white/80 mt-1 flex items-center justify-between">
+            <div className="text-[10px] text-white/80 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span>🏥 Clínica: {globalFinancials.formattedClinicNetProfit}</span>
               <span>🎓 Cursos: {globalFinancials.formattedCoursesNetProfit}</span>
+              <span className="text-amber-200">🏢 General: {globalFinancials.formattedOtherNetProfit}</span>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import DashboardClient from "./DashboardClient";
-import type { AppointmentData, DoctorOption, CourseSummaryData, DoctorExpenseData } from "./DashboardClient";
+import type { AppointmentData, DoctorOption, CourseSummaryData, DoctorExpenseData, OtherInvoiceData } from "./DashboardClient";
 import { ShieldAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -242,12 +242,35 @@ export default async function DashboardPage() {
     };
   });
 
+  // Identificar facturas que NO pertenezcan ni a clínica (citas) ni a cursos
+  const allCourseInvoiceIds = new Set<string>();
+  Object.values(courseBilledMap).forEach((info) => {
+    info.invoiceIds.forEach((id) => allCourseInvoiceIds.add(id));
+  });
+
+  const apptIds = new Set(rawAppointments.map((a: any) => a.id));
+
+  const otherInvoices: OtherInvoiceData[] = rawInvoices
+    .filter((inv: any) => {
+      const isClinic = Boolean(inv.xml_url && apptIds.has(inv.xml_url));
+      const isCourse = allCourseInvoiceIds.has(inv.id);
+      return !isClinic && !isCourse;
+    })
+    .map((inv: any) => ({
+      id: inv.id,
+      invoice_number: inv.invoice_number || "",
+      total: Number(inv.total) || 0,
+      created_at: inv.created_at,
+      description: inv.invoice_items?.[0]?.description || "Factura General / Otros",
+    }));
+
   return (
     <DashboardClient
       initialAppointments={appointments}
       doctors={doctors}
       courses={courses}
       expenses={rawExpenses}
+      otherInvoices={otherInvoices}
     />
   );
 }
