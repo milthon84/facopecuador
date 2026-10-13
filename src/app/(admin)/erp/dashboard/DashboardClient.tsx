@@ -759,13 +759,6 @@ export default function DashboardClient({
               </h2>
             </div>
           </div>
-          <Link
-            href="/erp/gastos"
-            className="text-[11px] text-lilac-300 hover:text-white font-bold flex items-center gap-1 transition print:hidden"
-          >
-            <span>Ver Todos los Gastos</span>
-            <ArrowUpRight size={13} />
-          </Link>
         </div>
 
         {/* 3 Métricas Principales: Facturación Total, Gastos Totales, Utilidad Neta */}
