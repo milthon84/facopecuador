@@ -476,7 +476,7 @@ export default function NuevaCompraForm({ today, bankAccounts, cajaAccounts, kno
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-ink-700">N° Baucher / Autorización *</label>
+                <label className="text-xs font-semibold text-ink-700">N° Voucher / Autorización *</label>
                 <input type="text" name="card_voucher" required placeholder="000123"
                   className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono" />
               </div>

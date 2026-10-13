@@ -313,7 +313,7 @@ export default function NewInvoiceForm({
     if (paymentMethod === "tarjeta_credito") {
       if (!cardType) e.cardType = "Selecciona o escribe el tipo de tarjeta";
       if (!cardLote.trim()) e.cardLote = "El número de lote es obligatorio";
-      if (!cardVoucher.trim()) e.cardVoucher = "El número de baucher es obligatorio";
+      if (!cardVoucher.trim()) e.cardVoucher = "El número de voucher es obligatorio";
     }
 
     setFormErrors(e);
@@ -723,7 +723,7 @@ export default function NewInvoiceForm({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-ink-700">N° Baucher *</label>
+                  <label className="text-xs font-semibold text-ink-700">N° Voucher *</label>
                   <input type="text" value={cardVoucher}
                     onChange={e => { setCardVoucher(e.target.value); setFormErrors(p => ({ ...p, cardVoucher: "" })); }}
                     placeholder="000123"

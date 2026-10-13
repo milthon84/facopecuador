@@ -54,7 +54,7 @@ async function updateExpense(formData: FormData) {
     const card_type = (formData.get("card_type") as string)?.trim() || "";
     const card_lote = (formData.get("card_lote") as string)?.trim() || "";
     const card_voucher = (formData.get("card_voucher") as string)?.trim() || "";
-    payment_reference = `Tarj: ${card_type} | Lote: ${card_lote} | Baucher: ${card_voucher}`;
+    payment_reference = `Tarj: ${card_type} | Lote: ${card_lote} | Voucher: ${card_voucher}`;
   }
 
   const { data: currentExp } = await supabase.from("expenses").select("notes").eq("id", id).maybeSingle();
