@@ -151,13 +151,7 @@ export default function IaGlobalConfigSection() {
         <h4 className="font-bold text-sm text-ink-800 flex items-center gap-2">
           <Bot size={18} className="text-lilac-600" />
           <span>Configuración de Inteligencia Artificial (IA)</span>
-          <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-lilac-100 text-lilac-800 border border-lilac-200">
-            Multi-Proveedor
-          </span>
         </h4>
-        <span className="text-[11px] text-ink-500 font-medium">
-          Control central para Auditoría de WhatsApp y herramientas automáticas
-        </span>
       </div>
 
       {/* BANNER DESTACADO: PROVEEDOR ACTUALMENTE EN USO */}

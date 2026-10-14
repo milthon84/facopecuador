@@ -4,6 +4,7 @@ import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import { redirect } from "next/navigation";
 import AuditoriaAtencionClient from "./AuditoriaAtencionClient";
 import { ShieldAlert } from "lucide-react";
+import { ecuadorDateOf } from "@/lib/ecuador-time";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,15 +42,23 @@ export default async function AuditoriaAtencionPage() {
   let initialChats: any[] = [];
   let initialAudits: any[] = [];
 
+  // Mes actual en hora Ecuador (carga inicial; el cliente vuelve a consultar al cambiar el periodo)
+  const todayEc = ecuadorDateOf(new Date());
+  const monthStart = `${todayEc.slice(0, 7)}-01`;
+  const lastDay = new Date(Date.UTC(Number(todayEc.slice(0, 4)), Number(todayEc.slice(5, 7)), 0)).getUTCDate();
+  const monthEnd = `${todayEc.slice(0, 7)}-${String(lastDay).padStart(2, "0")}`;
+
   try {
     const { getWhatsAppGroupedChats } = await import("@/lib/whatsapp-auditoria");
     const [waChats, directChatsRes, auditsRes] = await Promise.all([
-      getWhatsAppGroupedChats(supabase, null, null, 100),
+      getWhatsAppGroupedChats(supabase, monthStart, monthEnd),
       supabase
         .from("customer_service_chats")
         .select("*")
+        .gte("chat_date", monthStart)
+        .lte("chat_date", monthEnd)
         .order("started_at", { ascending: false })
-        .limit(50),
+        .limit(5000),
       supabase
         .from("customer_service_audits")
         .select("*")

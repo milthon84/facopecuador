@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { ecuadorDateTimeLabel } from "@/lib/ecuador-time";
 import Link from "next/link";
 import {
   Bot,
@@ -25,6 +26,16 @@ import {
   ExternalLink,
 } from "lucide-react";
 
+export interface ThreadMessage {
+  id: string;
+  created_at: string;
+  time_label: string;
+  sender: "ASESOR" | "PACIENTE/CLIENTE";
+  is_asesor: boolean;
+  content: string;
+  tipo_mensaje: string | null;
+}
+
 export interface ChatItem {
   id: string;
   patient_name: string;
@@ -33,8 +44,17 @@ export interface ChatItem {
   channel: string;
   chat_date: string;
   started_at: string;
+  ended_at?: string;
+  messages_count?: number;
   transcript: string;
+  messages?: ThreadMessage[];
   created_at: string;
+}
+
+interface JobProgress {
+  batches_done: number;
+  batches_total: number;
+  total_chats: number;
 }
 
 export interface IndividualChatEval {
@@ -50,6 +70,8 @@ export interface IndividualChatEval {
   resultado_agendamiento: string;
   resumen_caso: string;
   observaciones: string;
+  fecha_hora?: string | null;
+  hilo?: string | null;
 }
 
 export interface AuditResult {
@@ -81,6 +103,34 @@ export interface SavedAudit {
   created_at: string;
 }
 
+// Normaliza valores de la IA (acentos, mayúsculas, "sí"/"true")
+const normText = (v: unknown) => String(v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const isCriticalEval = (c: IndividualChatEval) => normText(c.status).includes("critic");
+const isRechazoEval = (c: IndividualChatEval) => ["true", "si", "1"].includes(normText(c.rechazo_fin_semana));
+
+// Convierte la transcripción "[YYYY-MM-DD HH:mm] [ASESOR|PACIENTE/CLIENTE]: texto" en burbujas
+function parseTranscript(transcript: string): ThreadMessage[] {
+  const out: ThreadMessage[] = [];
+  const re = /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\] \[(ASESOR|PACIENTE\/CLIENTE)\]: ?(.*)$/;
+  for (const line of transcript.split("\n")) {
+    const m = line.match(re);
+    if (m) {
+      out.push({
+        id: String(out.length),
+        created_at: "",
+        time_label: m[1],
+        sender: m[2] as ThreadMessage["sender"],
+        is_asesor: m[2] === "ASESOR",
+        content: m[3],
+        tipo_mensaje: null,
+      });
+    } else if (out.length > 0 && line.trim()) {
+      out[out.length - 1].content += `\n${line}`;
+    }
+  }
+  return out;
+}
+
 interface Props {
   initialChats: ChatItem[];
   initialAudits: SavedAudit[];
@@ -89,7 +139,7 @@ interface Props {
 type PeriodMode = "semanal" | "quincenal" | "mensual" | "custom";
 
 export default function AuditoriaAtencionClient({ initialChats, initialAudits }: Props) {
-  const [activeTab, setActiveTab] = useState<"auditoria" | "historial" | "chats">("auditoria");
+  const [activeTab, setActiveTab] = useState<"auditoria" | "historial" | "chats">("chats");
   const [periodMode, setPeriodMode] = useState<PeriodMode>("mensual");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -100,8 +150,11 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [filterSeverity, setFilterSeverity] = useState<string>("all");
+  const [filterSeverity, setFilterSeverity] = useState<string>("criticos");
   const [expandedChatId, setExpandedChatId] = useState<string | null>(null);
+  const [selectedChat, setSelectedChat] = useState<ChatItem | null>(null);
+  const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
+  const [showAllEvals, setShowAllEvals] = useState(false);
 
   // Estado del motor de IA activo
   const [activeAiConfig, setActiveAiConfig] = useState<{ provider: string; model: string } | null>(null);
@@ -237,21 +290,29 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
     };
   }, [periodMode, customStart, customEnd]);
 
-  // Filtrar chats del período
+  // Chats del período, ordenados de forma descendente por último mensaje
   const periodChats = useMemo(() => {
-    return chats.filter((c) => {
-      const d = c.chat_date || (c.started_at ? c.started_at.slice(0, 10) : "");
-      return d >= periodDates.start && d <= periodDates.end;
-    });
+    return chats
+      .filter((c) => {
+        const d = c.chat_date || (c.started_at ? c.started_at.slice(0, 10) : "");
+        return d >= periodDates.start && d <= periodDates.end;
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.ended_at || b.started_at || b.created_at).getTime() -
+          new Date(a.ended_at || a.started_at || a.created_at).getTime()
+      );
   }, [chats, periodDates]);
 
-  // Ejecutar análisis con IA
+  // Ejecutar auditoría con IA: crea el job del periodo y procesa los lotes en secuencia
   const handleRunAudit = async () => {
     setIsAnalyzing(true);
     setErrorMsg(null);
+    setCurrentAudit(null);
+    setJobProgress(null);
 
     try {
-      const res = await fetch("/api/admin/auditoria-atencion/analizar", {
+      const createRes = await fetch("/api/admin/auditoria-atencion/analizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,48 +320,54 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
           periodLabel: periodDates.label,
           startDate: periodDates.start,
           endDate: periodDates.end,
-          chats: periodChats.length > 0 ? periodChats : undefined,
-          saveAudit: true,
         }),
       });
+      const created = await createRes.json().catch(() => null);
+      if (!createRes.ok || !created?.job) {
+        throw new Error(created?.error || `Error ${createRes.status} al iniciar la auditoría con IA.`);
+      }
 
-      const contentType = res.headers.get("content-type") || "";
-      let data: any = null;
+      let job = created.job;
+      setJobProgress({ batches_done: job.batches_done, batches_total: job.batches_total, total_chats: job.total_chats });
 
-      if (contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        await res.text();
-        if (!res.ok) {
-          throw new Error(
-            `El servidor respondió con código HTTP ${res.status} (${res.statusText || "Error temporal"}). Si el análisis tiene muchos chats, intenta filtrar por un rango más corto o verifica tu API Key de IA.`
-          );
+      let guard = 0;
+      while (job.status !== "completado" && guard < 500) {
+        guard++;
+        const res = await fetch(`/api/admin/auditoria-atencion/jobs/${job.id}`, { method: "POST" });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.job) {
+          throw new Error(data?.error || `Error ${res.status} al procesar un lote de la auditoría.`);
         }
-        throw new Error("El servidor devolvió un formato no compatible (no es JSON).");
+        job = data.job;
+        setJobProgress({ batches_done: job.batches_done, batches_total: job.batches_total, total_chats: job.total_chats });
       }
 
-      if (!res.ok) {
-        throw new Error(data?.error || `Error ${res.status} al procesar la auditoría con IA.`);
+      if (!job.audit_id) {
+        throw new Error("La auditoría terminó sin generar un resultado consolidado.");
       }
 
-      setCurrentAudit(data.audit);
+      // Cargar el resultado guardado y refrescar historial
+      const histRes = await fetch("/api/admin/auditoria-atencion/historial");
+      const histData = await histRes.json().catch(() => ({ audits: [] }));
+      const audits: SavedAudit[] = histData.audits || [];
+      setAudits(audits);
+      const saved = audits.find((a) => a.id === job.audit_id);
+      if (saved) setCurrentAudit(saved as unknown as AuditResult);
       setActiveTab("auditoria");
-
-      // Refrescar historial
-      fetchHistorial();
     } catch (err: any) {
       setErrorMsg(err.message || "Error al conectar con la Inteligencia Artificial.");
     } finally {
       setIsAnalyzing(false);
+      setJobProgress(null);
     }
   };
 
   const [isRefreshingChats, setIsRefreshingChats] = useState(false);
 
-  const fetchChats = async () => {
+  const fetchChats = async (start: string, end: string) => {
     setIsRefreshingChats(true);
     try {
-      const res = await fetch("/api/admin/auditoria-atencion/chats");
+      const res = await fetch(`/api/admin/auditoria-atencion/chats?start=${start}&end=${end}`);
       const contentType = res.headers.get("content-type") || "";
       if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
@@ -315,6 +382,14 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
     }
   };
 
+  // Recargar chats cada vez que cambia el periodo (rango completo en hora Ecuador)
+  useEffect(() => {
+    if (periodDates.start && periodDates.end) {
+      fetchChats(periodDates.start, periodDates.end);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodDates.start, periodDates.end]);
+
   const fetchHistorial = async () => {
     try {
       const res = await fetch("/api/admin/auditoria-atencion/historial");
@@ -328,14 +403,61 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
     } catch {}
   };
 
-  const filteredEvals = useMemo(() => {
+  // Casos del filtro activo (por defecto: críticos y rechazos)
+  const evalsByFilter = useMemo(() => {
     if (!currentAudit) return [];
-    if (filterSeverity === "all") return currentAudit.chat_evaluations;
-    if (filterSeverity === "critico") return currentAudit.chat_evaluations.filter((c) => c.status === "critico");
-    if (filterSeverity === "rechazo") return currentAudit.chat_evaluations.filter((c) => c.rechazo_fin_semana);
-    if (filterSeverity === "lento") return currentAudit.chat_evaluations.filter((c) => c.tiempo_respuesta.toLowerCase().includes("lento"));
-    return currentAudit.chat_evaluations;
+    const all = currentAudit.chat_evaluations || [];
+    if (filterSeverity === "rechazo") return all.filter(isRechazoEval);
+    if (filterSeverity === "critico") return all.filter(isCriticalEval);
+    return all.filter((c) => isCriticalEval(c) || isRechazoEval(c));
   }, [currentAudit, filterSeverity]);
+
+  // Más relevantes primero (rechazos, luego menor score) y máximo 10 salvo que se pida ver todos
+  const filteredEvals = useMemo(() => {
+    const sorted = [...evalsByFilter].sort(
+      (a, b) => Number(isRechazoEval(b)) - Number(isRechazoEval(a)) || Number(a.score) - Number(b.score)
+    );
+    return showAllEvals ? sorted : sorted.slice(0, 10);
+  }, [evalsByFilter, showAllEvals]);
+
+  // Abre el hilo: usa el guardado en el caso; si no existe, lo busca en Supabase por id dentro del periodo auditado
+  const openEvalThread = async (item: IndividualChatEval) => {
+    if (item.hilo) {
+      setSelectedChat({
+        id: item.id_chat,
+        patient_name: item.paciente,
+        phone: item.telefono,
+        agent_name: "Recepción / Asesor FACOP",
+        channel: "whatsapp",
+        chat_date: "",
+        started_at: item.fecha_hora || "",
+        transcript: item.hilo,
+        created_at: "",
+        messages: parseTranscript(item.hilo),
+      });
+      return;
+    }
+
+    const audit = currentAudit as (AuditResult & { start_date?: string; end_date?: string }) | null;
+    if (!audit?.start_date || !audit?.end_date) {
+      setErrorMsg("Esta auditoría no tiene periodo registrado para cargar el hilo.");
+      return;
+    }
+    try {
+      const start = String(audit.start_date).slice(0, 10);
+      const end = String(audit.end_date).slice(0, 10);
+      const res = await fetch(`/api/admin/auditoria-atencion/chats?start=${start}&end=${end}`);
+      const data = await res.json();
+      const found = (data.chats || []).find((c: ChatItem) => c.id === item.id_chat);
+      if (found) {
+        setSelectedChat(found as ChatItem);
+      } else {
+        setErrorMsg("No se encontró la conversación de este caso en el periodo auditado.");
+      }
+    } catch {
+      setErrorMsg("No se pudo cargar el hilo de la conversación.");
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 pb-12">
@@ -349,9 +471,6 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight flex items-center gap-2">
                 Auditoría de Atención al Cliente
-                <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-lilac-50 text-lilac-700 border border-lilac-200">
-                  IA Supervisor
-                </span>
               </h1>
               <p className="text-xs text-ink-500 font-medium">
                 Supervisión inteligente de chats de WhatsApp: cordialidad, agilidad y detección de rechazos de pacientes.
@@ -425,14 +544,14 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
         <div className="flex items-center gap-1 p-0.5 bg-lilac-50/80 rounded-xl border border-lilac-100">
           <button
             type="button"
-            onClick={() => setActiveTab("auditoria")}
+            onClick={() => setActiveTab("chats")}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-              activeTab === "auditoria"
+              activeTab === "chats"
                 ? "bg-lilac-600 text-white shadow-xs"
                 : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
             }`}
           >
-            Resultados Auditoría
+            Chats Disponibles ({periodChats.length})
           </button>
           <button
             type="button"
@@ -447,14 +566,14 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("chats")}
+            onClick={() => setActiveTab("auditoria")}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-              activeTab === "chats"
+              activeTab === "auditoria"
                 ? "bg-lilac-600 text-white shadow-xs"
                 : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
             }`}
           >
-            Chats Disponibles ({periodChats.length})
+            Resultados Auditoría
           </button>
         </div>
 
@@ -513,6 +632,24 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
       {/* PESTAÑA 1: RESULTADOS AUDITORÍA */}
       {activeTab === "auditoria" && (
         <div className="space-y-4">
+          {isAnalyzing && jobProgress && (
+            <div className="bg-white p-6 rounded-2xl border border-lilac-100 shadow-xs space-y-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-ink-900">
+                <RefreshCw size={16} className="animate-spin text-lilac-600" />
+                <span>Auditoría con IA en progreso</span>
+              </div>
+              <p className="text-xs text-ink-500">
+                Lote {jobProgress.batches_done} de {jobProgress.batches_total} · {jobProgress.total_chats} chats del periodo
+              </p>
+              <div className="w-full h-2 bg-lilac-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-lilac-600 to-indigo-600 transition-all"
+                  style={{ width: `${Math.round((jobProgress.batches_done / Math.max(jobProgress.batches_total, 1)) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {!currentAudit && !isAnalyzing && (
             <div className="bg-white p-8 rounded-2xl border border-lilac-100 shadow-xs text-center space-y-3">
               <div className="w-12 h-12 bg-lilac-50 text-lilac-600 rounded-full flex items-center justify-center mx-auto">
@@ -525,14 +662,6 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                 La Inteligencia Artificial evaluará los chats de WhatsApp registrados del {periodDates.label} para
                 analizar cordialidad, tiempos de respuesta y oportunidades perdidas.
               </p>
-              <button
-                type="button"
-                onClick={handleRunAudit}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-lilac-600 hover:bg-lilac-700 transition shadow-xs"
-              >
-                <Bot size={15} />
-                <span>Analizar {periodChats.length} Chats con IA</span>
-              </button>
             </div>
           )}
 
@@ -687,10 +816,10 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-lilac-50 pb-2">
                   <div>
                     <h3 className="text-xs font-bold text-ink-900 uppercase tracking-wider">
-                      Desglose Individual por Conversación ({filteredEvals.length})
+                      Casos prioritarios ({evalsByFilter.length})
                     </h3>
                     <p className="text-[11px] text-ink-400">
-                      Haz clic en cualquier chat para ver la transcripción y las observaciones detalladas del supervisor IA.
+                      Casos prioritarios. Usa &quot;Ver hilo&quot; para leer la conversación completa.
                     </p>
                   </div>
 
@@ -698,12 +827,12 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                   <div className="flex items-center gap-1 text-xs">
                     <button
                       type="button"
-                      onClick={() => setFilterSeverity("all")}
+                      onClick={() => setFilterSeverity("criticos")}
                       className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition ${
-                        filterSeverity === "all" ? "bg-lilac-600 text-white" : "text-ink-600 hover:bg-lilac-50"
+                        filterSeverity === "criticos" ? "bg-lilac-600 text-white" : "text-ink-600 hover:bg-lilac-50"
                       }`}
                     >
-                      Todos
+                      Críticos y rechazos
                     </button>
                     <button
                       type="button"
@@ -712,7 +841,7 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                         filterSeverity === "rechazo" ? "bg-rose-600 text-white" : "text-rose-700 hover:bg-rose-50"
                       }`}
                     >
-                      Rechazos ({currentAudit.rejected_leads_count})
+                      Rechazos ({currentAudit.chat_evaluations.filter(isRechazoEval).length})
                     </button>
                     <button
                       type="button"
@@ -726,12 +855,22 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                   </div>
                 </div>
 
+                {evalsByFilter.length > 10 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllEvals((v) => !v)}
+                    className="text-[11px] font-bold text-lilac-700 hover:text-lilac-900 self-start"
+                  >
+                    {showAllEvals ? "Mostrar solo los 10 más prioritarios" : `Mostrar todos (${evalsByFilter.length})`}
+                  </button>
+                )}
+
                 {/* Lista de Chats Evaluados */}
                 <div className="divide-y divide-lilac-50">
                   {filteredEvals.map((item, idx) => {
                     const isExpanded = expandedChatId === item.id_chat;
-                    const isCrit = item.status === "critico" || item.rechazo_fin_semana;
-                    const isReg = item.status === "regular";
+                    const isCrit = isCriticalEval(item) || isRechazoEval(item);
+                    const isReg = normText(item.status).includes("regular");
 
                     return (
                       <div key={item.id_chat || idx} className="py-2.5">
@@ -769,6 +908,18 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                             <span className="text-[11px] font-semibold text-ink-500 hidden sm:inline">
                               {item.resultado_agendamiento}
                             </span>
+                            {(
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEvalThread(item);
+                                }}
+                                className="text-[11px] font-bold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 px-2 py-0.5 rounded-lg border border-lilac-200 transition"
+                              >
+                                Ver hilo
+                              </button>
+                            )}
                             {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                           </div>
                         </div>
@@ -837,7 +988,15 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
               </thead>
               <tbody className="divide-y divide-lilac-50/70">
                 {audits.map((a) => (
-                  <tr key={a.id} className="hover:bg-lilac-50/30 transition">
+                  <tr
+                    key={a.id}
+                    onClick={() => {
+                      setCurrentAudit(a as unknown as AuditResult);
+                      setActiveTab("auditoria");
+                    }}
+                    className="hover:bg-lilac-50/30 transition cursor-pointer"
+                    title="Haz clic para ver el detalle de esta auditoría"
+                  >
                     <td className="py-2 font-bold text-ink-900">{a.period_label}</td>
                     <td className="py-2 text-center capitalize text-ink-600">{a.period_type}</td>
                     <td className="py-2 text-center font-bold text-ink-700">{a.total_chats_analyzed}</td>
@@ -880,12 +1039,12 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
           <div className="bg-white p-4 rounded-2xl border border-lilac-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between border-b border-lilac-50 pb-2">
               <h3 className="text-xs font-bold text-ink-900 uppercase tracking-wider">
-                Chats de WhatsApp Sincronizados ({periodChats.length})
+                Conversaciones ({periodChats.length})
               </h3>
               <button
                 type="button"
                 disabled={isRefreshingChats}
-                onClick={fetchChats}
+                onClick={() => fetchChats(periodDates.start, periodDates.end)}
                 className="text-xs text-lilac-600 hover:text-lilac-800 font-bold inline-flex items-center gap-1 bg-lilac-50 hover:bg-lilac-100 px-3 py-1.5 rounded-xl transition"
               >
                 <RefreshCw size={13} className={isRefreshingChats ? "animate-spin" : ""} />
@@ -898,22 +1057,31 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                 <thead>
                   <tr className="border-b border-lilac-100 text-ink-400 font-bold uppercase text-[10px]">
                     <th className="pb-1.5">Paciente / Teléfono</th>
-                    <th className="pb-1.5">Asesor / Canal</th>
-                    <th className="pb-1.5 text-center">Fecha</th>
-                    <th className="pb-1.5">Inicio de Conversación</th>
+                    <th className="pb-1.5">Fecha y hora (Ecuador)</th>
+                    <th className="pb-1.5">Último mensaje</th>
+                    <th className="pb-1.5 text-right">Mensajes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-lilac-50/70">
                   {periodChats.map((c) => (
-                    <tr key={c.id} className="hover:bg-lilac-50/30 transition">
+                    <tr
+                      key={c.id}
+                      onClick={() => setSelectedChat(c)}
+                      className="hover:bg-lilac-50/40 transition cursor-pointer"
+                      title="Haz clic para ver el hilo completo de la conversación"
+                    >
                       <td className="py-2">
                         <div className="font-bold text-ink-900">{c.patient_name}</div>
                         <div className="text-[10px] text-ink-400">{c.phone}</div>
                       </td>
-                      <td className="py-2 text-ink-700">{c.agent_name}</td>
-                      <td className="py-2 text-center text-ink-600">{c.chat_date}</td>
-                      <td className="py-2 text-ink-600 font-mono text-[11px] truncate max-w-xs">
-                        {c.transcript.slice(0, 80)}...
+                      <td className="py-2.5 text-ink-700 font-mono text-[11px] whitespace-nowrap">
+                        {ecuadorDateTimeLabel(c.ended_at || c.started_at || c.created_at)}
+                      </td>
+                      <td className="py-2.5 text-ink-600 max-w-xs truncate">
+                        {(c.messages?.[c.messages.length - 1]?.content ?? (c.transcript || "").split("\n").pop() ?? "").slice(0, 120)}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-ink-600">
+                        {c.messages_count ?? c.messages?.length ?? "-"}
                       </td>
                     </tr>
                   ))}
@@ -927,6 +1095,62 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: hilo completo de la conversación */}
+      {selectedChat && (
+        <div
+          className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setSelectedChat(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-lilac-100 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-lilac-100 flex items-start justify-between gap-3 bg-lilac-50/40">
+              <div>
+                <h3 className="font-bold text-sm text-ink-900">
+                  {selectedChat.patient_name} <span className="text-ink-400 font-normal">({selectedChat.phone})</span>
+                </h3>
+                <p className="text-[11px] text-ink-500">
+                  {selectedChat.messages?.length ?? selectedChat.messages_count ?? 0} mensajes · Inicio{" "}
+                  {ecuadorDateTimeLabel(selectedChat.started_at)} · Último{" "}
+                  {ecuadorDateTimeLabel(selectedChat.ended_at || selectedChat.started_at)} (hora Ecuador)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedChat(null)}
+                className="w-8 h-8 shrink-0 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-lilac-100 flex items-center justify-center transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 bg-ink-50/40 flex-1">
+              {selectedChat.messages && selectedChat.messages.length > 0 ? (
+                selectedChat.messages.map((m) => (
+                  <div key={m.id} className={`flex ${m.is_asesor ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs shadow-xs border ${
+                        m.is_asesor
+                          ? "bg-lilac-600 text-white border-lilac-700 rounded-br-sm"
+                          : "bg-white text-ink-800 border-lilac-100 rounded-bl-sm"
+                      }`}
+                    >
+                      <div className={`text-[10px] font-bold mb-0.5 ${m.is_asesor ? "text-lilac-100" : "text-ink-400"}`}>
+                        {m.is_asesor ? "Asesor" : "Paciente"} · {m.time_label || ecuadorDateTimeLabel(m.created_at)}
+                      </div>
+                      <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <pre className="text-[11px] font-mono whitespace-pre-wrap text-ink-700">{selectedChat.transcript}</pre>
+              )}
             </div>
           </div>
         </div>

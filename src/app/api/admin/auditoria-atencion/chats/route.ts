@@ -24,22 +24,23 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const start = searchParams.get("start");
     const end = searchParams.get("end");
-    const limit = parseInt(searchParams.get("limit") || "100", 10);
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
     const supabase = createAdminClient();
     const { getWhatsAppGroupedChats } = await import("@/lib/whatsapp-auditoria");
 
-    // 1. Obtener chats agrupados de whatsapp_mensajes
-    const waChats = await getWhatsAppGroupedChats(supabase, start, end, limit);
+    // 1. Chats de WhatsApp del rango (Ecuador), sin límite por defecto
+    const waChats = await getWhatsAppGroupedChats(supabase, start, end);
 
-    // 2. Obtener chats manuales / directos si existen
+    // 2. Chats manuales / directos del rango
     let directChats: any[] = [];
     try {
       let query = supabase
         .from("customer_service_chats")
         .select("*")
         .order("started_at", { ascending: false })
-        .limit(limit);
+        .limit(5000);
 
       if (start) query = query.gte("chat_date", start);
       if (end) query = query.lte("chat_date", end);
@@ -49,9 +50,14 @@ export async function GET(req: NextRequest) {
     } catch {}
 
     const allChats = [...waChats, ...directChats];
-    allChats.sort((a, b) => new Date(b.started_at || b.created_at).getTime() - new Date(a.started_at || a.created_at).getTime());
+    // Descendente por último mensaje (lo más reciente primero)
+    allChats.sort(
+      (a, b) =>
+        new Date(b.ended_at || b.started_at || b.created_at).getTime() -
+        new Date(a.ended_at || a.started_at || a.created_at).getTime()
+    );
 
-    return NextResponse.json({ chats: allChats.slice(0, limit) });
+    return NextResponse.json({ chats: limit ? allChats.slice(0, limit) : allChats });
   } catch (err: any) {
     console.error("Error al obtener chats:", err);
     return NextResponse.json({ error: err.message || "Error al consultar chats" }, { status: 500 });

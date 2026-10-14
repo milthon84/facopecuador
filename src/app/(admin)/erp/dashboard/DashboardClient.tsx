@@ -965,12 +965,6 @@ export default function DashboardClient({
             <GraduationCap size={15} className="text-indigo-600" />
             <span>CURSOS</span>
           </div>
-          <Link
-            href="/erp/cursos"
-            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-0.5 print:hidden"
-          >
-            Gestionar cursos <ArrowUpRight size={12} />
-          </Link>
         </div>
 
         {/* 4 KPIs de Cursos: Activos, Alumnos, Facturación y Gastos */}
