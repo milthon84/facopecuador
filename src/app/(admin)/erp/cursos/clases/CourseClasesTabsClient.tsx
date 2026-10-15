@@ -62,6 +62,13 @@ export default function CourseClasesTabsClient({
 
           <div className="flex items-center gap-2 shrink-0">
             <Link
+              href="/erp/cursos?tab=agenda"
+              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-800 bg-lilac-50 border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-100 transition shadow-2xs"
+            >
+              <Calendar size={13} className="text-lilac-600" />
+              <span>Agenda y Feriados</span>
+            </Link>
+            <Link
               href={`/erp/cursos/${selectedCourse.id}`}
               className="inline-flex items-center gap-1 text-xs font-bold text-ink-700 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-50 transition shadow-2xs"
             >
@@ -70,7 +77,7 @@ export default function CourseClasesTabsClient({
             </Link>
             <Link
               href="/erp/cursos/clases"
-              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-100 transition shadow-2xs"
+              className="inline-flex items-center gap-1 text-xs font-bold text-ink-600 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl hover:bg-lilac-50 transition shadow-2xs"
             >
               <ArrowLeft size={13} />
               <span>Cambiar Curso</span>

@@ -814,3 +814,75 @@ export async function syncStudentModulesAction(payload: { studentId?: string; co
   return { success: true, insertedCount: res.insertedCount };
 }
 
+export async function createClassScheduleAction(payload: {
+  moduleId: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  title?: string;
+  teacherId?: string | null;
+  classroom?: string | null;
+}) {
+  try {
+    await assertWritePermission("/erp/cursos/clases");
+    const { moduleId, date, startTime = "08:00", endTime = "17:00", title, teacherId, classroom } = payload;
+    if (!moduleId || !date) {
+      return { success: false, error: "El módulo y la fecha son obligatorios." };
+    }
+
+    const supabase = createAdminClient();
+
+    let finalTitle = title?.trim();
+    if (!finalTitle) {
+      const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("es-EC", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+      finalTitle = `Clase del ${dateFormatted}`;
+    }
+
+    const { data: newClass, error } = await supabase
+      .from("curso_clases")
+      .insert({
+        module_id: moduleId,
+        title: finalTitle,
+        date,
+        start_time: startTime,
+        end_time: endTime,
+        teacher_id: teacherId || null,
+        classroom: classroom?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/erp/cursos/agenda");
+    revalidatePath("/erp/cursos/clases");
+    revalidatePath("/erp/cursos");
+    return { success: true, classId: newClass.id };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al programar la clase." };
+  }
+}
+
+export async function deleteClassScheduleAction(classId: string) {
+  try {
+    await assertWritePermission("/erp/cursos/clases");
+    if (!classId) return { success: false, error: "ID de clase no proporcionado." };
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("curso_clases").delete().eq("id", classId);
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/erp/cursos/agenda");
+    revalidatePath("/erp/cursos/clases");
+    revalidatePath("/erp/cursos");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al eliminar la clase." };
+  }
+}
+

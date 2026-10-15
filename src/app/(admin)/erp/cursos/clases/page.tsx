@@ -293,14 +293,24 @@ export default async function ClasesPage({
 
     return (
       <div className="max-w-6xl mx-auto pb-8 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 shrink-0">
-            <Presentation size={20} />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-700 shrink-0">
+              <Presentation size={20} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-ink-900 leading-tight">Clases, Asistencia y Comunicados</h1>
+              <p className="text-xs text-ink-500">Selecciona un curso activo o en ejecución para administrar sus clases, asistencias y comunicados.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-ink-900 leading-tight">Clases, Asistencia y Comunicados</h1>
-            <p className="text-xs text-ink-500">Selecciona un curso activo o en ejecución para administrar sus clases, asistencias y comunicados.</p>
-          </div>
+
+          <Link
+            href="/erp/cursos?tab=agenda"
+            className="inline-flex items-center gap-1.5 bg-white border border-lilac-200 text-lilac-800 hover:bg-lilac-50 text-xs px-3.5 py-2 rounded-xl font-bold shadow-2xs transition shrink-0"
+          >
+            <Calendar size={15} className="text-lilac-600" />
+            <span>Ver Agenda y Feriados</span>
+          </Link>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

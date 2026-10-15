@@ -232,15 +232,6 @@ export default async function AdminDashboard({
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
-          <Link
-            href="/erp/dashboard"
-            className="flex items-center gap-1.5 bg-white border border-lilac-200 text-ink-700 hover:bg-lilac-50 text-xs sm:text-sm px-3 py-2 rounded-xl transition font-semibold shadow-sm"
-            title="Ver resumen y estadísticas de citas y atenciones"
-          >
-            <TrendingUp size={15} className="text-lilac-600" />
-            <span className="hidden sm:inline">Métricas y</span> Resumen
-          </Link>
-
           {canModify && (
             <Link
               href={`/erp/citas/nueva?date=${targetDateStr}`}

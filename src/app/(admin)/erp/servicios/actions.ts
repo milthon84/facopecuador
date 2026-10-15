@@ -10,30 +10,33 @@ export async function addServiceAction(data: {
   iva_code: string;
   category: string;
 }) {
-  await assertWritePermission("/erp/servicios");
-  const name = data.name?.trim();
-  const cashPrice = Number(data.cash_price || 0);
+  try {
+    await assertWritePermission("/erp/servicios");
+    const name = data.name?.trim();
+    const cashPrice = Number(data.cash_price || 0);
 
-  if (!name) throw new Error("El nombre del servicio es obligatorio.");
+    if (!name) return { success: false, error: "El nombre del servicio es obligatorio." };
 
-  const supabase = createAdminClient();
-  const { data: sriConfig } = await supabase.from("sri_configs").select("*").maybeSingle();
-  const cashDiscountPercent = Number(sriConfig?.cash_discount_percent ?? sriConfig?.card_surcharge_percent ?? 6.0);
-  const pvp = cashPrice / (1 - cashDiscountPercent / 100);
+    const supabase = createAdminClient();
+    const { data: sriConfig } = await supabase.from("sri_configs").select("*").maybeSingle();
+    const cashDiscountPercent = Number(sriConfig?.cash_discount_percent ?? sriConfig?.card_surcharge_percent ?? 6.0);
+    const pvp = Number((cashPrice / (1 - cashDiscountPercent / 100)).toFixed(2));
 
-  const { error } = await supabase.from("services").insert({
-    name,
-    price: pvp,
-    discount_percent: 0,
-    iva_code: data.iva_code || "4",
-    category: data.category?.trim() || "General",
-    active: true,
-  });
+    const { error } = await supabase.from("services").insert({
+      name,
+      price: pvp,
+      iva_code: data.iva_code || "4",
+      category: data.category?.trim() || "General",
+      active: true,
+    });
 
-  if (error) throw new Error(error.message || "Error al registrar el servicio.");
+    if (error) return { success: false, error: error.message || "Error al registrar el servicio." };
 
-  revalidatePath("/erp/servicios");
-  return { success: true };
+    revalidatePath("/erp/servicios");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al registrar el servicio." };
+  }
 }
 
 export async function updateServiceAction(data: {
@@ -43,33 +46,36 @@ export async function updateServiceAction(data: {
   iva_code: string;
   category: string;
 }) {
-  await assertWritePermission("/erp/servicios");
-  const id = data.id;
-  const name = data.name?.trim();
-  const cashPrice = Number(data.cash_price || 0);
+  try {
+    await assertWritePermission("/erp/servicios");
+    const id = data.id;
+    const name = data.name?.trim();
+    const cashPrice = Number(data.cash_price || 0);
 
-  if (!id || !name) throw new Error("Datos incompletos para actualizar el servicio.");
+    if (!id || !name) return { success: false, error: "Datos incompletos para actualizar el servicio." };
 
-  const supabase = createAdminClient();
-  const { data: sriConfig } = await supabase.from("sri_configs").select("*").maybeSingle();
-  const cashDiscountPercent = Number(sriConfig?.cash_discount_percent ?? sriConfig?.card_surcharge_percent ?? 6.0);
-  const pvp = cashPrice / (1 - cashDiscountPercent / 100);
+    const supabase = createAdminClient();
+    const { data: sriConfig } = await supabase.from("sri_configs").select("*").maybeSingle();
+    const cashDiscountPercent = Number(sriConfig?.cash_discount_percent ?? sriConfig?.card_surcharge_percent ?? 6.0);
+    const pvp = Number((cashPrice / (1 - cashDiscountPercent / 100)).toFixed(2));
 
-  const { error } = await supabase
-    .from("services")
-    .update({
-      name,
-      price: pvp,
-      discount_percent: 0,
-      iva_code: data.iva_code || "4",
-      category: data.category?.trim() || "General",
-    })
-    .eq("id", id);
+    const { error } = await supabase
+      .from("services")
+      .update({
+        name,
+        price: pvp,
+        iva_code: data.iva_code || "4",
+        category: data.category?.trim() || "General",
+      })
+      .eq("id", id);
 
-  if (error) throw new Error(error.message || "Error al actualizar el servicio.");
+    if (error) return { success: false, error: error.message || "Error al actualizar el servicio." };
 
-  revalidatePath("/erp/servicios");
-  return { success: true };
+    revalidatePath("/erp/servicios");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al actualizar el servicio." };
+  }
 }
 
 export async function toggleServiceAction(formData: FormData) {

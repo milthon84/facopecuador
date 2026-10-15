@@ -57,12 +57,16 @@ export default function NuevoServicioModal({
     setErrorMsg(null);
 
     try {
-      await addServiceAction({
+      const res = await addServiceAction({
         name: name.trim(),
         cash_price: numCashPrice,
         iva_code: ivaCode,
         category: category.trim() || "General",
       });
+      if (res && !res.success) {
+        setErrorMsg(res.error || "Error al registrar el servicio.");
+        return;
+      }
       setIsOpen(false);
       router.refresh();
     } catch (err: any) {

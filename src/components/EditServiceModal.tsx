@@ -67,13 +67,17 @@ export default function EditServiceModal({
     setErrorMsg(null);
 
     try {
-      await updateServiceAction({
+      const res = await updateServiceAction({
         id: service.id,
         name: name.trim(),
         cash_price: numCashPrice,
         iva_code: ivaCode,
         category: category.trim() || "General",
       });
+      if (res && !res.success) {
+        setErrorMsg(res.error || "Error al actualizar el servicio.");
+        return;
+      }
       setIsOpen(false);
       router.refresh();
     } catch (err: any) {

@@ -248,6 +248,13 @@ export default async function CursoDetallePage({
 
           {canEdit && (
             <div className="flex items-center gap-2">
+              <Link
+                href="/erp/cursos?tab=agenda"
+                className="inline-flex items-center gap-1.5 bg-white border border-lilac-200 text-lilac-800 hover:bg-lilac-50 text-xs px-3 py-2 rounded-xl font-bold shadow-2xs transition"
+              >
+                <Calendar size={14} className="text-lilac-600" />
+                <span>Ver en Agenda</span>
+              </Link>
               <EditCourseModal course={course} />
               <CopyCourseButton courseId={id} courseName={course.name} />
             </div>
