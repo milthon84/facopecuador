@@ -67,6 +67,37 @@ async function fetchMessagesInRange(
 }
 
 /**
+ * Genera una transcripción acotada y optimizada para la IA:
+ * - Si hay más de 30 mensajes, conserva los primeros 12 (apertura y saludo) y los últimos 18 (resolución/cierre).
+ * - Trunca mensajes individuales a máximo 400 caracteres para evitar spam o documentos pegados.
+ */
+export function buildAuditTranscript(messages: ThreadMessage[], maxMessages = 30): string {
+  if (messages.length === 0) return "";
+
+  const formatLine = (m: ThreadMessage) => {
+    const raw = (m.content || "").trim();
+    const clean = raw.length > 400 ? `${raw.slice(0, 400)}... (truncado)` : raw;
+    return `[${m.time_label}] [${m.sender}]: ${clean}`;
+  };
+
+  if (messages.length <= maxMessages) {
+    return messages.map(formatLine).join("\n");
+  }
+
+  const headCount = 12;
+  const tailCount = 18;
+  const head = messages.slice(0, headCount).map(formatLine);
+  const tail = messages.slice(-tailCount).map(formatLine);
+  const omitted = messages.length - (headCount + tailCount);
+
+  return [
+    ...head,
+    `... [${omitted} mensajes intermedios omitidos por longitud para optimizar la auditoría de calidad] ...`,
+    ...tail,
+  ].join("\n");
+}
+
+/**
  * Consulta whatsapp_mensajes en Supabase, agrupa los mensajes por teléfono (una conversación por número)
  * y devuelve los chats ordenados del más reciente (último mensaje) al más antiguo.
  * Todas las fechas y horas se expresan en hora de Ecuador.
@@ -111,7 +142,7 @@ export async function getWhatsAppGroupedChats(
         };
       });
 
-      const transcript = messages.map((m) => `[${m.time_label}] [${m.sender}]: ${m.content}`).join("\n");
+      const transcript = buildAuditTranscript(messages);
       const firstMsg = msgs[0];
       const lastMsg = msgs[msgs.length - 1];
 
@@ -139,3 +170,4 @@ export async function getWhatsAppGroupedChats(
     return [];
   }
 }
+

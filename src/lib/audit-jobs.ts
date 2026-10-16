@@ -4,7 +4,7 @@ import { getEffectiveAuditPrompt } from "@/lib/ia-audit-prompt";
 import { resolveAiConfig, hasAnyAiKey, callAiForJson, type AiConfig } from "@/lib/ia-audit-runner";
 import { ecuadorDateOf } from "@/lib/ecuador-time";
 
-export const BATCH_SIZE = 10;
+export const BATCH_SIZE = 5;
 
 export interface AuditChatPayload {
   id: string;

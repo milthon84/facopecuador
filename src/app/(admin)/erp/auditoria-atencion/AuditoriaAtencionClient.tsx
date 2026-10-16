@@ -170,7 +170,7 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
       if (data.success) {
         setActiveAiConfig({
           provider: data.provider || "gemini",
-          model: data.model || "gemini-1.5-flash",
+          model: data.model || "gemini-3.5-flash-lite",
         });
         if (data.prompt) setPromptInput(data.prompt);
         if (data.defaultPrompt) setDefaultPrompt(data.defaultPrompt);
@@ -196,7 +196,7 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
         setDefaultPrompt(data.defaultPrompt || "");
         setActiveAiConfig({
           provider: data.provider || "gemini",
-          model: data.model || "gemini-1.5-flash",
+          model: data.model || "gemini-3.5-flash-lite",
         });
       }
     } catch (e) {
@@ -331,15 +331,32 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
       setJobProgress({ batches_done: job.batches_done, batches_total: job.batches_total, total_chats: job.total_chats });
 
       let guard = 0;
+      let consecutiveErrors = 0;
       while (job.status !== "completado" && guard < 500) {
         guard++;
-        const res = await fetch(`/api/admin/auditoria-atencion/jobs/${job.id}`, { method: "POST" });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || !data?.job) {
-          throw new Error(data?.error || `Error ${res.status} al procesar un lote de la auditoría.`);
+        try {
+          const res = await fetch(`/api/admin/auditoria-atencion/jobs/${job.id}`, { method: "POST" });
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data?.job) {
+            throw new Error(data?.error || `Error ${res.status} al procesar el lote ${job.batches_done + 1}.`);
+          }
+          job = data.job;
+          consecutiveErrors = 0;
+          setJobProgress({ batches_done: job.batches_done, batches_total: job.batches_total, total_chats: job.total_chats });
+
+          // Pausa preventiva de 600ms entre lotes para respetar límites de cuota (RPM)
+          if (job.status !== "completado") {
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        } catch (batchErr: any) {
+          consecutiveErrors++;
+          console.warn(`Error en lote de auditoría (intento ${consecutiveErrors}/3):`, batchErr?.message);
+          if (consecutiveErrors >= 3) {
+            throw batchErr;
+          }
+          // Pausa exponencial de reintento (2s, 4s) antes de reintentar el lote
+          await new Promise((r) => setTimeout(r, 2000 * consecutiveErrors));
         }
-        job = data.job;
-        setJobProgress({ batches_done: job.batches_done, batches_total: job.batches_total, total_chats: job.total_chats });
       }
 
       if (!job.audit_id) {
@@ -1199,7 +1216,7 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
                       : "OpenAI ChatGPT"}
                   </strong>
                   <span className="font-mono text-[10px] bg-white border border-lilac-200 px-2 py-0.5 rounded text-lilac-700 font-bold">
-                    {activeAiConfig?.model || "gemini-1.5-flash"}
+                    {activeAiConfig?.model || "gemini-3.5-flash-lite"}
                   </span>
                 </div>
                 <Link
