@@ -147,6 +147,7 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "General",       path: "/erp/cuentas-por-pagar",   label: "Cuentas por Pagar", hasEdit: true },
   { section: "General",       path: "/erp/activos",             label: "Activos Fijos", hasEdit: true },
   { section: "General",       path: "/erp/contabilidad",        label: "Contabilidad", hasEdit: true },
+  { section: "General",       path: "/erp/asistencia",          label: "Control de Asistencia", hasEdit: true },
 
   // Sistema
   { section: "Sistema",       path: "/erp/configuracion-sistema", label: "Configuración del Sistema", hasEdit: true },
@@ -206,6 +207,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/cuentas-por-pagar",   label: "Cuentas por Pagar",   icon: "CreditCard",       section: "General",       roles: ["admin", "contador"] },
   { href: "/erp/activos",             label: "Activos Fijos",       icon: "Landmark",         section: "General",       roles: ["admin", "contador"] },
   { href: "/erp/contabilidad",        label: "Contabilidad",        icon: "FileBarChart2",    section: "General",       roles: ["admin", "contador"] },
+  { href: "/erp/asistencia",          label: "Control de Asistencia", icon: "UserCheck",      section: "General",       roles: ["admin", "recepcionista"] },
 
   // Publicidad
   { href: "/erp/publicidad",          label: "Publicidad / Anuncios", icon: "Megaphone",       section: "Publicidad",    roles: ["admin"] },

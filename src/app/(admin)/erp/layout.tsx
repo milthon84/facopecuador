@@ -5,13 +5,14 @@ import {
   Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  TrendingUp, BarChart3, Bot
+  TrendingUp, BarChart3, Bot, UserCheck
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import SignOutButton from "@/components/SignOutButton";
 import AdminMobileNav from "@/components/AdminMobileNav";
 import GlobalLoadingOverlay from "@/components/GlobalLoadingOverlay";
+import AttendancePunchHeaderButton from "@/components/AttendancePunchHeaderButton";
 import type { UserRole } from "@/lib/roles";
 import { ROLE_LABELS, ROLE_COLORS, NAV_ITEMS, NAV_SECTIONS } from "@/lib/roles";
 import { headers } from "next/headers";
@@ -31,6 +32,7 @@ const ICONS: Record<string, React.ReactNode> = {
   FileText:        <FileText size={16} />,
   UserCog:         <UserCog size={16} />,
   ShieldCheck:     <ShieldCheck size={16} />,
+  UserCheck:       <UserCheck size={16} />,
   Settings:        <Settings size={16} />,
   ShoppingCart:    <ShoppingCart size={16} />,
   FileBarChart2:   <FileBarChart2 size={16} />,
@@ -123,10 +125,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* Header móvil */}
       <header className="sticky top-0 z-40 shadow-sm print:hidden">
         <div className="md:hidden bg-white border-b border-gray-100">
-          <div className="px-4 py-2.5 flex items-center gap-3">
+          <div className="px-4 py-2.5 flex items-center gap-2">
             <Link href="/erp" className="flex-1">
               <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
             </Link>
+            <AttendancePunchHeaderButton />
             <div className="w-8 h-8 rounded-full bg-lilac-100 border border-lilac-200 flex items-center justify-center text-xs font-bold text-lilac-700 shrink-0">
               {displayName.charAt(0).toUpperCase()}
             </div>
@@ -148,6 +151,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </Link>
             <div className="flex items-center gap-3">
+              <AttendancePunchHeaderButton />
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-white/90">{displayName}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColor}`}>
