@@ -7,7 +7,15 @@ import AttendancePunchModal from "./AttendancePunchModal";
 import type { AttendanceOfficeSettings, AttendancePunch } from "@/lib/attendance";
 import { ecuadorTimeOf } from "@/lib/ecuador-time";
 
-export default function AttendancePunchHeaderButton() {
+interface Props {
+  variant?: "header" | "menu" | "sidebar";
+  className?: string;
+}
+
+export default function AttendancePunchHeaderButton({
+  variant = "sidebar",
+  className = "",
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [punchType, setPunchType] = useState<"in" | "out">("in");
@@ -28,15 +36,15 @@ export default function AttendancePunchHeaderButton() {
         }
       }
     } catch (e) {
-      console.warn("No se pudo cargar estado de asistencia en el header:", e);
+      console.warn("No se pudo cargar estado de asistencia:", e);
     } finally {
       setLoading(false);
     }
   }
 
   const lastPunch = punches.length > 0 ? punches[punches.length - 1] : null;
-  const hasCheckedIn = punches.some(p => p.punch_type === "in");
-  const hasCheckedOut = punches.some(p => p.punch_type === "out");
+  const hasCheckedIn = punches.some((p) => p.punch_type === "in");
+  const hasCheckedOut = punches.some((p) => p.punch_type === "out");
   const isCheckedIn = lastPunch?.punch_type === "in";
 
   function handleOpenPunch() {
@@ -49,29 +57,37 @@ export default function AttendancePunchHeaderButton() {
   }
 
   function handlePunchSuccess(newPunch: AttendancePunch) {
-    setPunches(prev => [...prev, newPunch]);
+    setPunches((prev) => [...prev, newPunch]);
   }
 
   if (loading) {
     return (
-      <div className="h-8 px-3 rounded-lg bg-white/10 flex items-center gap-1.5 text-xs text-white/60 animate-pulse">
-        <Clock size={13} />
-        <span className="hidden sm:inline">Asistencia...</span>
+      <div className={`h-9 px-3 rounded-xl bg-gray-100 flex items-center justify-center gap-1.5 text-xs text-gray-400 animate-pulse ${
+        variant === "sidebar" ? "w-full" : ""
+      }`}>
+        <Clock size={14} />
+        <span>Cargando asistencia...</span>
       </div>
     );
   }
+
+  const isSidebar = variant === "sidebar" || variant === "menu";
 
   return (
     <>
       <button
         onClick={handleOpenPunch}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 ${
+        className={`flex items-center gap-2 rounded-xl text-xs font-bold transition shadow-xs active:scale-95 ${
+          isSidebar
+            ? "w-full justify-center py-2.5 px-3"
+            : "px-3 py-1.5"
+        } ${
           isCheckedIn
-            ? "bg-amber-500/90 hover:bg-amber-500 text-white border border-amber-400/40"
+            ? "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20 border border-amber-400/40"
             : hasCheckedIn && hasCheckedOut
-            ? "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30"
-            : "bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40"
-        }`}
+            ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200"
+            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 border border-emerald-500/40"
+        } ${className}`}
         title={
           isCheckedIn
             ? `Entrada registrada a las ${ecuadorTimeOf(lastPunch.punched_at)}. Clic para marcar salida.`
@@ -83,26 +99,26 @@ export default function AttendancePunchHeaderButton() {
         {isCheckedIn ? (
           <>
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-300"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
             </span>
-            <UserCheck size={14} />
-            <span className="hidden sm:inline">Marcar Salida</span>
-            <span className="text-[10px] opacity-80">({ecuadorTimeOf(lastPunch.punched_at)})</span>
+            <UserCheck size={15} />
+            <span>Marcar Salida</span>
+            <span className="text-[10px] opacity-90 font-mono">({ecuadorTimeOf(lastPunch.punched_at)})</span>
           </>
         ) : hasCheckedIn && hasCheckedOut ? (
           <>
-            <CheckCircle2 size={14} className="text-emerald-400" />
-            <span className="hidden sm:inline">Jornada Completa</span>
+            <CheckCircle2 size={15} className="text-emerald-600" />
+            <span>Jornada Completa Hoy</span>
           </>
         ) : (
           <>
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-200"></span>
             </span>
-            <UserCheck size={14} />
-            <span>Timbrar Entrada</span>
+            <UserCheck size={15} />
+            <span>Timbrar Mi Asistencia</span>
           </>
         )}
       </button>

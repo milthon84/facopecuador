@@ -131,7 +131,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
             </Link>
             <DoorOpenHeaderButton />
-            <AttendancePunchHeaderButton />
             <div className="w-8 h-8 rounded-full bg-lilac-100 border border-lilac-200 flex items-center justify-center text-xs font-bold text-lilac-700 shrink-0">
               {displayName.charAt(0).toUpperCase()}
             </div>
@@ -154,7 +153,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
             <div className="flex items-center gap-3">
               <DoorOpenHeaderButton />
-              <AttendancePunchHeaderButton />
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-white/90">{displayName}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColor}`}>
@@ -171,6 +169,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {/* Sidebar — solo desktop */}
         <nav className="hidden md:block md:w-60 md:min-h-[calc(100vh-52px)] border-r border-lilac-100 bg-white shadow-sm print:hidden">
           <div className="p-3 flex flex-col gap-1">
+            {/* Botón de marcación en el menú habilitado según permisos de rol */}
+            {visibleNav.some(i => i.href === "/erp/asistencia") && (
+              <div className="mb-2 pb-3 border-b border-lilac-100">
+                <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 mb-1.5">
+                  Mi Asistencia
+                </p>
+                <AttendancePunchHeaderButton variant="sidebar" />
+              </div>
+            )}
+
             {NAV_SECTIONS.map(section => {
               const items = visibleNav.filter(i => i.section === section);
               if (!items.length) return null;

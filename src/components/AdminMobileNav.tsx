@@ -9,10 +9,11 @@ import {
   LogOut, Settings, ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  Bot, TrendingUp, BarChart3
+  Bot, TrendingUp, BarChart3, UserCheck
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/client";
+import AttendancePunchHeaderButton from "@/components/AttendancePunchHeaderButton";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   LayoutDashboard, CalendarDays, Users, Clock, Ban,
@@ -20,7 +21,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   ShoppingCart, FileBarChart2, Shield, Tag, Ruler, Stethoscope,
   Building2, Landmark, Wallet, CircleDollarSign, CreditCard, Banknote, FileKey,
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
-  Bot, TrendingUp, BarChart3
+  Bot, TrendingUp, BarChart3, UserCheck
 };
 
 interface Props {
@@ -110,6 +111,13 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
             <X size={20} />
           </button>
         </div>
+
+        {/* Marcación rápida si el rol tiene acceso a asistencia */}
+        {visibleNav.some(i => i.href === "/erp/asistencia") && (
+          <div className="p-3 border-b border-gray-100 bg-lilac-50/30">
+            <AttendancePunchHeaderButton variant="sidebar" />
+          </div>
+        )}
 
         <div className="p-3 max-h-[55vh] overflow-y-auto">
           {orderedNav.map((item) => {
