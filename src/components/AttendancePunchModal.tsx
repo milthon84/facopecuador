@@ -565,7 +565,7 @@ export default function AttendancePunchModal({
                       className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full font-medium text-xs backdrop-blur-xs flex items-center gap-1.5 transition z-10 shadow-sm"
                     >
                       <Camera size={14} className="text-emerald-400" />
-                      <span>Previsualizar foto (opcional)</span>
+                      <span>Previsualizar foto</span>
                     </button>
                   </>
                 ) : (
