@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { canAccess, getFirstAllowedPath } from "@/lib/roles";
+import { canAccess, getFirstAllowedPath, hasPermission } from "@/lib/roles";
 import type { UserRole } from "@/lib/roles";
 
 function addSecurityHeaders(res: NextResponse): NextResponse {
@@ -141,13 +141,7 @@ async function checkAccess(
       (await supabase.from("role_permissions").select("path").eq("role_name", role)).data || []
     ).map((p: { path: string }) => p.path);
 
-    // Si la ruta es de escritura, requerimos explícitamente el permiso de modificación
-    if (isWritePath(pathname)) {
-      const requiredModifyPath = getModifyPathForPathname(pathname);
-      return paths.includes(requiredModifyPath);
-    }
-
-    return paths.some(p => pathname === p || pathname.startsWith(p + "/"));
+    return hasPermission(role, pathname, paths);
   } catch {
     // Fallback: usa la función hardcodeada si la DB no está disponible
     return canAccess(role as UserRole, pathname);

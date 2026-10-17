@@ -132,9 +132,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const visibleNav = NAV_ITEMS.filter(item => {
     if (role === "admin") return true;
     if (allowedPaths !== null) {
-      if (item.href === "/erp/inventario/transacciones") {
-        return allowedPaths.includes("/erp/inventario") || allowedPaths.includes("/erp/inventario/transacciones");
-      }
       return allowedPaths.includes(item.href);
     }
     return item.roles.includes(role as UserRole); // fallback

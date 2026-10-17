@@ -268,33 +268,48 @@ export default function AttendancePunchModal({
     };
   }, [isOpen, checkPermissions, startCamera, acquireGps, stopCamera]);
 
-  // Tomar Foto desde Video
+  // Tomar Foto desde Video y devolver Promise<Blob | null>
+  function captureSnapshotBlob(): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      if (!videoRef.current || !canvasRef.current) {
+        resolve(null);
+        return;
+      }
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+
+      // Efecto espejo para selfie natural
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            setCapturedBlob(blob);
+            setCapturedPreview(URL.createObjectURL(blob));
+            stopCamera();
+          }
+          resolve(blob);
+        },
+        "image/jpeg",
+        0.9
+      );
+    });
+  }
+
   function captureSnapshot() {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Efecto espejo para selfie natural
-    ctx.translate(canvas.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          setCapturedBlob(blob);
-          setCapturedPreview(URL.createObjectURL(blob));
-          stopCamera();
-        }
-      },
-      "image/jpeg",
-      0.9
-    );
+    captureSnapshotBlob();
   }
 
   function retakePhoto() {
@@ -305,11 +320,6 @@ export default function AttendancePunchModal({
 
   // Enviar Marcación
   async function handleSubmit() {
-    if (!capturedBlob && officeSettings.require_photo) {
-      alert("Debes tomar una foto selfie para registrar tu asistencia.");
-      return;
-    }
-
     if (!coords && officeSettings.require_location) {
       alert("Es necesario obtener tu ubicación GPS antes de timbrar.");
       return;
@@ -326,11 +336,23 @@ export default function AttendancePunchModal({
     setSubmitResult(null);
 
     try {
+      let finalBlob = capturedBlob;
+
+      // Si no hay foto previa pero se requiere, capturarla automáticamente de la cámara en vivo
+      if (!finalBlob && officeSettings.require_photo) {
+        if (cameraActive) {
+          finalBlob = await captureSnapshotBlob();
+        }
+        if (!finalBlob) {
+          throw new Error("No se pudo capturar la selfie de la cámara. Verifica que la cámara esté activa.");
+        }
+      }
+
       const formData = new FormData();
       formData.append("punchType", punchType);
 
-      if (capturedBlob) {
-        formData.append("photo", capturedBlob, "selfie.jpg");
+      if (finalBlob) {
+        formData.append("photo", finalBlob, "selfie.jpg");
       }
       if (coords) {
         formData.append("latitude", coords.lat.toString());
@@ -534,16 +556,16 @@ export default function AttendancePunchModal({
                     </button>
                   </div>
                 ) : cameraActive ? (
-                  // Botón de captura sobre el video en vivo
+                  // Botón opcional de previsualización sobre el video en vivo
                   <>
                     <div className="absolute inset-0 border-2 border-white/20 pointer-events-none rounded-xl" />
                     <button
                       type="button"
                       onClick={captureSnapshot}
-                      className="absolute bottom-3 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-white text-ink-900 rounded-full font-bold text-xs shadow-lg flex items-center gap-2 hover:bg-gray-100 active:scale-95 transition z-10"
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full font-medium text-xs backdrop-blur-xs flex items-center gap-1.5 transition z-10 shadow-sm"
                     >
-                      <Camera size={16} className="text-emerald-600" />
-                      Capturar Selfie
+                      <Camera size={14} className="text-emerald-400" />
+                      <span>Previsualizar foto (opcional)</span>
                     </button>
                   </>
                 ) : (
@@ -639,7 +661,7 @@ export default function AttendancePunchModal({
                 onClick={handleSubmit}
                 disabled={
                   isSubmitting ||
-                  (!capturedBlob && officeSettings.require_photo) ||
+                  (officeSettings.require_photo && !cameraActive && !capturedBlob) ||
                   (gpsLoading && officeSettings.require_location) ||
                   (!isInOffice && !officeSettings.allow_out_of_bounds)
                 }
@@ -652,7 +674,7 @@ export default function AttendancePunchModal({
                 {isSubmitting ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    <span>Guardando marcación...</span>
+                    <span>Tomando selfie y registrando...</span>
                   </>
                 ) : (
                   <>

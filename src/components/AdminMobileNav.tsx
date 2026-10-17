@@ -47,9 +47,6 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
 
   const visibleNav = NAV_ITEMS.filter(item => {
     if (role === "admin" || allowedPaths === null) return true;
-    if (item.href === "/erp/inventario/transacciones") {
-      return allowedPaths.includes("/erp/inventario") || allowedPaths.includes("/erp/inventario/transacciones");
-    }
     return allowedPaths.includes(item.href);
   });
 

@@ -50,62 +50,6 @@ export function canAccess(role: UserRole | undefined, pathname: string): boolean
   return !blocked.some(r => pathname.startsWith(r));
 }
 
-export function isWritePath(path: string): boolean {
-  const normalized = path.toLowerCase();
-  return (
-    normalized === "/erp/modificar" ||
-    normalized.startsWith("/erp/modificar/") ||
-    normalized.endsWith("/modificar") ||
-    normalized.includes("/modificar/") ||
-    normalized.endsWith("/crear") ||
-    normalized.includes("/crear/")
-  );
-}
-
-// Helper para verificar permisos dinámicos (base de datos o estáticos)
-export function hasPermission(
-  role: string,
-  pathToCheck: string,
-  allowedPathsFromDb: string[] | null
-): boolean {
-  if (role === "admin") return true;
-  if (allowedPathsFromDb !== null) {
-    return allowedPathsFromDb.some((p) => {
-      // Si la ruta a verificar es de escritura, solo se concede si el permiso otorgado es también de escritura
-      if (isWritePath(pathToCheck)) {
-        if (!isWritePath(p)) return false;
-      }
-      return pathToCheck === p || pathToCheck.startsWith(p + "/");
-    });
-  }
-  return canAccess(role as UserRole, pathToCheck);
-}
-
-/**
- * Retorna la primera ruta permitida para un rol según sus permisos.
- * Si el rol tiene permiso para "/erp", retorna "/erp".
- * En caso contrario, busca la primera ruta en NAV_ITEMS a la que tenga acceso.
- * Si no tiene acceso a ninguna ruta, retorna "/erp".
- */
-export function getFirstAllowedPath(
-  role: string,
-  allowedPathsFromDb: string[] | null
-): string {
-  if (role === "admin") return "/erp";
-
-  if (hasPermission(role, "/erp", allowedPathsFromDb)) {
-    return "/erp";
-  }
-
-  const firstAllowedItem = NAV_ITEMS.find((item) =>
-    hasPermission(role, item.href, allowedPathsFromDb)
-  );
-
-  return firstAllowedItem ? firstAllowedItem.href : "/erp";
-}
-
-
-
 export type ResourceSection = "Clínica" | "Cursos" | "Acceso y Asistencia" | "General" | "Publicidad" | "Sistema";
 
 export interface ResourceDef {
@@ -168,6 +112,63 @@ export function getWritePathForResource(path: string): string {
     return "/erp/inventario/transacciones/crear";
   }
   return path + "/modificar";
+}
+
+export function isWritePath(path: string): boolean {
+  const normalized = path.toLowerCase();
+  return (
+    normalized === "/erp/modificar" ||
+    normalized.startsWith("/erp/modificar/") ||
+    normalized.endsWith("/modificar") ||
+    normalized.includes("/modificar/") ||
+    normalized.endsWith("/crear") ||
+    normalized.includes("/crear/") ||
+    normalized.endsWith("/nueva") ||
+    normalized.includes("/nueva/") ||
+    normalized.endsWith("/nuevo") ||
+    normalized.includes("/nuevo/") ||
+    normalized.endsWith("/editar-ficha") ||
+    normalized.endsWith("/atencion") ||
+    normalized.includes("/atencion/")
+  );
+}
+
+export function getResourceForPath(pathname: string): ResourceDef | undefined {
+  const normalized = pathname.toLowerCase();
+  const matching = ALL_RESOURCES.filter((r) => {
+    const rPath = r.path.toLowerCase();
+    return normalized === rPath || normalized.startsWith(rPath + "/");
+  });
+  if (matching.length === 0) return undefined;
+  return [...matching].sort((a, b) => b.path.length - a.path.length)[0];
+}
+
+// Helper para verificar permisos dinámicos (base de datos o estáticos)
+export function hasPermission(
+  role: string,
+  pathToCheck: string,
+  allowedPathsFromDb: string[] | null
+): boolean {
+  if (role === "admin") return true;
+  if (allowedPathsFromDb !== null) {
+    const resource = getResourceForPath(pathToCheck);
+    if (resource) {
+      if (isWritePath(pathToCheck)) {
+        const requiredWritePath = getWritePathForResource(resource.path);
+        return allowedPathsFromDb.includes(requiredWritePath);
+      }
+      return allowedPathsFromDb.includes(resource.path);
+    }
+
+    // Fallback para rutas fuera del catálogo estándar ALL_RESOURCES
+    if (isWritePath(pathToCheck)) {
+      return allowedPathsFromDb.some(
+        (p) => isWritePath(p) && (pathToCheck === p || pathToCheck.startsWith(p + "/"))
+      );
+    }
+    return allowedPathsFromDb.some((p) => pathToCheck === p || pathToCheck.startsWith(p + "/"));
+  }
+  return canAccess(role as UserRole, pathToCheck);
 }
 
 export const RESOURCE_SECTIONS = [
@@ -233,6 +234,29 @@ export const NAV_ITEMS: NavItemDef[] = [
   { href: "/erp/roles",               label: "Roles",               icon: "Shield",           section: "Sistema",       roles: ["admin"] },
   { href: "/erp/auditoria",           label: "Auditoría",           icon: "ShieldCheck",      section: "Sistema",       roles: ["admin"] },
 ];
+
+/**
+ * Retorna la primera ruta permitida para un rol según sus permisos.
+ * Si el rol tiene permiso para "/erp", retorna "/erp".
+ * En caso contrario, busca la primera ruta en NAV_ITEMS a la que tenga acceso.
+ * Si no tiene acceso a ninguna ruta, retorna "/erp".
+ */
+export function getFirstAllowedPath(
+  role: string,
+  allowedPathsFromDb: string[] | null
+): string {
+  if (role === "admin") return "/erp";
+
+  if (hasPermission(role, "/erp", allowedPathsFromDb)) {
+    return "/erp";
+  }
+
+  const firstAllowedItem = NAV_ITEMS.find((item) =>
+    hasPermission(role, item.href, allowedPathsFromDb)
+  );
+
+  return firstAllowedItem ? firstAllowedItem.href : "/erp";
+}
 
 // Dashboard de bienvenida para el contador (sin cambios)
 export const CONTADOR_DASHBOARD_ITEMS = [
