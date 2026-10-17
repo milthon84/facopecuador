@@ -31,13 +31,24 @@ export default function EditServiceModal({
   const initialCashPrice = (Number(service.price) * (1 - cashDiscountPercent / 100)).toFixed(2);
 
   const [name, setName] = useState(service.name);
-  const [category, setCategory] = useState(service.category);
+  const [isNewCategory, setIsNewCategory] = useState(
+    service.category ? !existingCategories.includes(service.category) : false
+  );
+  const [selectedCategory, setSelectedCategory] = useState(
+    existingCategories.includes(service.category) ? service.category : existingCategories[0] || "General"
+  );
+  const [newCategoryName, setNewCategoryName] = useState(
+    existingCategories.includes(service.category) ? "" : service.category || ""
+  );
   const [cashPrice, setCashPrice] = useState(initialCashPrice);
   const [ivaCode, setIvaCode] = useState(service.iva_code);
 
   function handleOpen() {
     setName(service.name);
-    setCategory(service.category);
+    const isCustom = service.category ? !existingCategories.includes(service.category) : false;
+    setIsNewCategory(isCustom);
+    setSelectedCategory(existingCategories.includes(service.category) ? service.category : existingCategories[0] || "General");
+    setNewCategoryName(isCustom ? service.category : "");
     setCashPrice((Number(service.price) * (1 - cashDiscountPercent / 100)).toFixed(2));
     setIvaCode(service.iva_code);
     setErrorMsg(null);
@@ -58,6 +69,11 @@ export default function EditServiceModal({
       setErrorMsg("El nombre del servicio es obligatorio.");
       return;
     }
+    const finalCategory = isNewCategory ? newCategoryName.trim() : selectedCategory.trim();
+    if (!finalCategory) {
+      setErrorMsg("Debes seleccionar o escribir una categoría para el servicio.");
+      return;
+    }
     if (numCashPrice <= 0) {
       setErrorMsg("Ingresa un precio efectivo válido mayor a cero.");
       return;
@@ -72,7 +88,7 @@ export default function EditServiceModal({
         name: name.trim(),
         cash_price: numCashPrice,
         iva_code: ivaCode,
-        category: category.trim() || "General",
+        category: finalCategory,
       });
       if (res && !res.success) {
         setErrorMsg(res.error || "Error al actualizar el servicio.");
@@ -81,7 +97,11 @@ export default function EditServiceModal({
       setIsOpen(false);
       router.refresh();
     } catch (err: any) {
-      setErrorMsg(err.message || "Error al actualizar el servicio.");
+      if (err.message?.includes("Server Action") || err.message?.includes("was not found")) {
+        setErrorMsg("El sistema se actualizó recientemente. Por favor presiona F5 o recarga la página para continuar.");
+      } else {
+        setErrorMsg(err.message || "Error al actualizar el servicio.");
+      }
     } finally {
       setLoading(false);
     }
@@ -143,21 +163,51 @@ export default function EditServiceModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-ink-800 mb-1.5">
-              Categoría
-            </label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              list="service-edit-categories-list"
-              className="w-full px-3.5 py-2.5 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition bg-white"
-            />
-            <datalist id="service-edit-categories-list">
-              {existingCategories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-ink-800">
+                Categoría <span className="text-red-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsNewCategory(!isNewCategory)}
+                className="text-xs text-lilac-600 hover:text-lilac-800 font-semibold transition cursor-pointer"
+              >
+                {isNewCategory ? "← Seleccionar de existentes" : "+ Escribir nueva categoría"}
+              </button>
+            </div>
+
+            {isNewCategory ? (
+              <input
+                type="text"
+                required
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Escribe el nombre de la nueva categoría (Ej: 2. ENDODONCIA)..."
+                className="w-full px-3.5 py-2.5 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition bg-white"
+                autoFocus
+              />
+            ) : (
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  if (e.target.value === "__NEW__") {
+                    setIsNewCategory(true);
+                  } else {
+                    setSelectedCategory(e.target.value);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 text-sm border border-lilac-200 rounded-xl outline-none focus:ring-2 focus:ring-lilac-300 focus:border-lilac-400 transition bg-white font-medium"
+              >
+                {existingCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+                <option value="__NEW__" className="font-bold text-lilac-700">
+                  + Escribir nueva categoría...
+                </option>
+              </select>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
