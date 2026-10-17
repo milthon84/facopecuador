@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { 
   Camera, 
+  CameraOff,
   MapPin, 
   CheckCircle2, 
   AlertCircle, 
@@ -58,7 +59,6 @@ export default function AttendancePunchModal({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -72,16 +72,28 @@ export default function AttendancePunchModal({
     setCameraError(null);
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Tu navegador no soporta captura de video en vivo.");
+        throw new Error("Tu navegador o conexión actual no soporta captura de video en vivo.");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 960 },
-        },
-        audio: false,
-      });
+
+      let stream: MediaStream | null = null;
+      try {
+        // Intento 1: Cámara frontal / user
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 960 },
+          },
+          audio: false,
+        });
+      } catch (firstErr) {
+        // Intento 2: Fallback general sin facingMode (esencial para webcams USB y PCs de escritorio en Windows)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -90,11 +102,17 @@ export default function AttendancePunchModal({
       setCameraActive(true);
     } catch (err: any) {
       console.warn("No se pudo iniciar la cámara web:", err);
-      setCameraError(
-        err.name === "NotAllowedError"
-          ? "Permiso de cámara denegado. Por favor permite el acceso a la cámara en tu navegador."
-          : "No se pudo acceder a la cámara frontal. Puedes usar el botón de subir foto."
-      );
+      let msg = "No se pudo acceder a la cámara.";
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        msg = "Permiso de cámara bloqueado en el navegador. Haz clic en el icono del candado 🔒 junto a la URL en Chrome y activa 'Cámara'.";
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        msg = "No se detectó ninguna cámara web conectada a este equipo.";
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        msg = "La cámara está en uso por otro programa (ej. Teams, Zoom, WhatsApp o Meet). Ciérralo y vuelve a intentar.";
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setCameraError(msg);
       setCameraActive(false);
     }
   }, []);
@@ -186,16 +204,6 @@ export default function AttendancePunchModal({
       "image/jpeg",
       0.9
     );
-  }
-
-  // Tomar Foto mediante selector / fallback móvil
-  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setCapturedBlob(file);
-      setCapturedPreview(URL.createObjectURL(file));
-      stopCamera();
-    }
   }
 
   function retakePhoto() {
@@ -390,28 +398,26 @@ export default function AttendancePunchModal({
                   </div>
                 ) : (
                   // Estado de error o carga de cámara
-                  <div className="p-4 text-center text-white flex flex-col items-center gap-2.5">
-                    <Camera size={32} className="text-white/60 animate-pulse" />
-                    <p className="text-xs text-white/80 max-w-xs">{cameraError || "Iniciando cámara..."}</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={startCamera}
-                        className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs rounded-lg flex items-center gap-1"
-                      >
-                        <RefreshCw size={14} /> Reintentar
-                      </button>
-                      <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg cursor-pointer flex items-center gap-1">
-                        <Camera size={14} /> Tomar con cámara
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          capture="user"
-                          className="hidden"
-                          onChange={handleFileInputChange}
-                        />
-                      </label>
+                  <div className="p-5 text-center text-white flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-300 flex items-center justify-center">
+                      <CameraOff size={24} />
                     </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-white">Cámara Requerida</h4>
+                      <p className="text-xs text-white/80 max-w-xs leading-relaxed">
+                        {cameraError || "Iniciando cámara en vivo..."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="px-4 py-2 bg-white text-ink-900 hover:bg-gray-100 text-xs font-bold rounded-xl flex items-center gap-2 shadow-md transition active:scale-95"
+                    >
+                      <RefreshCw size={14} /> Reintentar activar cámara
+                    </button>
+                    <p className="text-[10px] text-white/50 max-w-xs">
+                      Por seguridad, la selfie debe capturarse en vivo directamente desde la cámara. No se permiten archivos de la computadora ni fotos de la galería.
+                    </p>
                   </div>
                 )}
                 <canvas ref={canvasRef} className="hidden" />
