@@ -73,6 +73,9 @@ export default function AttendancePunchModal({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraActive(false);
   }, []);
 
@@ -111,7 +114,11 @@ export default function AttendancePunchModal({
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn("Video play error:", playErr);
+        }
       }
       setCameraActive(true);
       setCameraPermDenied(false);
@@ -132,6 +139,18 @@ export default function AttendancePunchModal({
       setCameraActive(false);
     }
   }, []);
+
+  // Asegura que en cuanto el elemento <video> esté activo en pantalla, el stream se conecte y reproduzca
+  useEffect(() => {
+    if (cameraActive && streamRef.current && videoRef.current) {
+      if (videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+      }
+      videoRef.current.play().catch((err) => {
+        console.warn("Error reproduciendo video:", err);
+      });
+    }
+  }, [cameraActive]);
 
   const acquireGps = useCallback(() => {
     setGpsLoading(true);
@@ -483,6 +502,20 @@ export default function AttendancePunchModal({
 
               {/* Sección Cámara */}
               <div className="relative w-full aspect-4/3 bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200">
+                {/* Video en vivo (siempre en el DOM para enlazar inmediatamente el stream del sensor) */}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  className={`w-full h-full object-cover -scale-x-100 ${
+                    cameraActive && !capturedPreview ? "block" : "hidden"
+                  }`}
+                  onLoadedMetadata={() => {
+                    videoRef.current?.play().catch((e) => console.warn("Video play error:", e));
+                  }}
+                />
+
                 {capturedPreview ? (
                   // Foto tomada
                   <div className="relative w-full h-full">
@@ -492,33 +525,27 @@ export default function AttendancePunchModal({
                       className="w-full h-full object-cover"
                     />
                     <button
+                      type="button"
                       onClick={retakePhoto}
-                      className="absolute bottom-3 right-3 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 backdrop-blur-xs transition"
+                      className="absolute bottom-3 right-3 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 backdrop-blur-xs transition z-10"
                     >
                       <RefreshCw size={14} />
                       Repetir foto
                     </button>
                   </div>
                 ) : cameraActive ? (
-                  // Video en vivo
-                  <div className="relative w-full h-full">
-                    <video
-                      ref={videoRef}
-                      playsInline
-                      muted
-                      autoPlay
-                      className="w-full h-full object-cover -scale-x-100"
-                    />
+                  // Botón de captura sobre el video en vivo
+                  <>
                     <div className="absolute inset-0 border-2 border-white/20 pointer-events-none rounded-xl" />
                     <button
                       type="button"
                       onClick={captureSnapshot}
-                      className="absolute bottom-3 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-white text-ink-900 rounded-full font-bold text-xs shadow-lg flex items-center gap-2 hover:bg-gray-100 active:scale-95 transition"
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-white text-ink-900 rounded-full font-bold text-xs shadow-lg flex items-center gap-2 hover:bg-gray-100 active:scale-95 transition z-10"
                     >
                       <Camera size={16} className="text-emerald-600" />
                       Capturar Selfie
                     </button>
-                  </div>
+                  </>
                 ) : (
                   // Estado de error o carga de cámara
                   <div className="p-5 text-center text-white flex flex-col items-center gap-3">
