@@ -71,7 +71,14 @@ type BankTransaction = {
   status: string;
 };
 
-export default async function BancosPage() {
+export default async function BancosPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+  const currentTab = searchParams?.tab === "inactivas" ? "inactivas" : searchParams?.tab === "todas" ? "todas" : "activas";
+
   await assertPermission("/erp/bancos");
   const canEdit = await hasWritePermission("/erp/bancos");
 
@@ -92,9 +99,24 @@ export default async function BancosPage() {
     balanceMap.set(t.account_id, prev + (t.type === "ingreso" ? t.amount : -t.amount));
   });
 
-  const totalBalance = Array.from(balanceMap.values()).reduce((s, v) => s + v, 0);
-  const activeAccounts = (accounts as BankAccount[] || []).filter(a => a.is_active);
-  const cajaCount = (accounts as BankAccount[] || []).filter(a => a.account_type === "caja" && a.is_active).length;
+  const allAccounts = (accounts as BankAccount[]) || [];
+  const activeAccounts = allAccounts.filter(a => a.is_active);
+  const inactiveAccounts = allAccounts.filter(a => !a.is_active);
+
+  // Cuentas a mostrar según la pestaña seleccionada (por defecto solo activas)
+  const displayedAccounts =
+    currentTab === "inactivas"
+      ? inactiveAccounts
+      : currentTab === "todas"
+      ? allAccounts
+      : activeAccounts;
+
+  // Saldo total solo de cuentas activas
+  const totalActiveBalance = activeAccounts.reduce((sum, a) => {
+    return sum + (balanceMap.get(a.id) ?? a.initial_balance);
+  }, 0);
+
+  const cajaCount = activeAccounts.filter(a => a.account_type === "caja").length;
   const canAddCaja = cajaCount < 2;
 
   return (
@@ -128,24 +150,64 @@ export default async function BancosPage() {
             <Wallet size={20} className="text-green-600" />
           </div>
           <div>
-            <div className="text-xs text-ink-500">Saldo total</div>
-            <div className={`text-xl font-bold ${totalBalance >= 0 ? "text-green-700" : "text-red-600"}`}>
-              ${totalBalance.toFixed(2)}
+            <div className="text-xs text-ink-500">Saldo cuentas activas</div>
+            <div className={`text-xl font-bold ${totalActiveBalance >= 0 ? "text-green-700" : "text-red-600"}`}>
+              ${totalActiveBalance.toFixed(2)}
             </div>
           </div>
         </div>
       </div>
 
+      {/* Selector de Pestañas Activas / Inactivas */}
+      <div className="flex items-center gap-2 mb-4 border-b border-lilac-100 pb-3">
+        <Link
+          href="/erp/bancos?tab=activas"
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+            currentTab === "activas"
+              ? "bg-lilac-600 text-white shadow-xs"
+              : "text-ink-600 hover:bg-lilac-100/60"
+          }`}
+        >
+          Activas ({activeAccounts.length})
+        </Link>
+        {inactiveAccounts.length > 0 && (
+          <Link
+            href="/erp/bancos?tab=inactivas"
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+              currentTab === "inactivas"
+                ? "bg-lilac-600 text-white shadow-xs"
+                : "text-ink-600 hover:bg-lilac-100/60"
+            }`}
+          >
+            Inactivas ({inactiveAccounts.length})
+          </Link>
+        )}
+        <Link
+          href="/erp/bancos?tab=todas"
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+            currentTab === "todas"
+              ? "bg-lilac-600 text-white shadow-xs"
+              : "text-ink-600 hover:bg-lilac-100/60"
+          }`}
+        >
+          Todas ({allAccounts.length})
+        </Link>
+      </div>
+
       {/* Lista de cuentas */}
-      {(accounts as BankAccount[] || []).length === 0 ? (
+      {displayedAccounts.length === 0 ? (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-12 text-center mb-6">
           <Building2 size={32} className="text-lilac-300 mx-auto mb-3" />
-          <p className="text-ink-500 font-medium">Sin cuentas bancarias registradas</p>
-          {canEdit && <p className="text-sm text-ink-400 mt-1">Agrega tu primera cuenta abajo.</p>}
+          <p className="text-ink-500 font-medium">
+            {currentTab === "inactivas" ? "No hay cuentas bancarias inactivas." : "Sin cuentas bancarias registradas."}
+          </p>
+          {canEdit && currentTab === "activas" && (
+            <p className="text-sm text-ink-400 mt-1">Agrega una cuenta bancaria con el botón superior.</p>
+          )}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4 mb-6">
-          {(accounts as BankAccount[]).map(account => {
+          {displayedAccounts.map(account => {
             const balance = balanceMap.get(account.id) ?? account.initial_balance;
             return (
               <div key={account.id} className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${!account.is_active ? "opacity-60" : "border-lilac-100"}`}>
