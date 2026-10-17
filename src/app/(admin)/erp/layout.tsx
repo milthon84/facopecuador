@@ -13,6 +13,7 @@ import SignOutButton from "@/components/SignOutButton";
 import AdminMobileNav from "@/components/AdminMobileNav";
 import GlobalLoadingOverlay from "@/components/GlobalLoadingOverlay";
 import AttendancePunchHeaderButton from "@/components/AttendancePunchHeaderButton";
+import DoorOpenHeaderButton from "@/components/DoorOpenHeaderButton";
 import type { UserRole } from "@/lib/roles";
 import { ROLE_LABELS, ROLE_COLORS, NAV_ITEMS, NAV_SECTIONS } from "@/lib/roles";
 import { headers } from "next/headers";
@@ -129,6 +130,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/erp" className="flex-1">
               <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
             </Link>
+            <DoorOpenHeaderButton />
             <AttendancePunchHeaderButton />
             <div className="w-8 h-8 rounded-full bg-lilac-100 border border-lilac-200 flex items-center justify-center text-xs font-bold text-lilac-700 shrink-0">
               {displayName.charAt(0).toUpperCase()}
@@ -151,6 +153,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </Link>
             <div className="flex items-center gap-3">
+              <DoorOpenHeaderButton />
               <AttendancePunchHeaderButton />
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-white/90">{displayName}</span>
