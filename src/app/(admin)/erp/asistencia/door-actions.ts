@@ -27,7 +27,16 @@ export async function getDoorSettingsAction(): Promise<{
       .maybeSingle();
 
     const role = (user.app_metadata?.role as string) ?? "recepcionista";
-    const canEdit = role === "admin";
+    let canEdit = role === "admin";
+    if (role !== "admin") {
+      const { data: perm } = await supabase
+        .from("role_permissions")
+        .select("path")
+        .eq("role_name", role)
+        .eq("path", "/erp/puerta/modificar")
+        .maybeSingle();
+      canEdit = !!perm;
+    }
 
     const settings: DoorSettingsDef = data || {
       device_id: "1002906ff1",
@@ -79,10 +88,19 @@ export async function updateDoorSettingsAction(formData: {
     if (!user) return { success: false, error: "No autenticado" };
 
     const supabase = createAdminClient();
-    const role = (user.app_metadata?.role as string);
+    const role = (user.app_metadata?.role as string) ?? "recepcionista";
 
     if (role !== "admin") {
-      return { success: false, error: "Solo los administradores pueden cambiar la configuración de la puerta." };
+      const { data: perm } = await supabase
+        .from("role_permissions")
+        .select("path")
+        .eq("role_name", role)
+        .eq("path", "/erp/puerta/modificar")
+        .maybeSingle();
+
+      if (!perm) {
+        return { success: false, error: "Tu rol no tiene permiso para cambiar la configuración de la puerta." };
+      }
     }
 
     const { data: existing } = await supabase
@@ -153,6 +171,18 @@ export async function openDoorAction(): Promise<{
     }
 
     const supabase = createAdminClient();
+    const role = (user.app_metadata?.role as string) ?? "recepcionista";
+    if (role !== "admin") {
+      const { data: perms } = await supabase
+        .from("role_permissions")
+        .select("path")
+        .eq("role_name", role)
+        .in("path", ["/erp/puerta", "/erp/puerta/modificar"]);
+
+      if (!perms || perms.length === 0) {
+        return { success: false, error: "Tu rol no tiene permiso para abrir la puerta." };
+      }
+    }
     const { data: rawSettings } = await supabase
       .from("door_settings")
       .select("*")

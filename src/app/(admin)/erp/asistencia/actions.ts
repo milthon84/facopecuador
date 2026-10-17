@@ -129,6 +129,20 @@ export async function recordPunchAction(formData: FormData): Promise<PunchAction
       return { success: false, error: "Debes iniciar sesión para registrar tu asistencia." };
     }
 
+    const role = (user.app_metadata?.role as string) ?? "recepcionista";
+    if (role !== "admin") {
+      const supabaseCheck = createAdminClient();
+      const { data: perms } = await supabaseCheck
+        .from("role_permissions")
+        .select("path")
+        .eq("role_name", role)
+        .in("path", ["/erp/asistencia/timbrar", "/erp/asistencia"]);
+
+      if (!perms || perms.length === 0) {
+        return { success: false, error: "Tu rol no tiene permiso para timbrar asistencia." };
+      }
+    }
+
     const punchType = formData.get("punchType") as "in" | "out";
     const photoFile = formData.get("photo") as File | null;
     const latStr = formData.get("latitude") as string | null;

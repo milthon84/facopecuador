@@ -106,8 +106,10 @@ export function getFirstAllowedPath(
 
 
 
+export type ResourceSection = "Clínica" | "Cursos" | "Acceso y Asistencia" | "General" | "Publicidad" | "Sistema";
+
 export interface ResourceDef {
-  section: "Clínica" | "Cursos" | "General" | "Publicidad" | "Sistema";
+  section: ResourceSection;
   path: string;
   label: string;
   hasEdit: boolean;
@@ -138,6 +140,11 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "Cursos",        path: "/erp/cursos/facturacion", label: "Facturación de Módulos", hasEdit: true },
   { section: "Cursos",        path: "/erp/cursos/avisos",     label: "Avisos y Comunicados", hasEdit: true },
 
+  // Acceso y Asistencia
+  { section: "Acceso y Asistencia", path: "/erp/asistencia/timbrar", label: "Timbrar Asistencia (Botón Entrada/Salida)", hasEdit: false },
+  { section: "Acceso y Asistencia", path: "/erp/puerta",             label: "Apertura de Puerta (Botón eWeLink)",          hasEdit: true },
+  { section: "Acceso y Asistencia", path: "/erp/asistencia",         label: "Control de Asistencia (Panel Administrativo)", hasEdit: true },
+
   // General
   { section: "General",       path: "/erp/caja-general",        label: "Caja General", hasEdit: true },
   { section: "General",       path: "/erp/bancos",              label: "Bancos", hasEdit: true },
@@ -147,7 +154,6 @@ export const ALL_RESOURCES: readonly ResourceDef[] = [
   { section: "General",       path: "/erp/cuentas-por-pagar",   label: "Cuentas por Pagar", hasEdit: true },
   { section: "General",       path: "/erp/activos",             label: "Activos Fijos", hasEdit: true },
   { section: "General",       path: "/erp/contabilidad",        label: "Contabilidad", hasEdit: true },
-  { section: "General",       path: "/erp/asistencia",          label: "Control de Asistencia", hasEdit: true },
 
   // Sistema
   { section: "Sistema",       path: "/erp/configuracion-sistema", label: "Configuración del Sistema", hasEdit: true },
@@ -164,7 +170,14 @@ export function getWritePathForResource(path: string): string {
   return path + "/modificar";
 }
 
-export const RESOURCE_SECTIONS = ["Clínica", "Cursos", "General", "Publicidad", "Sistema"] as const;
+export const RESOURCE_SECTIONS = [
+  "Clínica",
+  "Cursos",
+  "Acceso y Asistencia",
+  "General",
+  "Publicidad",
+  "Sistema",
+] as const;
 
 // ── Navegación ────────────────────────────────────────────────────────────
 export interface NavItemDef {

@@ -112,8 +112,8 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
           </button>
         </div>
 
-        {/* Marcación rápida si el rol tiene acceso a asistencia */}
-        {visibleNav.some(i => i.href === "/erp/asistencia") && (
+        {/* Marcación rápida si el rol tiene acceso a timbrar asistencia */}
+        {(isAdmin || (allowedPaths !== null ? (allowedPaths.includes("/erp/asistencia/timbrar") || allowedPaths.includes("/erp/asistencia")) : true)) && (
           <div className="p-3 border-b border-gray-100 bg-lilac-50/30">
             <AttendancePunchHeaderButton variant="sidebar" />
           </div>

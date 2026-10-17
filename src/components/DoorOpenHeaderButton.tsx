@@ -29,13 +29,23 @@ const DEFAULT_DOOR_SETTINGS: DoorSettingsDef = {
   auto_close_seconds: 3,
 };
 
-export default function DoorOpenHeaderButton() {
+interface Props {
+  canEdit?: boolean;
+}
+
+export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {}) {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [openedSuccess, setOpenedSuccess] = useState(false);
   const [settings, setSettings] = useState<DoorSettingsDef>(DEFAULT_DOOR_SETTINGS);
-  const [canEdit, setCanEdit] = useState(false);
+  const [canEdit, setCanEdit] = useState(canEditProp ?? false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (canEditProp !== undefined) {
+      setCanEdit(canEditProp);
+    }
+  }, [canEditProp]);
 
   useEffect(() => {
     loadSettings();
@@ -46,7 +56,9 @@ export default function DoorOpenHeaderButton() {
       const res = await getDoorSettingsAction();
       if (res.success && res.settings) {
         setSettings(res.settings);
-        setCanEdit(!!res.canEdit);
+        if (canEditProp === undefined && res.canEdit !== undefined) {
+          setCanEdit(!!res.canEdit);
+        }
       }
     } catch (e) {
       console.warn("No se pudo cargar configuración de la puerta:", e);

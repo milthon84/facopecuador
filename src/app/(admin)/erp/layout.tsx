@@ -109,6 +109,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const displayName = profileName || user.email?.split("@")[0] || "Usuario";
 
+  // Control de permisos para botones rápidos de Asistencia y Puerta
+  const canOpenDoor =
+    role === "admin" ||
+    (allowedPaths !== null
+      ? allowedPaths.includes("/erp/puerta")
+      : true);
+
+  const canEditDoor =
+    role === "admin" ||
+    (allowedPaths !== null
+      ? allowedPaths.includes("/erp/puerta/modificar")
+      : false);
+
+  const canPunchAttendance =
+    role === "admin" ||
+    (allowedPaths !== null
+      ? allowedPaths.includes("/erp/asistencia/timbrar") || allowedPaths.includes("/erp/asistencia")
+      : true);
+
   // Filtrar nav: admin ve todo, otros solo lo que tienen permiso en DB
   const visibleNav = NAV_ITEMS.filter(item => {
     if (role === "admin") return true;
@@ -130,7 +149,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/erp" className="flex-1">
               <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
             </Link>
-            <DoorOpenHeaderButton />
+            {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} />}
             <div className="w-8 h-8 rounded-full bg-lilac-100 border border-lilac-200 flex items-center justify-center text-xs font-bold text-lilac-700 shrink-0">
               {displayName.charAt(0).toUpperCase()}
             </div>
@@ -152,7 +171,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </Link>
             <div className="flex items-center gap-3">
-              <DoorOpenHeaderButton />
+              {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} />}
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-white/90">{displayName}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColor}`}>
@@ -170,7 +189,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <nav className="hidden md:block md:w-60 md:min-h-[calc(100vh-52px)] border-r border-lilac-100 bg-white shadow-sm print:hidden">
           <div className="p-3 flex flex-col gap-1">
             {/* Botón de marcación en el menú habilitado según permisos de rol */}
-            {visibleNav.some(i => i.href === "/erp/asistencia") && (
+            {canPunchAttendance && (
               <div className="mb-2 pb-3 border-b border-lilac-100">
                 <p className="text-[10px] font-bold text-ink-400 uppercase tracking-wider px-1 mb-1.5">
                   Mi Asistencia

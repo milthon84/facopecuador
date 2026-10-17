@@ -383,7 +383,7 @@ export default async function RolesPage() {
                                           className="sr-only peer"
                                         />
                                         <div className="px-2.5 py-1 text-[10px] font-bold rounded-md text-ink-500 peer-checked:bg-lilac-100 peer-checked:text-lilac-700 peer-checked:shadow-sm transition-all hover:text-ink-700">
-                                          Ver
+                                          {r.path === "/erp/asistencia/timbrar" || r.path === "/erp/puerta" ? "Permitir" : "Ver"}
                                         </div>
                                       </label>
 
@@ -398,7 +398,7 @@ export default async function RolesPage() {
                                             className="sr-only peer"
                                           />
                                           <div className="px-2.5 py-1 text-[10px] font-bold rounded-md text-ink-500 peer-checked:bg-gold-500 peer-checked:text-white peer-checked:shadow-sm transition-all hover:text-gold-700">
-                                            Editar
+                                            {r.path === "/erp/puerta" ? "Configurar" : "Editar"}
                                           </div>
                                         </label>
                                       )}
