@@ -12,6 +12,18 @@ interface Props {
   className?: string;
 }
 
+const DEFAULT_OFFICE_SETTINGS: AttendanceOfficeSettings = {
+  id: "default",
+  office_name: "Sede Principal",
+  latitude: -0.1806532,
+  longitude: -78.4678382,
+  radius_meters: 150,
+  require_photo: true,
+  require_location: true,
+  allow_out_of_bounds: true,
+  updated_at: new Date().toISOString(),
+};
+
 export default function AttendancePunchHeaderButton({
   variant = "sidebar",
   className = "",
@@ -19,7 +31,7 @@ export default function AttendancePunchHeaderButton({
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [punchType, setPunchType] = useState<"in" | "out">("in");
-  const [officeSettings, setOfficeSettings] = useState<AttendanceOfficeSettings | null>(null);
+  const [officeSettings, setOfficeSettings] = useState<AttendanceOfficeSettings>(DEFAULT_OFFICE_SETTINGS);
   const [punches, setPunches] = useState<AttendancePunch[]>([]);
 
   useEffect(() => {

@@ -7,11 +7,14 @@ import {
   MapPin, 
   CheckCircle2, 
   AlertCircle, 
+  AlertTriangle,
   Loader2, 
   X, 
   RefreshCw, 
   ShieldCheck, 
+  ShieldAlert,
   Clock, 
+  Lock,
   ChevronRight,
   ExternalLink
 } from "lucide-react";
@@ -38,6 +41,11 @@ export default function AttendancePunchModal({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
+
+  // Diagnóstico de Permisos y Contexto Seguro
+  const [isSecure, setIsSecure] = useState(true);
+  const [cameraPermDenied, setCameraPermDenied] = useState(false);
+  const [gpsPermDenied, setGpsPermDenied] = useState(false);
 
   // GPS State
   const [gpsLoading, setGpsLoading] = useState(true);
@@ -71,6 +79,12 @@ export default function AttendancePunchModal({
   const startCamera = useCallback(async () => {
     setCameraError(null);
     try {
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error(
+          "El navegador bloquea la cámara por conexión no segura. Se requiere HTTPS o http://localhost para timbrar."
+        );
+      }
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("Tu navegador o conexión actual no soporta captura de video en vivo.");
       }
@@ -100,11 +114,13 @@ export default function AttendancePunchModal({
         await videoRef.current.play();
       }
       setCameraActive(true);
+      setCameraPermDenied(false);
     } catch (err: any) {
       console.warn("No se pudo iniciar la cámara web:", err);
       let msg = "No se pudo acceder a la cámara.";
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        msg = "Permiso de cámara bloqueado en el navegador. Haz clic en el icono del candado 🔒 junto a la URL en Chrome y activa 'Cámara'.";
+        setCameraPermDenied(true);
+        msg = "Permiso de cámara bloqueado en el navegador. Haz clic en el icono 🔒 junto a la URL en Chrome y activa 'Cámara'.";
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         msg = "No se detectó ninguna cámara web conectada a este equipo.";
       } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
@@ -120,6 +136,12 @@ export default function AttendancePunchModal({
   const acquireGps = useCallback(() => {
     setGpsLoading(true);
     setGpsError(null);
+
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setGpsError("Se requiere HTTPS o localhost para consultar geolocalización.");
+      setGpsLoading(false);
+      return;
+    }
 
     if (!navigator.geolocation) {
       setGpsError("Tu dispositivo o navegador no soporta geolocalización.");
@@ -141,13 +163,19 @@ export default function AttendancePunchModal({
         setDistanceMeters(dist);
         setIsInOffice(dist <= Number(officeSettings.radius_meters));
         setGpsLoading(false);
+        setGpsPermDenied(false);
       },
       (err) => {
         console.warn("Error obteniendo GPS:", err);
         let msg = "No se pudo obtener la ubicación.";
-        if (err.code === 1) msg = "Permiso de ubicación denegado. Activa el GPS para continuar.";
-        if (err.code === 2) msg = "Señal de GPS no disponible.";
-        if (err.code === 3) msg = "Tiempo de espera agotado al consultar GPS.";
+        if (err.code === 1) {
+          setGpsPermDenied(true);
+          msg = "Permiso de ubicación bloqueado. Haz clic en el candado 🔒 junto a la URL y activa 'Ubicación'.";
+        } else if (err.code === 2) {
+          msg = "Señal de GPS no disponible.";
+        } else if (err.code === 3) {
+          msg = "Tiempo de espera agotado al consultar GPS.";
+        }
         setGpsError(msg);
         setGpsLoading(false);
       },
@@ -159,6 +187,49 @@ export default function AttendancePunchModal({
     );
   }, [officeSettings.latitude, officeSettings.longitude, officeSettings.radius_meters]);
 
+  const checkPermissions = useCallback(async () => {
+    if (typeof window !== "undefined") {
+      setIsSecure(window.isSecureContext);
+    }
+    if (typeof navigator !== "undefined" && Boolean((navigator as any).permissions?.query)) {
+      try {
+        const cam = await (navigator.permissions as any).query({ name: "camera" });
+        if (cam.state === "denied") setCameraPermDenied(true);
+        else if (cam.state === "granted") setCameraPermDenied(false);
+        cam.onchange = () => {
+          if (cam.state === "denied") setCameraPermDenied(true);
+          else if (cam.state === "granted") {
+            setCameraPermDenied(false);
+            startCamera();
+          }
+        };
+      } catch (e) {
+        // Query camera no soportado en algunos navegadores
+      }
+      try {
+        const geo = await (navigator.permissions as any).query({ name: "geolocation" });
+        if (geo.state === "denied") setGpsPermDenied(true);
+        else if (geo.state === "granted") setGpsPermDenied(false);
+        geo.onchange = () => {
+          if (geo.state === "denied") setGpsPermDenied(true);
+          else if (geo.state === "granted") {
+            setGpsPermDenied(false);
+            acquireGps();
+          }
+        };
+      } catch (e) {
+        // Query geolocation no soportado
+      }
+    }
+  }, [startCamera, acquireGps]);
+
+  const handleRequestAllPermissions = async () => {
+    setCameraError(null);
+    setGpsError(null);
+    await startCamera();
+    acquireGps();
+  };
+
   // 1. Iniciar cámara y GPS al abrir el modal
   useEffect(() => {
     if (isOpen) {
@@ -167,6 +238,7 @@ export default function AttendancePunchModal({
       setSubmitResult(null);
       setCameraError(null);
       setGpsError(null);
+      checkPermissions();
       startCamera();
       acquireGps();
     } else {
@@ -175,7 +247,7 @@ export default function AttendancePunchModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, acquireGps, stopCamera]);
+  }, [isOpen, checkPermissions, startCamera, acquireGps, stopCamera]);
 
   // Tomar Foto desde Video
   function captureSnapshot() {
@@ -358,6 +430,57 @@ export default function AttendancePunchModal({
             </div>
           ) : (
             <>
+              {/* Alerta si el navegador no está en HTTPS o localhost */}
+              {!isSecure && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-900 flex items-start gap-2.5">
+                  <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-rose-950">Conexión Insegura (HTTP detectado)</p>
+                    <p className="text-[11px] text-rose-800 leading-relaxed">
+                      Google Chrome y otros navegadores <strong>bloquean por seguridad</strong> el acceso a la cámara y al GPS en conexiones HTTP sin certificado SSL.
+                    </p>
+                    <p className="text-[11px] text-rose-900 font-semibold">
+                      Para que el navegador solicite los permisos y funcione la cámara, accede mediante <strong>https://</strong> o desde <strong>http://localhost:3000</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Guía visual si los permisos están bloqueados en Chrome/Edge */}
+              {(cameraPermDenied || gpsPermDenied) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 shadow-xs space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-900">
+                    <ShieldAlert size={17} className="text-amber-600 shrink-0" />
+                    <span>Permisos bloqueados en el explorador</span>
+                  </div>
+                  <p className="text-amber-800 text-[11px] leading-relaxed">
+                    Tu navegador tiene bloqueado el acceso a la {cameraPermDenied && gpsPermDenied ? "cámara y ubicación" : cameraPermDenied ? "cámara" : "ubicación"}. Chrome no volverá a mostrar la ventana emergente hasta desbloquearlo:
+                  </p>
+                  <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200/80 space-y-1 text-[11px] font-medium text-amber-900">
+                    <div className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                      <span>Haz clic en el icono del candado o controles <span className="font-bold">🔒 o 🎛️</span> junto a la URL arriba.</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                      <span>Cambia <span className="font-bold">Cámara</span> y <span className="font-bold">Ubicación</span> a <span className="text-emerald-700 font-bold">Permitir</span>.</span>
+                    </div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                      <span>Presiona el botón <span className="font-bold underline">Reintentar Activar Permisos</span> a continuación.</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRequestAllPermissions}
+                    className="w-full py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-98 shadow-xs"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Reintentar Activar Permisos</span>
+                  </button>
+                </div>
+              )}
+
               {/* Sección Cámara */}
               <div className="relative w-full aspect-4/3 bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200">
                 {capturedPreview ? (
@@ -410,10 +533,11 @@ export default function AttendancePunchModal({
                     </div>
                     <button
                       type="button"
-                      onClick={startCamera}
-                      className="px-4 py-2 bg-white text-ink-900 hover:bg-gray-100 text-xs font-bold rounded-xl flex items-center gap-2 shadow-md transition active:scale-95"
+                      onClick={handleRequestAllPermissions}
+                      className="px-4 py-2.5 bg-white text-ink-900 hover:bg-gray-100 text-xs font-bold rounded-xl flex items-center gap-2 shadow-md transition active:scale-95"
                     >
-                      <RefreshCw size={14} /> Reintentar activar cámara
+                      <Camera size={15} className="text-emerald-600" />
+                      <span>Activar Cámara y Ubicación</span>
                     </button>
                     <p className="text-[10px] text-white/50 max-w-xs">
                       Por seguridad, la selfie debe capturarse en vivo directamente desde la cámara. No se permiten archivos de la computadora ni fotos de la galería.
