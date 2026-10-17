@@ -14,11 +14,26 @@ import { getDoorSettingsAction, openDoorAction } from "@/app/(admin)/erp/asisten
 import DoorSettingsModal from "./DoorSettingsModal";
 import type { DoorSettingsDef } from "@/lib/ewelink";
 
+const DEFAULT_DOOR_SETTINGS: DoorSettingsDef = {
+  id: "default",
+  device_id: "1002906ff1",
+  device_name: "Puerta Principal",
+  connection_mode: "webhook",
+  webhook_url: "",
+  app_id: "",
+  app_secret: "",
+  email: "",
+  password: "",
+  region: "us",
+  is_enabled: true,
+  auto_close_seconds: 3,
+};
+
 export default function DoorOpenHeaderButton() {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [openedSuccess, setOpenedSuccess] = useState(false);
-  const [settings, setSettings] = useState<DoorSettingsDef | null>(null);
+  const [settings, setSettings] = useState<DoorSettingsDef>(DEFAULT_DOOR_SETTINGS);
   const [canEdit, setCanEdit] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
@@ -138,7 +153,7 @@ export default function DoorOpenHeaderButton() {
         )}
       </div>
 
-      {settingsModalOpen && settings && (
+      {settingsModalOpen && (
         <DoorSettingsModal
           isOpen={settingsModalOpen}
           onClose={() => setSettingsModalOpen(false)}

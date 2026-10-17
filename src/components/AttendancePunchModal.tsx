@@ -363,7 +363,7 @@ export default function AttendancePunchModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-md bg-white text-slate-900 rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col">
         {/* Header */}
         <div className={`px-5 py-4 flex items-center justify-between text-white ${
           isEntry ? "bg-gradient-to-r from-emerald-600 to-teal-700" : "bg-gradient-to-r from-amber-600 to-rose-600"
