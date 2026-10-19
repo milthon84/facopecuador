@@ -7,6 +7,8 @@ import {
   Loader2, 
   CheckCircle2, 
   AlertCircle, 
+  WifiOff,
+  X,
   Settings,
   KeyRound
 } from "lucide-react";
@@ -40,6 +42,13 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
   const [settings, setSettings] = useState<DoorSettingsDef>(DEFAULT_DOOR_SETTINGS);
   const [canEdit, setCanEdit] = useState(canEditProp ?? false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    isOpen: boolean;
+    type: "success" | "error" | "warning";
+    title: string;
+    message: string;
+    needConfig?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (canEditProp !== undefined) {
@@ -86,7 +95,12 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
       if (canEdit) {
         setSettingsModalOpen(true);
       } else {
-        alert("La apertura de puerta aún no ha sido configurada por el administrador.");
+        setFeedback({
+          isOpen: true,
+          type: "warning",
+          title: "Apertura no configurada",
+          message: "La apertura de puerta aún no ha sido configurada por el administrador.",
+        });
       }
       return;
     }
@@ -104,10 +118,21 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
       } else if (res.needConfig && canEdit) {
         setSettingsModalOpen(true);
       } else {
-        alert(res.error || "No se pudo abrir la puerta.");
+        setFeedback({
+          isOpen: true,
+          type: "error",
+          title: "No se pudo abrir la puerta",
+          message: res.error || "El dispositivo de la puerta no respondió.",
+          needConfig: res.needConfig,
+        });
       }
     } catch (err: any) {
-      alert("Error al enviar comando: " + err.message);
+      setFeedback({
+        isOpen: true,
+        type: "error",
+        title: "Error al comunicar con la puerta",
+        message: err.message || "Ocurrió un error inesperado al enviar el comando.",
+      });
     } finally {
       setOpening(false);
     }
@@ -170,6 +195,67 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
           </button>
         )}
       </div>
+
+      {/* Modal Popup Controlado para Errores/Avisos de Apertura */}
+      {feedback && feedback.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3.5">
+              <div
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                  feedback.type === "error"
+                    ? "bg-rose-50 border-rose-200 text-rose-600"
+                    : feedback.type === "warning"
+                    ? "bg-amber-50 border-amber-200 text-amber-600"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-600"
+                }`}
+              >
+                {feedback.type === "error" ? (
+                  <WifiOff size={22} />
+                ) : feedback.type === "warning" ? (
+                  <AlertCircle size={22} />
+                ) : (
+                  <CheckCircle2 size={22} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pt-0.5">
+                <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                  {feedback.title}
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  {feedback.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setFeedback(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 -mr-1 -mt-1 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setFeedback(null);
+                    setSettingsModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition"
+                >
+                  Abrir Configuración
+                </button>
+              )}
+              <button
+                onClick={() => setFeedback(null)}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {settingsModalOpen && (
         <DoorSettingsModal
