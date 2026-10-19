@@ -98,7 +98,8 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
       } catch (e) {}
     }
 
-    if (!oauthData?.at && (!email || !password)) {
+    const tokenVal = oauthData?.at || (oauthData as any)?.accessToken || (oauthData as any)?.access_token;
+    if (!tokenVal && (!email || !password)) {
       return {
         success: false,
         needConfig: true,
@@ -108,7 +109,7 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
 
     try {
       const baseUrl = `https://${region}-apia.coolkit.cc/v2`;
-      let accessToken = oauthData?.at;
+      let accessToken = tokenVal;
 
       // Si no hay token OAuth previo, intentar login directo
       if (!accessToken) {

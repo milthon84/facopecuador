@@ -74,19 +74,38 @@ export async function GET(req: NextRequest) {
 
     const tokenData = await tokenRes.json();
 
-    if (tokenData.error !== 0 || !tokenData.data?.at) {
+    if (tokenData.error !== 0) {
       const msg = tokenData.msg || `Código ${tokenData.error}`;
       throw new Error(`eWeLink respondió: ${msg}`);
     }
 
-    const { at, rt, user } = tokenData.data;
-    const finalRegion = tokenData.data.region || region;
+    const dataObj = tokenData.data || tokenData;
+    const at =
+      dataObj.at ||
+      dataObj.accessToken ||
+      dataObj.access_token ||
+      dataObj.token;
+    const rt =
+      dataObj.rt ||
+      dataObj.refreshToken ||
+      dataObj.refresh_token ||
+      "";
+    const user = dataObj.user || dataObj.userInfo || null;
+    const finalRegion = dataObj.region || tokenData.region || region;
+
+    if (!at) {
+      throw new Error(
+        `eWeLink respondió exitoso (código 0) pero sin token: ${JSON.stringify(dataObj)}`
+      );
+    }
 
     // 2. Guardar token en door_settings
     const oauthPayload = JSON.stringify({
       type: "oauth",
       at,
       rt,
+      accessToken: at,
+      refreshToken: rt,
       email: user?.email || settings.email || "",
       nickname: user?.nickname || "",
       updated_at: new Date().toISOString(),

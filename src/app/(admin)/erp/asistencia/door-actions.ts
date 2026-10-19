@@ -57,7 +57,7 @@ export async function getDoorSettingsAction(): Promise<{
     if (settings.password && settings.password.startsWith('{"type":"oauth"')) {
       try {
         const parsed = JSON.parse(settings.password);
-        if (parsed.at) {
+        if (parsed.at || parsed.accessToken || parsed.access_token) {
           is_oauth_configured = true;
           if (parsed.email && !settings.email) {
             settings.email = parsed.email;
