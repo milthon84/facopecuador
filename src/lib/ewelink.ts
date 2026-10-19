@@ -13,6 +13,7 @@ export interface DoorSettingsDef {
   region: string;
   is_enabled: boolean;
   auto_close_seconds: number;
+  is_oauth_configured?: boolean;
 }
 
 /**
@@ -81,14 +82,6 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
   if (settings.connection_mode === "api") {
     const { app_id, app_secret, email, password, region = "us", device_id } = settings;
 
-    if (!email || !password) {
-      return {
-        success: false,
-        needConfig: true,
-        error: "Faltan credenciales de eWeLink (correo y contraseña).",
-      };
-    }
-
     if (!app_id || !app_secret) {
       return {
         success: false,
@@ -97,42 +90,78 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
       };
     }
 
+    // Detectar si tenemos token OAuth guardado
+    let oauthData: { at: string; rt?: string; email?: string } | null = null;
+    if (password && password.startsWith('{"type":"oauth"')) {
+      try {
+        oauthData = JSON.parse(password);
+      } catch (e) {}
+    }
+
+    if (!oauthData?.at && (!email || !password)) {
+      return {
+        success: false,
+        needConfig: true,
+        error: "Debes autorizar la cuenta de eWeLink con el botón 'Conectar con eWeLink'.",
+      };
+    }
+
     try {
       const baseUrl = `https://${region}-apia.coolkit.cc/v2`;
-      const nonce = crypto.randomBytes(4).toString("hex");
+      let accessToken = oauthData?.at;
 
-      // Payload login
-      const loginBody = JSON.stringify({
-        email: email.trim(),
-        password: password.trim(),
-      });
+      // Si no hay token OAuth previo, intentar login directo
+      if (!accessToken) {
+        const nonce = crypto.randomBytes(4).toString("hex");
 
-      const sign = crypto
-        .createHmac("sha256", app_secret.trim())
-        .update(loginBody)
-        .digest("base64");
+        const loginPayload: any = {
+          email: email!.trim(),
+          account: email!.trim(),
+          password: password!.trim(),
+        };
+        const loginBody = JSON.stringify(loginPayload);
 
-      const loginRes = await fetch(`${baseUrl}/user/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CK-Appid": app_id.trim(),
-          "X-CK-Nonce": nonce,
-          Authorization: `Sign ${sign}`,
-        },
-        body: loginBody,
-        cache: "no-store",
-      });
+        const sign = crypto
+          .createHmac("sha256", app_secret.trim())
+          .update(loginBody)
+          .digest("base64");
 
-      const loginData = await loginRes.json();
+        const loginRes = await fetch(`${baseUrl}/user/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CK-Appid": app_id.trim(),
+            "X-CK-Nonce": nonce,
+            Authorization: `Sign ${sign}`,
+          },
+          body: loginBody,
+          cache: "no-store",
+        });
 
-      if (loginData.error !== 0 || !loginData.data?.at) {
-        throw new Error(
-          loginData.msg || loginData.error === 400 ? "Credenciales de eWeLink inválidas." : `Error de login eWeLink: ${loginData.msg || loginData.error}`
-        );
+        const loginData = await loginRes.json();
+
+        if (loginData.error !== 0 || !loginData.data?.at) {
+          const rawMsg = loginData.msg || "";
+          if (rawMsg === "invalid appid" || (loginData.error === 400 && rawMsg.toLowerCase().includes("appid"))) {
+            throw new Error(`eWeLink requiere autorización OAuth con tu App ID. Haz clic en "Conectar con eWeLink".`);
+          }
+          if (rawMsg === "invalid secret" || rawMsg === "sign error") {
+            throw new Error("App Secret inválido o error en la firma de seguridad (Sign).");
+          }
+          if (rawMsg === "user not exist" || rawMsg === "account not exist") {
+            throw new Error(`La cuenta ${email!.trim()} no existe en la región ${region}.`);
+          }
+          if (rawMsg === "password error" || rawMsg === "wrong password") {
+            throw new Error("Contraseña de eWeLink incorrecta.");
+          }
+          if (loginData.error === 407 || rawMsg.toLowerCase().includes("not allowed")) {
+            throw new Error("eWeLink restringió el login por contraseña en API v2. Haz clic en 'Conectar con eWeLink'.");
+          }
+          throw new Error(rawMsg ? `eWeLink: ${rawMsg}` : `Error de login eWeLink [código ${loginData.error}]`);
+        }
+
+        accessToken = loginData.data.at;
       }
-
-      const accessToken = loginData.data.at;
 
       // Enviar comando para encender relé (Switch: on)
       const statusNonce = crypto.randomBytes(4).toString("hex");

@@ -49,6 +49,12 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
 
   useEffect(() => {
     loadSettings();
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.has("ewelink_success") || sp.has("ewelink_error")) {
+        setSettingsModalOpen(true);
+      }
+    }
   }, []);
 
   async function loadSettings() {
@@ -74,7 +80,7 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
     const isConfigured =
       settings &&
       ((settings.connection_mode === "webhook" && !!settings.webhook_url?.trim()) ||
-        (settings.connection_mode === "api" && !!settings.email?.trim() && !!settings.password?.trim()));
+        (settings.connection_mode === "api" && (settings.is_oauth_configured || !!settings.password?.trim())));
 
     if (!isConfigured) {
       if (canEdit) {
