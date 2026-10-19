@@ -138,7 +138,18 @@ export default function DoorSettingsModal({
     setStatusMsg(null);
 
     try {
-      await updateDoorSettingsAction(formData);
+      const res = await updateDoorSettingsAction({
+        ...formData,
+        connection_mode: "api",
+      });
+      if (!res.success) {
+        setIsAuthorizing(false);
+        setStatusMsg({
+          type: "error",
+          text: res.error || "No se pudo guardar la configuración antes de conectar.",
+        });
+        return;
+      }
       const returnTo = window.location.pathname;
       const authorizeUrl = `/api/ewelink/authorize?app_id=${encodeURIComponent(
         formData.app_id.trim()

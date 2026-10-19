@@ -31,9 +31,23 @@ export async function GET(req: NextRequest) {
           .update({
             app_id: appId,
             app_secret: appSecret,
+            connection_mode: "api",
             updated_at: new Date().toISOString(),
           })
           .eq("id", settings.id);
+      } else {
+        await supabase
+          .from("door_settings")
+          .insert({
+            app_id: appId,
+            app_secret: appSecret,
+            connection_mode: "api",
+            device_id: "1002906ff1",
+            device_name: "Puerta Principal",
+            region: "us",
+            is_enabled: true,
+            auto_close_seconds: 3,
+          });
       }
     }
 
