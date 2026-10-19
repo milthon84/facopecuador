@@ -19,6 +19,7 @@ import { formatTimeLocal } from "@/lib/availability";
 import EditPatientModal from "@/components/EditPatientModal";
 import CotizacionesPacienteSection from "@/components/CotizacionesPacienteSection";
 import FotosPacienteSection from "@/components/FotosPacienteSection";
+import DocumentosPacienteSection from "@/components/DocumentosPacienteSection";
 import DeletePatientButton from "@/components/DeletePatientButton";
 import { hasPermission } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
@@ -30,7 +31,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const supabase = createAdminClient();
   
   // Ejecutar todas las consultas del perfil del paciente y permisos en paralelo
-  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes, quotationsRes, photosRes] = await Promise.all([
+  const [patientRes, authData, dentalRecordRes, apptsRes, consultationsRes, quotationsRes, photosRes, documentsRes] = await Promise.all([
     supabase
       .from("patients")
       .select("*")
@@ -61,6 +62,11 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
       .from("patient_photos")
       .select("*")
       .eq("patient_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("patient_documents")
+      .select("*")
+      .eq("patient_id", id)
       .order("created_at", { ascending: false })
   ]);
     
@@ -75,6 +81,7 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
   const consultations = consultationsRes.data;
   const quotations = quotationsRes.data || [];
   const photos = photosRes.data || [];
+  const documents = documentsRes.data || [];
 
   // Help format date nicely
   const formatDateES = (d: string) => {
@@ -223,6 +230,13 @@ export default async function PacienteDetalle({ params }: { params: Promise<{ id
           <FotosPacienteSection
             patientId={patient.id}
             initialPhotos={photos}
+            canModify={canModify}
+          />
+
+          {/* Consentimientos y Documentos del Paciente */}
+          <DocumentosPacienteSection
+            patientId={patient.id}
+            initialDocuments={documents}
             canModify={canModify}
           />
 
