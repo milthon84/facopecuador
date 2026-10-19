@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     )}&redirectUrl=${encodeURIComponent(
       redirectUrl
     )}&grantType=authorization_code&state=${encodeURIComponent(returnTo)}&nonce=${nonce}&seq=${seq}&authorization=${encodeURIComponent(
-      `Sign ${sign}`
+      sign
     )}`;
 
     return NextResponse.redirect(authUrl);
