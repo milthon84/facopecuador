@@ -172,7 +172,7 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
         params: { switch: "on" },
       });
 
-      const switchRes = await fetch(`${baseUrl}/device/thing/status`, {
+      let switchRes = await fetch(`${baseUrl}/device/thing/status`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -184,10 +184,43 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
         cache: "no-store",
       });
 
-      const switchData = await switchRes.json();
+      let switchData = await switchRes.json();
+
+      // Si falla (ej. error 500 / 控制失败), intentar con formato multicanal (switches: [{outlet: 0, switch: "on"}])
+      if (switchData.error !== 0 && (switchData.msg === "控制失败" || switchData.error === 500)) {
+        const retryNonce = crypto.randomBytes(4).toString("hex");
+        const retryBody = JSON.stringify({
+          type: 1,
+          id: device_id,
+          params: {
+            switches: [{ switch: "on", outlet: 0 }],
+          },
+        });
+
+        const retryRes = await fetch(`${baseUrl}/device/thing/status`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CK-Appid": app_id.trim(),
+            "X-CK-Nonce": retryNonce,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: retryBody,
+          cache: "no-store",
+        });
+
+        const retryData = await retryRes.json();
+        if (retryData.error === 0) {
+          switchData = retryData;
+        }
+      }
 
       if (switchData.error !== 0) {
-        throw new Error(switchData.msg || `Error activando el dispositivo: código ${switchData.error}`);
+        let msg = switchData.msg || `Código ${switchData.error}`;
+        if (msg === "控制失败" || msg.includes("失败")) {
+          msg = `El dispositivo (${device_id}) está desconectado (Offline) de internet o no respondió a eWeLink. Verifica en la app eWeLink de tu teléfono que el interruptor aparezca 'En línea' y con Wi-Fi.`;
+        }
+        throw new Error(msg);
       }
 
       // Si no tiene Inching configurado por hardware, apagar después de auto_close_seconds
@@ -206,7 +239,10 @@ export async function triggerDoorOpen(settings: DoorSettingsDef): Promise<{
               body: JSON.stringify({
                 type: 1,
                 id: device_id,
-                params: { switch: "off" },
+                params: {
+                  switch: "off",
+                  switches: [{ switch: "off", outlet: 0 }],
+                },
               }),
             });
           } catch (e) {
