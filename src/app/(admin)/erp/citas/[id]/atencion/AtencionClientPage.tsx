@@ -447,23 +447,13 @@ export default function AtencionClientPage({
               </div>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <DocumentosPacienteSection
-              patientId={patient.id}
-              documents={documents}
-              onDocumentsChange={(updated) => setDocuments(updated)}
-              canModify={true}
-              compact={true}
-              variant="dark"
-            />
-            <div className="bg-ink-800/80 border border-gold-900/50 rounded-xl px-4 py-2 text-right">
-              <div className="text-[10px] text-gold-400 uppercase font-semibold">Cita Actual</div>
-              <div className="text-sm font-medium">
-                {new Date(appointment.starts_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
-              </div>
-              <div className="text-xs text-lilac-300 capitalize">
-                {new Date(appointment.starts_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-              </div>
+          <div className="bg-ink-800/80 border border-gold-900/50 rounded-xl px-4 py-2 text-right">
+            <div className="text-[10px] text-gold-400 uppercase font-semibold">Cita Actual</div>
+            <div className="text-sm font-medium">
+              {new Date(appointment.starts_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+            </div>
+            <div className="text-xs text-lilac-300 capitalize">
+              {new Date(appointment.starts_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
             </div>
           </div>
         </div>
