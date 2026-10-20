@@ -44,6 +44,8 @@ interface DocumentosPacienteSectionProps {
   canModify?: boolean;
   compact?: boolean;
   mode?: "full" | "add_only" | "view_only";
+  variant?: "emerald" | "dark" | "gold";
+  buttonLabel?: string;
 }
 
 const CATEGORIES: { id: string; label: string; color: string }[] = [
@@ -62,17 +64,22 @@ export default function DocumentosPacienteSection({
   canModify = true,
   compact = false,
   mode = "full",
+  variant = "emerald",
+  buttonLabel,
 }: DocumentosPacienteSectionProps) {
   const [internalDocuments, setInternalDocuments] = useState<PatientDocument[]>(controlledDocuments ?? initialDocuments);
   const documents = controlledDocuments ?? internalDocuments;
 
   useEffect(() => {
-    if (controlledDocuments) {
+    if (controlledDocuments !== undefined) {
       setInternalDocuments(controlledDocuments);
+    } else if (initialDocuments !== undefined) {
+      setInternalDocuments(initialDocuments);
     }
-  }, [controlledDocuments]);
+  }, [controlledDocuments, initialDocuments]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("todos");
 
   // Form State
@@ -531,7 +538,7 @@ export default function DocumentosPacienteSection({
   const renderDeleteConfirm = () => {
     if (!docToDelete) return null;
     return (
-      <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="fixed inset-0 z-[135] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
         <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 text-center">
           <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <Trash2 size={22} />
@@ -562,21 +569,232 @@ export default function DocumentosPacienteSection({
     );
   };
 
+  // Render: Modal con la lista completa de documentos
+  const renderListModal = () => {
+    if (!isListModalOpen) return null;
+    return (
+      <div
+        className="fixed inset-0 z-[105] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+        onClick={() => setIsListModalOpen(false)}
+      >
+        <div
+          className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh] animate-scale-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Consentimientos y Documentos ({documents.length})
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Autorizaciones firmadas, documentos clínicos y exámenes del paciente
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {canModify && mode !== "view_only" && (
+                <button
+                  type="button"
+                  onClick={handleOpenModal}
+                  className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs"
+                >
+                  <PlusCircle size={14} /> Cargar Documento
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsListModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 overflow-y-auto space-y-4">
+            {/* Filter Tabs if there are documents */}
+            {documents.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter("todos")}
+                  className={`px-3 py-1 rounded-lg font-bold transition text-xs ${
+                    selectedCategoryFilter === "todos"
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Todos ({documents.length})
+                </button>
+                {CATEGORIES.map((cat) => {
+                  const count = documents.filter((d) => (d.category || "otro").toLowerCase() === cat.id).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategoryFilter(cat.id)}
+                      className={`px-3 py-1 rounded-lg font-bold transition text-xs ${
+                        selectedCategoryFilter === cat.id
+                          ? "bg-emerald-700 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {cat.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Document list */}
+            {filteredDocuments.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500 italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                No hay documentos registrados en esta categoría.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredDocuments.map((doc) => {
+                  const catInfo = CATEGORIES.find((c) => c.id === (doc.category || "otro").toLowerCase()) || CATEGORIES[4];
+                  const pdfFile = isPdf(doc);
+                  const imageFile = isImage(doc);
+                  const proxiedUrl = proxyStorageUrl(doc.file_url);
+
+                  return (
+                    <div
+                      key={doc.id}
+                      className="group p-3 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 hover:border-emerald-300 rounded-2xl transition flex items-center justify-between gap-3 shadow-2xs"
+                    >
+                      <div
+                        onClick={() => setActiveDoc(doc)}
+                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                      >
+                        <div
+                          className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0 font-bold text-[10px] shadow-2xs ${
+                            pdfFile
+                              ? "bg-rose-100 text-rose-700 border border-rose-200"
+                              : imageFile
+                              ? "bg-blue-100 text-blue-700 border border-blue-200"
+                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          }`}
+                        >
+                          {pdfFile ? "PDF" : imageFile ? "IMG" : "DOC"}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition truncate">
+                              {doc.title}
+                            </p>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${catInfo.color}`}>
+                              {catInfo.label}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-mono truncate mt-0.5">
+                            {doc.file_name} • {formatDate(doc.created_at)}
+                            {doc.file_size ? ` • ${formatFileSize(doc.file_size)}` : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setActiveDoc(doc)}
+                          className="p-2 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition"
+                          title="Ver documento"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <a
+                          href={proxiedUrl}
+                          download={doc.file_name}
+                          className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
+                          title="Descargar"
+                        >
+                          <Download size={16} />
+                        </a>
+                        {canModify && (
+                          <button
+                            type="button"
+                            onClick={() => setDocToDelete(doc)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ── MODO COMPACTO ──────────────────────────────────────────────────────────
   if (compact) {
+    const buttonStyle =
+      variant === "dark"
+        ? "bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl border border-emerald-400/40 shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0 inline-flex items-center gap-2"
+        : variant === "gold"
+        ? "bg-gold-50 hover:bg-gold-100 text-gold-900 font-bold text-xs px-3 py-1.5 rounded-xl border border-gold-200 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0 inline-flex items-center gap-1.5"
+        : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0 inline-flex items-center gap-1.5";
+
+    const iconStyle = variant === "dark" ? "text-emerald-100" : "text-emerald-600";
+
     return (
       <div className="flex items-center gap-2 shrink-0">
-        {canModify && mode !== "view_only" && (
+        {mode !== "add_only" && documents.length > 0 ? (
           <button
             type="button"
-            onClick={handleOpenModal}
-            className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0"
+            onClick={() => setIsListModalOpen(true)}
+            className={buttonStyle}
+            title="Ver y gestionar autorizaciones y documentos del paciente"
           >
-            <FileText size={14} className="text-emerald-600" />
-            <span>{documents.length === 0 ? "Documentos / Consentimientos" : `Documentos (${documents.length})`}</span>
-            <PlusCircle size={13} className="text-emerald-600" />
+            <FileText size={15} className={iconStyle} />
+            <span>{buttonLabel || `Documentos (${documents.length})`}</span>
+            {canModify && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenModal();
+                }}
+                className={`ml-1 p-0.5 rounded-md hover:scale-125 transition-transform ${
+                  variant === "dark" ? "hover:bg-emerald-700" : "hover:bg-emerald-200"
+                }`}
+                title="Cargar nuevo documento"
+              >
+                <PlusCircle size={14} className={iconStyle} />
+              </span>
+            )}
           </button>
+        ) : (
+          canModify && (
+            <button
+              type="button"
+              onClick={handleOpenModal}
+              className={buttonStyle}
+              title="Cargar nuevo consentimiento o documento"
+            >
+              <FileText size={15} className={iconStyle} />
+              <span>{buttonLabel || "Cargar Documentos"}</span>
+              <PlusCircle size={14} className={iconStyle} />
+            </button>
+          )
         )}
+
+        {isListModalOpen && renderListModal()}
         {isModalOpen && renderModalForm()}
         {activeDoc && renderPreview()}
         {docToDelete && renderDeleteConfirm()}

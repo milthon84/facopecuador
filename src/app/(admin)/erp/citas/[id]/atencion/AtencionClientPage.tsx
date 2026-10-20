@@ -20,6 +20,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import FotosPacienteSection from "@/components/FotosPacienteSection";
+import DocumentosPacienteSection from "@/components/DocumentosPacienteSection";
 
 interface Patient {
   id: string;
@@ -49,17 +50,30 @@ interface AtencionClientPageProps {
   initialConsultation?: any;
   pastConsultations?: any[];
   patientPhotos?: any[];
+  patientDocuments?: any[];
 }
 
-export default function AtencionClientPage({ appointment, patient, initialConsultation, pastConsultations = [], patientPhotos = [] }: AtencionClientPageProps) {
+export default function AtencionClientPage({
+  appointment,
+  patient,
+  initialConsultation,
+  pastConsultations = [],
+  patientPhotos = [],
+  patientDocuments = [],
+}: AtencionClientPageProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"ficha" | "odontogram" | "evolucion">("ficha");
   const [photos, setPhotos] = useState<any[]>(patientPhotos);
   const [initialPhotoIds] = useState<Set<string>>(() => new Set(patientPhotos.map((p: any) => p.id)));
+  const [documents, setDocuments] = useState<any[]>(patientDocuments);
 
   useEffect(() => {
     setPhotos(patientPhotos);
   }, [patientPhotos]);
+
+  useEffect(() => {
+    setDocuments(patientDocuments);
+  }, [patientDocuments]);
 
   const currentSessionPhotos = photos.filter((p: any) => !initialPhotoIds.has(p.id));
   const previousPhotos = photos.filter((p: any) => initialPhotoIds.has(p.id));
@@ -433,13 +447,23 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
               </div>
             )}
           </div>
-          <div className="bg-ink-800/80 border border-gold-900/50 rounded-xl px-4 py-2 text-right">
-            <div className="text-[10px] text-gold-400 uppercase font-semibold">Cita Actual</div>
-            <div className="text-sm font-medium">
-              {new Date(appointment.starts_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
-            </div>
-            <div className="text-xs text-lilac-300 capitalize">
-              {new Date(appointment.starts_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <DocumentosPacienteSection
+              patientId={patient.id}
+              documents={documents}
+              onDocumentsChange={(updated) => setDocuments(updated)}
+              canModify={true}
+              compact={true}
+              variant="dark"
+            />
+            <div className="bg-ink-800/80 border border-gold-900/50 rounded-xl px-4 py-2 text-right">
+              <div className="text-[10px] text-gold-400 uppercase font-semibold">Cita Actual</div>
+              <div className="text-sm font-medium">
+                {new Date(appointment.starts_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+              </div>
+              <div className="text-xs text-lilac-300 capitalize">
+                {new Date(appointment.starts_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+              </div>
             </div>
           </div>
         </div>
@@ -1002,22 +1026,34 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
         {activeTab === "evolucion" && (
           <div className="space-y-6">
             <div className="card p-6 bg-white border border-lilac-100 shadow-sm">
-              <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-lilac-50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-lilac-50">
                 <h2 className="text-base font-bold text-ink-950 flex items-center gap-2 shrink-0">
                   <FileText className="text-lilac-600" size={18} /> Registro Clínico de la Cita
                 </h2>
                 
-                {/* Fotos e Imágenes de la Consulta Activa (Fotos subidas en esta sesión) */}
-                <FotosPacienteSection
-                  patientId={patient.id}
-                  photos={currentSessionPhotos}
-                  onPhotosChange={(updatedCurrent) => {
-                    setPhotos([...updatedCurrent, ...previousPhotos]);
-                  }}
-                  canModify={true}
-                  compact={true}
-                  mode="full"
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Fotos e Imágenes de la Consulta Activa (Fotos subidas en esta sesión) */}
+                  <FotosPacienteSection
+                    patientId={patient.id}
+                    photos={currentSessionPhotos}
+                    onPhotosChange={(updatedCurrent) => {
+                      setPhotos([...updatedCurrent, ...previousPhotos]);
+                    }}
+                    canModify={true}
+                    compact={true}
+                    mode="full"
+                  />
+
+                  {/* Consentimientos y Documentos del Paciente */}
+                  <DocumentosPacienteSection
+                    patientId={patient.id}
+                    documents={documents}
+                    onDocumentsChange={(updated) => setDocuments(updated)}
+                    canModify={true}
+                    compact={true}
+                    variant="emerald"
+                  />
+                </div>
               </div>
               
               <div className="space-y-5">
@@ -1090,6 +1126,12 @@ export default function AtencionClientPage({ appointment, patient, initialConsul
         {activeTab !== "odontogram" && (
           <div className="lg:col-span-1 space-y-6">
             {renderPastConsultations()}
+            <DocumentosPacienteSection
+              patientId={patient.id}
+              documents={documents}
+              onDocumentsChange={(updated) => setDocuments(updated)}
+              canModify={true}
+            />
           </div>
         )}
       </div>
