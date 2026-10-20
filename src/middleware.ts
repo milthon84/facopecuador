@@ -148,6 +148,9 @@ async function checkAccess(
   }
 }
 
+// In-memory cache para role_permissions en middleware (TTL: 60s)
+const rolePermsCache = new Map<string, { paths: string[]; expiresAt: number }>();
+
 // Fallback para obtener usuario desde cookies/JWT en caso de timeout de red con Supabase Auth
 function getUserFromCookieFallback(req: NextRequest): any | null {
   try {
@@ -214,17 +217,18 @@ export async function middleware(req: NextRequest) {
 
   // ── Proteger rutas del panel de administración ─────────────────────────
   if (pathname.startsWith("/erp") && pathname !== "/erp/login" && pathname !== "/erp/reset-password") {
-    const supabase = buildSupabaseClient(req, res);
-    let user = null;
-    try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
-    } catch (err) {
-      console.error("Error fetching user in middleware path check:", err);
-    }
+    // 1. Validar rápidamente con el JWT firmado de la cookie (0ms)
+    let user = getUserFromCookieFallback(req);
 
+    // 2. Si no hay token en cookie o ya expiró, consultar Supabase Auth
     if (!user) {
-      user = getUserFromCookieFallback(req);
+      const supabase = buildSupabaseClient(req, res);
+      try {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      } catch (err) {
+        console.error("Error fetching user in middleware path check:", err);
+      }
     }
 
     if (!user) {
@@ -262,15 +266,26 @@ export async function middleware(req: NextRequest) {
 
     let dbPaths: string[] | null = null;
     if (role !== "admin") {
-      try {
-        const { data } = await supabase
-          .from("role_permissions")
-          .select("path")
-          .eq("role_name", role);
-        if (data) dbPaths = data.map((p: any) => p.path);
-      } catch {}
+      const now = Date.now();
+      const cached = rolePermsCache.get(role);
+      if (cached && now < cached.expiresAt) {
+        dbPaths = cached.paths;
+      } else {
+        try {
+          const supabase = buildSupabaseClient(req, res);
+          const { data } = await supabase
+            .from("role_permissions")
+            .select("path")
+            .eq("role_name", role);
+          if (data) {
+            dbPaths = data.map((p: any) => p.path);
+            rolePermsCache.set(role, { paths: dbPaths, expiresAt: now + 60000 });
+          }
+        } catch {}
+      }
     }
 
+    const supabase = buildSupabaseClient(req, res);
     if (!(await checkAccess(supabase, role, pathname, dbPaths))) {
       const targetPath = getFirstAllowedPath(role, dbPaths);
       if (targetPath !== pathname) {
@@ -288,17 +303,15 @@ export async function middleware(req: NextRequest) {
 
   // ── Proteger rutas API del panel admin ─────────────────────────────────
   if (pathname.startsWith("/api/admin")) {
-    const supabase = buildSupabaseClient(req, res);
-    let user = null;
-    try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
-    } catch (err) {
-      console.error("Error fetching user in middleware API check:", err);
-    }
-
+    let user = getUserFromCookieFallback(req);
     if (!user) {
-      user = getUserFromCookieFallback(req);
+      const supabase = buildSupabaseClient(req, res);
+      try {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+      } catch (err) {
+        console.error("Error fetching user in middleware API check:", err);
+      }
     }
 
     if (!user) {

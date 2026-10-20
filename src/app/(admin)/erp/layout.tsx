@@ -7,8 +7,7 @@ import {
   Layers, GraduationCap, Award, Presentation, Megaphone, Globe, Newspaper,
   TrendingUp, BarChart3, Bot, UserCheck
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import SignOutButton from "@/components/SignOutButton";
 import AdminMobileNav from "@/components/AdminMobileNav";
 import GlobalLoadingOverlay from "@/components/GlobalLoadingOverlay";
@@ -16,7 +15,6 @@ import AttendancePunchHeaderButton from "@/components/AttendancePunchHeaderButto
 import DoorOpenHeaderButton from "@/components/DoorOpenHeaderButton";
 import type { UserRole } from "@/lib/roles";
 import { ROLE_LABELS, ROLE_COLORS, NAV_ITEMS, NAV_SECTIONS } from "@/lib/roles";
-import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -58,54 +56,10 @@ const ICONS: Record<string, React.ReactNode> = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
-  let user = null;
-  try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch (err) {
-    console.error("Error fetching user in AdminLayout:", err);
-  }
-
-  const headersList = await headers();
-  const pathname = headersList.get("x-pathname") || "";
+  const { user, role, allowedPaths, profileName, roleLabel, roleColor } = await getCachedUserAndPermissions();
 
   const requireChange = user?.user_metadata?.require_password_change === true;
-  if (!user || requireChange || pathname === "/erp/cambiar-contrasena") return <>{children}</>;
-
-  const role = (user.app_metadata?.role as string | undefined) ?? "admin";
-
-  // Datos del rol y permisos desde DB (con fallback a valores hardcodeados)
-  let profileName: string | null = null;
-  let roleLabel = ROLE_LABELS[role as UserRole] ?? role;
-  let roleColor = ROLE_COLORS[role as UserRole] ?? "bg-gray-100 text-gray-800 border-gray-200";
-  let allowedPaths: string[] | null = null; // null = admin (acceso total)
-
-  try {
-    const adminClient = createAdminClient();
-
-    const [profileRes, roleRes, permsRes] = await Promise.all([
-      adminClient.from("user_profiles").select("full_name").eq("id", user.id).single()
-        .then(r => r as { data: { full_name: string } | null }),
-      adminClient.from("system_roles").select("label, color").eq("name", role).single()
-        .then(r => r as { data: { label: string; color: string } | null }),
-      role !== "admin"
-        ? adminClient.from("role_permissions").select("path").eq("role_name", role)
-          .then(r => r as { data: { path: string }[] | null })
-        : Promise.resolve(null),
-    ]);
-
-    profileName = profileRes.data?.full_name ?? null;
-
-    if (roleRes.data) {
-      roleLabel = roleRes.data.label;
-      roleColor = roleRes.data.color;
-    }
-
-    if (role !== "admin" && permsRes?.data) {
-      allowedPaths = permsRes.data.map(p => p.path);
-    }
-  } catch { /* usa fallbacks hardcodeados */ }
+  if (!user || requireChange) return <>{children}</>;
 
   const displayName = profileName || user.email?.split("@")[0] || "Usuario";
 
@@ -244,6 +198,7 @@ function NavItem({ href, icon, children }: { href: string; icon: React.ReactNode
   return (
     <Link
       href={href}
+      prefetch={false}
       className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-ink-800 hover:bg-lilac-50 hover:text-lilac-700 whitespace-nowrap transition-colors group"
     >
       <span className="text-ink-400 group-hover:text-lilac-600 transition-colors">{icon}</span>

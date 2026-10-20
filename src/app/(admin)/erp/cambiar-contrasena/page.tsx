@@ -58,7 +58,7 @@ export default function CambiarContrasenaPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-lilac-50 via-white to-gold-50 px-4 py-8">
+    <main className="fixed inset-0 z-[100] min-h-screen flex items-center justify-center bg-gradient-to-br from-lilac-50 via-white to-gold-50 px-4 py-8 overflow-y-auto">
       <div className="card w-full max-w-md p-8 shadow-xl relative overflow-hidden">
         {/* Header */}
         <div className="flex justify-center mb-6">

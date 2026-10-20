@@ -124,6 +124,7 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={() => setOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3.5 rounded-xl mb-1 transition-colors ${
                   active ? "bg-lilac-50 text-lilac-700" : "text-gray-700 hover:bg-gray-50"
@@ -157,6 +158,7 @@ export default function AdminMobileNav({ role, roleLabel, roleColor, displayName
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={`flex-1 flex flex-col items-center justify-center py-3 gap-0.5 transition-colors ${
                   active ? "text-lilac-600" : "text-gray-400"
                 }`}
