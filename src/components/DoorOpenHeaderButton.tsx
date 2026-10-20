@@ -147,41 +147,35 @@ export default function DoorOpenHeaderButton({
   if (loading) {
     return (
       <div
-        className={`h-8 px-2.5 rounded-lg flex items-center gap-1.5 text-xs animate-pulse ${
+        className={`h-8 px-3 rounded-xl flex items-center gap-1.5 text-xs animate-pulse font-medium ${
           isLight
-            ? "bg-slate-100 border border-slate-200 text-slate-500 shadow-xs"
-            : "bg-white/10 text-white/50 border border-white/10"
+            ? "bg-amber-50 border border-amber-200 text-amber-700 shadow-xs"
+            : "bg-white/10 text-amber-300 border border-white/10"
         }`}
       >
-        <KeyRound size={13} className={isLight ? "text-amber-600" : "text-gold-400"} />
+        <KeyRound size={14} className="text-amber-500 animate-spin" />
         <span className="hidden sm:inline">Puerta...</span>
       </div>
     );
   }
 
   const buttonClasses = openedSuccess
-    ? isLight
-      ? "bg-emerald-600 text-white border border-emerald-500 shadow-sm animate-pulse"
-      : "bg-emerald-500 text-white border border-emerald-400 animate-pulse"
+    ? "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 text-white border border-emerald-300 shadow-lg shadow-emerald-500/40 scale-105 animate-bounce"
     : opening
-    ? isLight
-      ? "bg-amber-500 text-slate-950 font-bold border border-amber-600 shadow-sm animate-pulse"
-      : "bg-gold-500/90 text-white border border-gold-400"
-    : isLight
-    ? "bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 shadow-sm hover:border-gold-400"
-    : "bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-gold-400/60 shadow-xs";
+    ? "bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black border border-amber-300 shadow-lg shadow-amber-500/50 animate-pulse scale-[1.02]"
+    : "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-white font-extrabold border border-amber-300/90 shadow-md shadow-amber-500/35 hover:shadow-lg hover:shadow-amber-500/50 hover:scale-[1.04]";
 
   const gearClasses = isLight
-    ? "p-1.5 rounded-lg text-slate-700 hover:text-slate-950 hover:bg-slate-100 border border-slate-200 transition shadow-xs"
-    : "p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition";
+    ? "p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 transition-all shadow-xs"
+    : "p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all";
 
   return (
     <>
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1">
         <button
           onClick={handleOpenDoor}
           disabled={opening}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 disabled:opacity-75 ${buttonClasses}`}
+          className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all duration-200 shadow-xs active:scale-95 disabled:opacity-85 ${buttonClasses}`}
           title={
             settings
               ? `Abrir ${settings.device_name} (${settings.device_id})`
@@ -190,19 +184,23 @@ export default function DoorOpenHeaderButton({
         >
           {opening ? (
             <>
-              <Loader2 size={14} className={`animate-spin ${isLight ? "text-slate-950" : "text-gold-200"}`} />
-              <span className={isLight ? "text-slate-950 font-bold" : ""}>Abriendo...</span>
+              <Loader2 size={15} className="animate-spin text-slate-950" />
+              <span className="text-slate-950 font-black">Abriendo...</span>
             </>
           ) : openedSuccess ? (
             <>
-              <DoorOpen size={14} className="text-white" />
-              <span>¡Puerta Abierta!</span>
+              <DoorOpen size={16} className="text-white" />
+              <span className="font-black">¡Puerta Abierta!</span>
             </>
           ) : (
             <>
-              <KeyRound size={14} className="text-gold-400" />
-              <span className="hidden sm:inline">Abrir Puerta</span>
-              <span className="sm:hidden">Abrir</span>
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-80"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-300 border border-white/60"></span>
+              </span>
+              <KeyRound size={15} className="text-amber-100 shrink-0" />
+              <span className="hidden sm:inline tracking-wide">Abrir Puerta</span>
+              <span className="sm:hidden tracking-wide">Abrir</span>
             </>
           )}
         </button>
@@ -213,7 +211,7 @@ export default function DoorOpenHeaderButton({
             className={gearClasses}
             title="Configurar eWeLink / Webhook de la puerta"
           >
-            <Settings size={13} />
+            <Settings size={14} />
           </button>
         )}
       </div>
