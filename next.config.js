@@ -36,7 +36,7 @@ const nextConfig = {
         // Aplicar a todas las rutas
         source: "/:path*",
         headers: [
-          { key: "X-Frame-Options",        value: "DENY" },
+          { key: "X-Frame-Options",        value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options",  value: "nosniff" },
           { key: "Referrer-Policy",         value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy",      value: "camera=(self), microphone=(), geolocation=(self)" },
@@ -56,8 +56,10 @@ const nextConfig = {
               "media-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
               // Fuentes
               "font-src 'self'",
-              // No iframes
-              "frame-ancestors 'none'",
+              // Visor interno de PDFs y multimedia
+              "frame-src 'self' blob: data:",
+              // Permitir iframes del mismo sitio (bloqueando embebido de sitios externos)
+              "frame-ancestors 'self'",
             ].join("; "),
           },
         ],

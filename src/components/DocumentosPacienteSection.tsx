@@ -477,11 +477,17 @@ export default function DocumentosPacienteSection({
           {/* Content Preview */}
           <div className="flex-1 bg-slate-100 overflow-auto flex items-center justify-center p-2 relative">
             {isPdf(activeDoc) ? (
-              <iframe
-                src={`${proxiedUrl}#toolbar=1`}
-                className="w-full h-full border-none rounded-lg bg-white"
-                title={activeDoc.title}
-              />
+              <object
+                data={`${proxiedUrl}#toolbar=1`}
+                type="application/pdf"
+                className="w-full h-full rounded-lg bg-white"
+              >
+                <iframe
+                  src={`${proxiedUrl}#toolbar=1`}
+                  className="w-full h-full border-none rounded-lg bg-white"
+                  title={activeDoc.title}
+                />
+              </object>
             ) : isImage(activeDoc) ? (
               <div className="relative max-w-full max-h-full flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

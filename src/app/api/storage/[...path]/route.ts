@@ -111,6 +111,8 @@ export async function GET(
     "Cache-Control": "public, max-age=31536000, s-maxage=31536000, immutable",
     "Accept-Ranges": "bytes",
     ETag: etag,
+    "X-Frame-Options": "SAMEORIGIN",
+    "Content-Disposition": `inline; filename="${encodeURIComponent(path.basename(cacheFilePath))}"`,
   };
 
   // Soporte de validación condicional 304 Not Modified (0 bytes transferidos)
