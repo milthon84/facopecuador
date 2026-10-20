@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { 
   Award, GraduationCap, Calendar, FileText, Pencil, ArrowLeft, Mail, Phone, 
   UserCheck, ExternalLink, Download, CheckCircle2, X, Stethoscope, Search,
-  Clock, AlertCircle, DollarSign, Filter, CheckCircle
+  Clock, AlertCircle, DollarSign, Filter, CheckCircle, Landmark, Copy, Check
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -95,6 +95,7 @@ export default function TeacherDetailClient({
   const [modalError, setModalError] = useState<string | null>(null);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [copiedAccount, setCopiedAccount] = useState(false);
   const router = useRouter();
 
   const totalClassesCount = assignedClasses.length;
@@ -239,6 +240,12 @@ export default function TeacherDetailClient({
             </div>
 
             <div className="pt-3 border-t border-lilac-50 space-y-2 text-xs text-ink-700">
+              {teacher.document_number && (
+                <div className="flex justify-between items-center">
+                  <span className="text-ink-400 font-medium">Cédula / RUC:</span>
+                  <span className="font-mono font-semibold text-ink-900 bg-slate-100 px-2 py-0.5 rounded text-[11px]">{teacher.document_number}</span>
+                </div>
+              )}
               {teacher.phone && (
                 <div className="flex justify-between items-center">
                   <span className="text-ink-400 font-medium">Teléfono:</span>
@@ -264,6 +271,87 @@ export default function TeacherDetailClient({
                   <FileText size={14} className="text-lilac-600" />
                   <span>Ver / Descargar Hoja de Vida (CV)</span>
                 </a>
+              </div>
+            )}
+          </div>
+
+          {/* Tarjeta Datos Bancarios */}
+          <div className="card p-5 bg-white border border-lilac-100 rounded-3xl shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-lilac-50 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                  <Landmark size={15} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-ink-900">Datos Bancarios</h3>
+                  <p className="text-[10px] text-ink-500">Para pago de honorarios y transferencias</p>
+                </div>
+              </div>
+            </div>
+
+            {teacher.bank_name || teacher.bank_account_number ? (
+              <div className="space-y-2.5 text-xs">
+                {teacher.bank_name && (
+                  <div className="flex justify-between items-center py-1 border-b border-dashed border-slate-100">
+                    <span className="text-ink-400 font-medium">Banco:</span>
+                    <span className="font-bold text-ink-900">{teacher.bank_name}</span>
+                  </div>
+                )}
+                {teacher.bank_account_type && (
+                  <div className="flex justify-between items-center py-1 border-b border-dashed border-slate-100">
+                    <span className="text-ink-400 font-medium">Tipo de Cuenta:</span>
+                    <span className="font-medium text-ink-800">
+                      {teacher.bank_account_type === "Ahorros" ? "Cuenta de Ahorros" : teacher.bank_account_type === "Corriente" ? "Cuenta Corriente" : teacher.bank_account_type}
+                    </span>
+                  </div>
+                )}
+                {teacher.bank_account_number && (
+                  <div className="flex justify-between items-center py-1 border-b border-dashed border-slate-100">
+                    <span className="text-ink-400 font-medium">Nº de Cuenta:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-ink-900 text-xs bg-slate-100 px-2 py-0.5 rounded">
+                        {teacher.bank_account_number}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(teacher.bank_account_number);
+                          setCopiedAccount(true);
+                          setTimeout(() => setCopiedAccount(false), 2000);
+                        }}
+                        title="Copiar número de cuenta"
+                        className="p-1 hover:bg-slate-100 text-ink-500 hover:text-ink-800 rounded transition cursor-pointer"
+                      >
+                        {copiedAccount ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {teacher.bank_account_owner && (
+                  <div className="flex justify-between items-center py-1 border-b border-dashed border-slate-100">
+                    <span className="text-ink-400 font-medium">Titular:</span>
+                    <span className="font-semibold text-ink-800 text-right">{teacher.bank_account_owner}</span>
+                  </div>
+                )}
+                {teacher.bank_account_id && (
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-ink-400 font-medium">CI / RUC Titular:</span>
+                    <span className="font-mono font-medium text-ink-800">{teacher.bank_account_id}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50/60 border border-amber-200/60 rounded-xl text-center">
+                <p className="text-[11px] text-amber-800 font-medium">Sin datos bancarios registrados</p>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingModalOpen(true)}
+                    className="mt-1.5 text-[11px] font-bold text-lilac-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <Pencil size={11} /> Registrar cuenta ahora
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -854,9 +942,25 @@ export default function TeacherDetailClient({
                 <input name="fullName" defaultValue={teacher.full_name} required className="input text-xs" />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad</label>
-                <input name="specialty" defaultValue={teacher.specialty || ""} placeholder="Ej: Implantología, Ortodoncia" className="input text-xs" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink-700 mb-1">Cédula / Documento de Identidad</label>
+                  <input
+                    name="documentNumber"
+                    defaultValue={teacher.document_number || ""}
+                    placeholder="Ej: 1712345678"
+                    className="input text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad</label>
+                  <input
+                    name="specialty"
+                    defaultValue={teacher.specialty || ""}
+                    placeholder="Ej: Implantología, Ortodoncia"
+                    className="input text-xs"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -867,6 +971,97 @@ export default function TeacherDetailClient({
                 <div>
                   <label className="block text-xs font-semibold text-ink-700 mb-1">Correo electrónico</label>
                   <input name="email" type="email" defaultValue={teacher.email || ""} placeholder="Ej: especialista@facop.com" className="input text-xs" />
+                </div>
+              </div>
+
+              {/* Sección Datos Bancarios en Edición */}
+              <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                  <Landmark size={15} className="text-emerald-700" />
+                  <span>Datos Bancarios (Para Transferencias / Honorarios)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Banco o Entidad Financiera
+                    </label>
+                    <input
+                      name="bankName"
+                      defaultValue={teacher.bank_name || ""}
+                      list="bancos-especialista-edit-list"
+                      placeholder="Ej: Banco Pichincha"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                    <datalist id="bancos-especialista-edit-list">
+                      <option value="Banco Pichincha" />
+                      <option value="Banco Guayaquil" />
+                      <option value="Produbanco" />
+                      <option value="Banco del Pacífico" />
+                      <option value="Banco Internacional" />
+                      <option value="Banco Bolivariano" />
+                      <option value="Banco Solidario" />
+                      <option value="Banco General Rumiñahui" />
+                      <option value="Banco del Austro" />
+                      <option value="Cooperativa JEP" />
+                      <option value="Cooperativa Policía Nacional" />
+                      <option value="Cooperativa Alianza del Valle" />
+                      <option value="Mutualista Pichincha" />
+                      <option value="Cooperativa 29 de Octubre" />
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Tipo de Cuenta
+                    </label>
+                    <select
+                      name="bankAccountType"
+                      defaultValue={teacher.bank_account_type || ""}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    >
+                      <option value="">- Seleccionar tipo -</option>
+                      <option value="Ahorros">Cuenta de Ahorros</option>
+                      <option value="Corriente">Cuenta Corriente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Número de Cuenta
+                  </label>
+                  <input
+                    name="bankAccountNumber"
+                    defaultValue={teacher.bank_account_number || ""}
+                    placeholder="Ej: 2200123456"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Titular de la Cuenta
+                    </label>
+                    <input
+                      name="bankAccountOwner"
+                      defaultValue={teacher.bank_account_owner || ""}
+                      placeholder="Nombre del beneficiario"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Cédula / RUC del Titular
+                    </label>
+                    <input
+                      name="bankAccountId"
+                      defaultValue={teacher.bank_account_id || ""}
+                      placeholder="Cédula / RUC titular"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -66,11 +66,19 @@ async function addTeacher(formData: FormData) {
   await assertWritePermission("/erp/cursos/profesores");
   
   const fullName = (formData.get("fullName") as string)?.trim();
+  const documentNumber = (formData.get("documentNumber") as string)?.trim();
   const specialty = (formData.get("specialty") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
   const photoFile = formData.get("photoFile") as File;
   const cvFile = formData.get("cvFile") as File;
+
+  // Datos bancarios
+  const bankName = (formData.get("bankName") as string)?.trim();
+  const bankAccountType = (formData.get("bankAccountType") as string)?.trim();
+  const bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim();
+  const bankAccountOwner = (formData.get("bankAccountOwner") as string)?.trim();
+  const bankAccountId = (formData.get("bankAccountId") as string)?.trim();
 
   const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
   const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
@@ -82,11 +90,17 @@ async function addTeacher(formData: FormData) {
 
   const insertPayload: any = {
     full_name: fullName,
+    document_number: documentNumber || null,
     specialty: specialty || null,
     phone: phone || null,
     email: email || null,
     is_doctor: isDoctor,
     is_teacher: isTeacher,
+    bank_name: bankName || null,
+    bank_account_type: bankAccountType || null,
+    bank_account_number: bankAccountNumber || null,
+    bank_account_owner: bankAccountOwner || null,
+    bank_account_id: bankAccountId || null,
   };
 
   if (photoUrl) insertPayload.photo_url = photoUrl;
@@ -111,6 +125,7 @@ async function updateTeacher(formData: FormData) {
 
   const id = formData.get("id") as string;
   const fullName = (formData.get("fullName") as string)?.trim();
+  const documentNumber = (formData.get("documentNumber") as string)?.trim();
   const specialty = (formData.get("specialty") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -118,6 +133,13 @@ async function updateTeacher(formData: FormData) {
   const existingCvUrl = (formData.get("existingCvUrl") as string) || null;
   const photoFile = formData.get("photoFile") as File;
   const cvFile = formData.get("cvFile") as File;
+
+  // Datos bancarios
+  const bankName = (formData.get("bankName") as string)?.trim();
+  const bankAccountType = (formData.get("bankAccountType") as string)?.trim();
+  const bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim();
+  const bankAccountOwner = (formData.get("bankAccountOwner") as string)?.trim();
+  const bankAccountId = (formData.get("bankAccountId") as string)?.trim();
 
   const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
   const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
@@ -129,11 +151,17 @@ async function updateTeacher(formData: FormData) {
 
   const updatePayload: any = {
     full_name: fullName,
+    document_number: documentNumber || null,
     specialty: specialty || null,
     phone: phone || null,
     email: email || null,
     is_doctor: isDoctor,
     is_teacher: isTeacher,
+    bank_name: bankName || null,
+    bank_account_type: bankAccountType || null,
+    bank_account_number: bankAccountNumber || null,
+    bank_account_owner: bankAccountOwner || null,
+    bank_account_id: bankAccountId || null,
     photo_url: newPhotoUrl || existingPhotoUrl,
     cv_url: newCvUrl || existingCvUrl,
     updated_at: new Date().toISOString(),
@@ -269,7 +297,7 @@ export default async function ProfesoresPage({
 
   if (searchQuery) {
     query = query.or(
-      `full_name.ilike.%${searchQuery}%,specialty.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`
+      `full_name.ilike.%${searchQuery}%,specialty.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,document_number.ilike.%${searchQuery}%`
     );
   }
 
@@ -409,9 +437,16 @@ export default async function ProfesoresPage({
                             </div>
                           )}
                           <div className="space-y-1">
-                            <Link href={`/erp/cursos/profesores?id=${prof.id}`} className="font-bold text-ink-950 hover:text-lilac-700">
-                              {prof.full_name}
-                            </Link>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Link href={`/erp/cursos/profesores?id=${prof.id}`} className="font-bold text-ink-950 hover:text-lilac-700">
+                                {prof.full_name}
+                              </Link>
+                              {prof.document_number && (
+                                <span className="text-[10px] bg-slate-100 text-slate-700 font-mono px-1.5 py-0.5 rounded border border-slate-200">
+                                  CI: {prof.document_number}
+                                </span>
+                              )}
+                            </div>
                             {prof.specialty && (
                               <div className="text-[11px] text-ink-600 font-medium">{prof.specialty}</div>
                             )}

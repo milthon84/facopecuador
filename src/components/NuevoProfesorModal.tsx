@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Award, AlertCircle, Loader2, FileText, Stethoscope, GraduationCap } from "lucide-react";
+import { Plus, Award, AlertCircle, Loader2, FileText, Stethoscope, GraduationCap, Landmark, CreditCard } from "lucide-react";
 import { useRouter } from "next/navigation";
 import StandardModal from "@/components/StandardModal";
 
@@ -145,17 +145,28 @@ export default function NuevoProfesorModal({ action }: Props) {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad</label>
-            <input
-              name="specialty"
-              disabled={loading}
-              placeholder="Ej: Implantología Oral, Ortodoncia"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Cédula / Documento de Identidad</label>
+              <input
+                name="documentNumber"
+                disabled={loading}
+                placeholder="Ej: 1712345678"
+                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad</label>
+              <input
+                name="specialty"
+                disabled={loading}
+                placeholder="Ej: Implantología, Ortodoncia"
+                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-ink-700 mb-1">Teléfono</label>
               <input
@@ -174,6 +185,98 @@ export default function NuevoProfesorModal({ action }: Props) {
                 placeholder="Ej: especialista@facop.com"
                 className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
               />
+            </div>
+          </div>
+
+          {/* Sección Datos Bancarios */}
+          <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+              <Landmark size={15} className="text-emerald-700" />
+              <span>Datos Bancarios (Para Transferencias / Honorarios)</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Banco o Entidad Financiera
+                </label>
+                <input
+                  name="bankName"
+                  list="bancos-especialista-modal-list"
+                  disabled={loading}
+                  placeholder="Ej: Banco Pichincha"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                />
+                <datalist id="bancos-especialista-modal-list">
+                  <option value="Banco Pichincha" />
+                  <option value="Banco Guayaquil" />
+                  <option value="Produbanco" />
+                  <option value="Banco del Pacífico" />
+                  <option value="Banco Internacional" />
+                  <option value="Banco Bolivariano" />
+                  <option value="Banco Solidario" />
+                  <option value="Banco General Rumiñahui" />
+                  <option value="Banco del Austro" />
+                  <option value="Cooperativa JEP" />
+                  <option value="Cooperativa Policía Nacional" />
+                  <option value="Cooperativa Alianza del Valle" />
+                  <option value="Mutualista Pichincha" />
+                  <option value="Cooperativa 29 de Octubre" />
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Tipo de Cuenta
+                </label>
+                <select
+                  name="bankAccountType"
+                  disabled={loading}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                >
+                  <option value="">- Seleccionar tipo -</option>
+                  <option value="Ahorros">Cuenta de Ahorros</option>
+                  <option value="Corriente">Cuenta Corriente</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                Número de Cuenta
+              </label>
+              <input
+                name="bankAccountNumber"
+                disabled={loading}
+                placeholder="Ej: 2200123456"
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Titular de la Cuenta
+                </label>
+                <input
+                  name="bankAccountOwner"
+                  disabled={loading}
+                  placeholder="Nombre del titular"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Cédula / RUC del Titular
+                </label>
+                <input
+                  name="bankAccountId"
+                  disabled={loading}
+                  placeholder="Cédula o RUC del titular"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                />
+              </div>
             </div>
           </div>
 
