@@ -146,7 +146,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/erp" className="flex-1">
               <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
             </Link>
-            {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} />}
+            {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} variant="light" />}
             <div className="w-8 h-8 rounded-full bg-lilac-100 border border-lilac-200 flex items-center justify-center text-xs font-bold text-lilac-700 shrink-0">
               {displayName.charAt(0).toUpperCase()}
             </div>
@@ -168,7 +168,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </Link>
             <div className="flex items-center gap-3">
-              {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} />}
+              {canOpenDoor && <DoorOpenHeaderButton canEdit={canEditDoor} variant="dark" />}
               <div className="flex flex-col items-end">
                 <span className="text-sm font-medium text-white/90">{displayName}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleColor}`}>

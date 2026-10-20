@@ -33,9 +33,13 @@ const DEFAULT_DOOR_SETTINGS: DoorSettingsDef = {
 
 interface Props {
   canEdit?: boolean;
+  variant?: "dark" | "light" | "auto";
 }
 
-export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {}) {
+export default function DoorOpenHeaderButton({
+  canEdit: canEditProp,
+  variant = "dark",
+}: Props = {}) {
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [openedSuccess, setOpenedSuccess] = useState(false);
@@ -138,14 +142,38 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
     }
   }
 
+  const isLight = variant === "light";
+
   if (loading) {
     return (
-      <div className="h-8 px-2.5 rounded-lg bg-white/10 flex items-center gap-1.5 text-xs text-white/50 animate-pulse">
-        <KeyRound size={13} />
+      <div
+        className={`h-8 px-2.5 rounded-lg flex items-center gap-1.5 text-xs animate-pulse ${
+          isLight
+            ? "bg-slate-100 border border-slate-200 text-slate-500 shadow-xs"
+            : "bg-white/10 text-white/50 border border-white/10"
+        }`}
+      >
+        <KeyRound size={13} className={isLight ? "text-amber-600" : "text-gold-400"} />
         <span className="hidden sm:inline">Puerta...</span>
       </div>
     );
   }
+
+  const buttonClasses = openedSuccess
+    ? isLight
+      ? "bg-emerald-600 text-white border border-emerald-500 shadow-sm animate-pulse"
+      : "bg-emerald-500 text-white border border-emerald-400 animate-pulse"
+    : opening
+    ? isLight
+      ? "bg-amber-500 text-slate-950 font-bold border border-amber-600 shadow-sm animate-pulse"
+      : "bg-gold-500/90 text-white border border-gold-400"
+    : isLight
+    ? "bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 shadow-sm hover:border-gold-400"
+    : "bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-gold-400/60 shadow-xs";
+
+  const gearClasses = isLight
+    ? "p-1.5 rounded-lg text-slate-700 hover:text-slate-950 hover:bg-slate-100 border border-slate-200 transition shadow-xs"
+    : "p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition";
 
   return (
     <>
@@ -153,13 +181,7 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
         <button
           onClick={handleOpenDoor}
           disabled={opening}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 disabled:opacity-75 ${
-            openedSuccess
-              ? "bg-emerald-500 text-white border border-emerald-400 animate-pulse"
-              : opening
-              ? "bg-gold-500/90 text-white border border-gold-400"
-              : "bg-white/10 hover:bg-white/20 text-white border border-white/20 hover:border-gold-400/60"
-          }`}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs active:scale-95 disabled:opacity-75 ${buttonClasses}`}
           title={
             settings
               ? `Abrir ${settings.device_name} (${settings.device_id})`
@@ -168,8 +190,8 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
         >
           {opening ? (
             <>
-              <Loader2 size={14} className="animate-spin text-gold-200" />
-              <span>Abriendo...</span>
+              <Loader2 size={14} className={`animate-spin ${isLight ? "text-slate-950" : "text-gold-200"}`} />
+              <span className={isLight ? "text-slate-950 font-bold" : ""}>Abriendo...</span>
             </>
           ) : openedSuccess ? (
             <>
@@ -188,7 +210,7 @@ export default function DoorOpenHeaderButton({ canEdit: canEditProp }: Props = {
         {canEdit && (
           <button
             onClick={() => setSettingsModalOpen(true)}
-            className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition"
+            className={gearClasses}
             title="Configurar eWeLink / Webhook de la puerta"
           >
             <Settings size={13} />
