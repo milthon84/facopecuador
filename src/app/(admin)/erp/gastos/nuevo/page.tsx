@@ -245,7 +245,7 @@ export default async function NuevoGastoPage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-3.5">
+    <div className="max-w-3xl mx-auto space-y-3.5">
       <div className="flex items-center gap-3">
         <Link
           href="/erp/gastos"
