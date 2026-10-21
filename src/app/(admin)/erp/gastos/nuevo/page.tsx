@@ -54,7 +54,68 @@ async function saveExpense(formData: FormData) {
 
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   let description = (formData.get("description") as string)?.trim() || null;
-  const notes = `[AREA:${area}]`;
+
+  // Manejo de archivo de respaldo / comprobante digital
+  const receiptFile = formData.get("receipt_file") as File | null;
+  let receiptUrl: string | null = (formData.get("existing_receipt_url") as string)?.trim() || null;
+
+  if (receiptFile && receiptFile.size > 0) {
+    try {
+      const rawBytes = Buffer.from(await receiptFile.arrayBuffer());
+      let uploadBuffer: Buffer = rawBytes;
+      let contentType = receiptFile.type || "application/octet-stream";
+      let fileExt = receiptFile.name.split(".").pop()?.toLowerCase() || "pdf";
+
+      if (contentType.startsWith("image/")) {
+        try {
+          const { optimizeImageForWeb } = await import("@/lib/image-optimizer");
+          const optimized = await optimizeImageForWeb(rawBytes, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 82,
+            format: "webp",
+          });
+          uploadBuffer = optimized.buffer;
+          contentType = optimized.contentType;
+          fileExt = optimized.extension;
+        } catch (optErr) {
+          console.warn("No se pudo optimizar imagen de respaldo:", optErr);
+        }
+      }
+
+      const timestamp = Date.now();
+      const safeName = receiptFile.name.replace(/[^a-zA-Z0-9.-]/g, "_").slice(0, 30);
+      const fileName = `gastos/${timestamp}_${safeName}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("payment-proofs")
+        .upload(fileName, uploadBuffer, {
+          contentType,
+          cacheControl: "31536000",
+          upsert: true,
+        });
+
+      if (!uploadError) {
+        try {
+          const { warmLocalStorageCache } = await import("@/lib/storage-cache-server");
+          await warmLocalStorageCache("payment-proofs", fileName, uploadBuffer);
+        } catch {
+          // Cache opcional
+        }
+        const { data: urlData } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+        receiptUrl = urlData?.publicUrl || null;
+      } else {
+        console.error("Error al subir archivo de respaldo:", uploadError);
+      }
+    } catch (err) {
+      console.error("Error procesando comprobante adjunto:", err);
+    }
+  }
+
+  let notes = `[AREA:${area}]`;
+  if (receiptUrl) {
+    notes += ` [COMPROBANTE:${receiptUrl}]`;
+  }
 
   const insertPayload: Record<string, any> = {
     supplier_name,
@@ -75,6 +136,7 @@ async function saveExpense(formData: FormData) {
     payment_reference: payment_reference || null,
     created_by_id:     user?.id ?? null,
     created_by_email:  user?.email ?? null,
+    receipt_url:       receiptUrl || null,
   };
 
   let { data: expense, error: expenseError } = await supabase
@@ -82,6 +144,13 @@ async function saveExpense(formData: FormData) {
     .insert(insertPayload)
     .select()
     .single();
+
+  if (expenseError && (expenseError.message.includes("receipt_url") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
+    delete insertPayload.receipt_url;
+    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
+    expense = retry.data;
+    expenseError = retry.error;
+  }
 
   if (expenseError && (expenseError.message.includes("area") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
     delete insertPayload.area;
@@ -176,24 +245,27 @@ export default async function NuevoGastoPage() {
   });
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-4">
-        <Link href="/erp/gastos"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0">
+    <div className="max-w-5xl mx-auto space-y-3.5">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/erp/gastos"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-xs"
+        >
           <ArrowLeft size={18} />
         </Link>
-        <h1 className="text-xl font-bold text-ink-900">Registrar Gasto / Compra</h1>
+        <div>
+          <h1 className="text-xl font-bold text-ink-900 tracking-tight">Registrar Gasto / Compra</h1>
+          <p className="text-xs text-ink-500">Gestión de egresos contables, centros de costo y archivo de respaldo digital</p>
+        </div>
       </div>
 
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 sm:p-5">
-        <NuevaCompraForm
-          today={today}
-          bankAccounts={bankAccounts}
-          cajaAccounts={cajaAccounts}
-          knownSuppliersList={knownSuppliersList}
-          saveExpense={saveExpense}
-        />
-      </div>
+      <NuevaCompraForm
+        today={today}
+        bankAccounts={bankAccounts}
+        cajaAccounts={cajaAccounts}
+        knownSuppliersList={knownSuppliersList}
+        saveExpense={saveExpense}
+      />
     </div>
   );
 }

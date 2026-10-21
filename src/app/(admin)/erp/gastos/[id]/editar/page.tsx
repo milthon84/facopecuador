@@ -50,6 +50,63 @@ async function updateExpense(formData: FormData) {
   let description         = (formData.get("description") as string)?.trim() || null;
   let payment_reference   = (formData.get("payment_reference") as string)?.trim() || null;
 
+  // Manejo de comprobante digital / archivo de respaldo
+  const receiptFile = formData.get("receipt_file") as File | null;
+  let receiptUrl: string | null = (formData.get("existing_receipt_url") as string)?.trim() || null;
+
+  if (receiptFile && receiptFile.size > 0) {
+    try {
+      const rawBytes = Buffer.from(await receiptFile.arrayBuffer());
+      let uploadBuffer: Buffer = rawBytes;
+      let contentType = receiptFile.type || "application/octet-stream";
+      let fileExt = receiptFile.name.split(".").pop()?.toLowerCase() || "pdf";
+
+      if (contentType.startsWith("image/")) {
+        try {
+          const { optimizeImageForWeb } = await import("@/lib/image-optimizer");
+          const optimized = await optimizeImageForWeb(rawBytes, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 82,
+            format: "webp",
+          });
+          uploadBuffer = optimized.buffer;
+          contentType = optimized.contentType;
+          fileExt = optimized.extension;
+        } catch (optErr) {
+          console.warn("No se pudo optimizar imagen de respaldo:", optErr);
+        }
+      }
+
+      const timestamp = Date.now();
+      const safeName = receiptFile.name.replace(/[^a-zA-Z0-9.-]/g, "_").slice(0, 30);
+      const fileName = `gastos/${timestamp}_${safeName}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("payment-proofs")
+        .upload(fileName, uploadBuffer, {
+          contentType,
+          cacheControl: "31536000",
+          upsert: true,
+        });
+
+      if (!uploadError) {
+        try {
+          const { warmLocalStorageCache } = await import("@/lib/storage-cache-server");
+          await warmLocalStorageCache("payment-proofs", fileName, uploadBuffer);
+        } catch {
+          // Cache opcional
+        }
+        const { data: urlData } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+        receiptUrl = urlData?.publicUrl || null;
+      } else {
+        console.error("Error al subir archivo de respaldo:", uploadError);
+      }
+    } catch (err) {
+      console.error("Error procesando comprobante adjunto:", err);
+    }
+  }
+
   if (payment_method === "tarjeta_credito") {
     const card_type = (formData.get("card_type") as string)?.trim() || "";
     const card_lote = (formData.get("card_lote") as string)?.trim() || "";
@@ -58,8 +115,18 @@ async function updateExpense(formData: FormData) {
   }
 
   const { data: currentExp } = await supabase.from("expenses").select("notes").eq("id", id).maybeSingle();
-  const cleanNotes = (currentExp?.notes || "").replace(/\[AREA:[a-z]+\]/gi, "").trim();
-  const updatedNotes = cleanNotes ? `[AREA:${area}] ${cleanNotes}` : `[AREA:${area}]`;
+  let cleanNotes = (currentExp?.notes || "")
+    .replace(/\[AREA:[a-z]+\]/gi, "")
+    .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
+    .trim();
+
+  let updatedNotes = `[AREA:${area}]`;
+  if (receiptUrl) {
+    updatedNotes += ` [COMPROBANTE:${receiptUrl}]`;
+  }
+  if (cleanNotes) {
+    updatedNotes += ` ${cleanNotes}`;
+  }
 
   const updatePayload: Record<string, any> = {
     supplier_name,
@@ -78,9 +145,16 @@ async function updateExpense(formData: FormData) {
     payment_method,
     bank_account_id:   bank_account_id || null,
     payment_reference: payment_reference || null,
+    receipt_url:       receiptUrl || null,
   };
 
   let { error } = await supabase.from("expenses").update(updatePayload).eq("id", id);
+
+  if (error && (error.message.includes("receipt_url") || error.code === "PGRST204" || error.code === "42703")) {
+    delete updatePayload.receipt_url;
+    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
+    error = retry.error;
+  }
 
   if (error && (error.message.includes("area") || error.code === "PGRST204" || error.code === "42703")) {
     delete updatePayload.area;
@@ -133,17 +207,17 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
   });
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="max-w-5xl mx-auto space-y-3.5">
+      <div className="flex items-center gap-3">
         <Link
           href={`/erp/gastos/${id}`}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-xs"
         >
           <ArrowLeft size={18} />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-ink-900">Editar Gasto / Compra</h1>
-          <p className="text-xs text-ink-500 font-mono">ID: {id.slice(0, 8)}</p>
+          <h1 className="text-xl font-bold text-ink-900 tracking-tight">Editar Gasto / Compra</h1>
+          <p className="text-xs text-ink-500 font-mono">ID: {id.slice(0, 8)} · Modificación de datos y respaldo</p>
         </div>
       </div>
 
@@ -166,16 +240,14 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 sm:p-5">
-          <NuevaCompraForm
-            today={expense.expense_date}
-            bankAccounts={bankAccounts}
-            cajaAccounts={cajaAccounts}
-            knownSuppliersList={knownSuppliersList}
-            initialData={expense}
-            saveExpense={updateExpense}
-          />
-        </div>
+        <NuevaCompraForm
+          today={expense.expense_date}
+          bankAccounts={bankAccounts}
+          cajaAccounts={cajaAccounts}
+          knownSuppliersList={knownSuppliersList}
+          initialData={expense}
+          saveExpense={updateExpense}
+        />
       )}
     </div>
   );

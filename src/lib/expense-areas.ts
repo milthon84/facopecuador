@@ -107,3 +107,28 @@ export function resolveExpenseArea(expense: {
 
   return "clinica";
 }
+
+/**
+ * Extrae la URL del comprobante de respaldo (desde el campo receipt_url o desde notes [COMPROBANTE:...])
+ */
+export function resolveReceiptUrl(expense: {
+  receipt_url?: string | null;
+  notes?: string | null;
+}): string | null {
+  if (expense.receipt_url) return expense.receipt_url;
+  if (!expense.notes) return null;
+  const match = expense.notes.match(/\[COMPROBANTE:([^\]]+)\]/i);
+  return match && match[1] ? match[1].trim() : null;
+}
+
+/**
+ * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...]) de las notas visibles
+ */
+export function cleanVisibleNotes(notes: string | null | undefined): string {
+  if (!notes) return "";
+  return notes
+    .replace(/\[AREA:[a-z]+\]/gi, "")
+    .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
+    .trim();
+}
+

@@ -1,10 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2, Key, Edit, Lock, Stethoscope, GraduationCap, Building2 } from "lucide-react";
+import { ArrowLeft, Calendar, Tag, CreditCard, FileText, Trash2, Key, Edit, Lock, Stethoscope, GraduationCap, Building2, UploadCloud, FileImage, ExternalLink, Paperclip } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
-import { resolveExpenseArea, EXPENSE_AREA_CONFIG } from "@/lib/expense-areas";
+import { resolveExpenseArea, EXPENSE_AREA_CONFIG, resolveReceiptUrl, cleanVisibleNotes } from "@/lib/expense-areas";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,13 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
   const areaConfig = EXPENSE_AREA_CONFIG[area];
 
   const isClosed = await isMonthClosed(expense.expense_date);
+  const receiptUrl = resolveReceiptUrl(expense);
+  const visibleNotes = cleanVisibleNotes(expense.notes);
+  const isPdf = Boolean(
+    receiptUrl &&
+      (receiptUrl.toLowerCase().includes(".pdf") ||
+        receiptUrl.toLowerCase().includes("application/pdf"))
+  );
 
   const dateStr = new Date(expense.expense_date + "T12:00:00").toLocaleDateString("es-EC", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -164,13 +172,75 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
 
-          {expense.notes && (
-            <div className="bg-lilac-50 border border-lilac-100 rounded-xl p-3">
-              <span className="text-[11px] text-lilac-600 uppercase tracking-wide font-semibold">Notas</span>
-              <p className="text-sm text-ink-700 mt-0.5">{expense.notes}</p>
+          {visibleNotes && (
+            <div className="bg-lilac-50/70 border border-lilac-100 rounded-xl p-3">
+              <span className="text-[11px] text-lilac-700 uppercase tracking-wide font-semibold">Notas</span>
+              <p className="text-sm text-ink-700 mt-0.5">{visibleNotes}</p>
             </div>
           )}
         </div>
+
+        {/* Respaldo Digital Adjunto */}
+        {receiptUrl ? (
+          <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-lilac-50 pb-2">
+              <div className="flex items-center gap-2">
+                <Paperclip size={16} className="text-lilac-600" />
+                <h3 className="text-xs font-bold text-ink-800 uppercase tracking-wide">
+                  Respaldo Digital / Comprobante Adjunto
+                </h3>
+              </div>
+              <a
+                href={proxyStorageUrl(receiptUrl)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-lilac-700 hover:text-lilac-900 font-semibold flex items-center gap-1 hover:underline"
+              >
+                <ExternalLink size={13} /> Abrir archivo original
+              </a>
+            </div>
+
+            {isPdf ? (
+              <div className="flex items-center justify-between p-3 bg-red-50/50 border border-red-100 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
+                    PDF
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-ink-900">Factura Electrónica / Comprobante PDF</p>
+                    <p className="text-[11px] text-ink-400">Documento tributario respaldado</p>
+                  </div>
+                </div>
+                <a
+                  href={proxyStorageUrl(receiptUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3.5 py-1.5 rounded-xl font-semibold shadow-xs transition"
+                >
+                  <ExternalLink size={13} /> Ver PDF
+                </a>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative rounded-xl overflow-hidden border border-lilac-200 bg-ink-950 flex items-center justify-center max-h-80 group">
+                  <img
+                    src={proxyStorageUrl(receiptUrl)}
+                    alt="Comprobante de gasto"
+                    className="max-h-80 object-contain rounded-lg"
+                  />
+                  <a
+                    href={proxyStorageUrl(receiptUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="absolute inset-0 bg-ink-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold gap-1.5 transition"
+                  >
+                    <ExternalLink size={14} /> Clic para ampliar en tamaño completo
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* Totales */}
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">

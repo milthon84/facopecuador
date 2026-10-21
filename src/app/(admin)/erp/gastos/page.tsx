@@ -1,8 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { ShoppingCart, Plus, TrendingDown, Calendar, Tag, Stethoscope, GraduationCap, Building2, Filter } from "lucide-react";
+import { ShoppingCart, Plus, TrendingDown, Calendar, Tag, Stethoscope, GraduationCap, Building2, Filter, Paperclip } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
-import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea } from "@/lib/expense-areas";
+import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -265,6 +265,11 @@ export default async function GastosPage({
                     <span className="font-medium text-sm text-ink-900 truncate">{exp.supplier_name}</span>
                     <AreaBadge area={exp.resolvedArea} />
                     <CategoryBadge category={exp.category} />
+                    {resolveReceiptUrl(exp) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] bg-lilac-50 text-lilac-700 border border-lilac-200 px-1.5 py-0.5 rounded-md font-semibold" title="Comprobante digital adjunto">
+                        <Paperclip size={10} /> Respaldo
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-xs text-ink-400">
