@@ -65,6 +65,7 @@ export default function NewInvoiceForm({
   initialFullCoursePayment = false,
   initialItemDescription = "",
   initialItemPrice = 0,
+  rentalId = "",
   returnUrl = "",
 }: {
   patients: Patient[];
@@ -84,6 +85,7 @@ export default function NewInvoiceForm({
   initialFullCoursePayment?: boolean;
   initialItemDescription?: string;
   initialItemPrice?: number;
+  rentalId?: string;
   returnUrl?: string;
 }) {
   const router = useRouter();
@@ -392,6 +394,7 @@ export default function NewInvoiceForm({
           module_enrollment_ids: moduleEnrollmentIds.length > 0 ? moduleEnrollmentIds : undefined,
           course_enrollment_id: initialCourseEnrollmentId || undefined,
           full_course_payment: initialFullCoursePayment || undefined,
+          rental_id:           rentalId || undefined,
         }),
       });
       const result = await res.json();

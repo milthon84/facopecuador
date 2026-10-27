@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       module_enrollment_ids,
       course_enrollment_id,
       full_course_payment,
+      rental_id,
     } = body;
 
     if (!client_name || !client_document || !items || items.length === 0) {
@@ -329,6 +330,22 @@ export async function POST(req: Request) {
             updated_at: new Date().toISOString()
           })
           .eq("enrollment_id", course_enrollment_id);
+      }
+    }
+
+    if (rental_id) {
+      try {
+        await supabase
+          .from("coworking_rentals")
+          .update({
+            invoice_id: invoice.id,
+            invoice_number: invoiceNumber,
+            status: "facturado",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", rental_id);
+      } catch (err) {
+        console.warn("No se pudo vincular la factura al alquiler coworking:", err);
       }
     }
 

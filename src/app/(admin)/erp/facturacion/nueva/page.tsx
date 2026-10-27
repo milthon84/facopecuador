@@ -20,6 +20,7 @@ export default async function NewInvoicePage({
     full_course_payment?: string;
     item_description?: string;
     item_price?: string;
+    rental_id?: string;
     return_url?: string;
   }>;
 }) {
@@ -64,6 +65,7 @@ export default async function NewInvoicePage({
       initialFullCoursePayment={searchParams.full_course_payment === "true"}
       initialItemDescription={searchParams.item_description}
       initialItemPrice={searchParams.item_price ? Number(searchParams.item_price) : undefined}
+      rentalId={searchParams.rental_id}
       returnUrl={searchParams.return_url}
     />
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent } from "react";
+import { useState, useRef, ChangeEvent, useEffect } from "react";
 import {
   Save,
   Stethoscope,
@@ -13,9 +13,22 @@ import {
   Loader2,
   Calendar,
   FileText,
+  Plus,
+  Trash2,
+  Sparkles,
+  Search,
+  CheckCircle2,
+  Receipt,
+  FileCheck2,
 } from "lucide-react";
 import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
+import {
+  FacturaRecibida,
+  ExpenseItemRow,
+  calculateItemRow,
+  calculateExpenseTotals,
+} from "@/lib/expense-types";
 
 type Account = {
   id: string;
@@ -32,7 +45,10 @@ interface Props {
   bankAccounts: Account[];
   cajaAccounts: Account[];
   knownSuppliersList?: SupplierItem[];
+  pendingFacturas?: FacturaRecibida[];
+  initialFacturaClave?: string | null;
   initialData?: any;
+  initialItems?: ExpenseItemRow[];
   saveExpense: (formData: FormData) => Promise<void | { success?: boolean; error?: string; url?: string }>;
 }
 
@@ -41,7 +57,10 @@ export default function NuevaCompraForm({
   bankAccounts,
   cajaAccounts,
   knownSuppliersList = [],
+  pendingFacturas = [],
+  initialFacturaClave = null,
   initialData,
+  initialItems = [],
   saveExpense,
 }: Props) {
   const isEditing = Boolean(initialData?.id);
@@ -55,17 +74,62 @@ export default function NuevaCompraForm({
       : "factura"
   );
 
-  const [subtotal, setSubtotal] = useState<number | string>(
-    initialData
-      ? Number(initialData.subtotal_0 || 0) + Number(initialData.subtotal_15 || 0)
-      : 0
-  );
-  const [ivaAmount, setIvaAmount] = useState<number | string>(initialData?.iva_amount ?? 0);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
   const [supplierRuc, setSupplierRuc] = useState(initialData?.supplier_ruc || "");
   const [supplierName, setSupplierName] = useState(initialData?.supplier_name || "");
+  const [docNumber, setDocNumber] = useState(initialData?.document_number || "");
+  const [expenseDate, setExpenseDate] = useState(initialData?.expense_date || today);
+  const [authNumber, setAuthNumber] = useState(initialData?.authorization_number || "");
+  const [selectedFacturaClave, setSelectedFacturaClave] = useState<string | null>(
+    initialFacturaClave || initialData?.factura_recibida_clave_acceso || null
+  );
+
+  // Selector y buscador de facturas recibidas
+  const [facturaSearch, setFacturaSearch] = useState("");
+  const [facturaDropdownOpen, setFacturaDropdownOpen] = useState(false);
+
+  // Líneas de detalle del gasto (Cabecera y Detalle)
+  const [items, setItems] = useState<ExpenseItemRow[]>(() => {
+    if (initialItems && initialItems.length > 0) return initialItems;
+    if (initialData) {
+      const sub0 = Number(initialData.subtotal_0) || 0;
+      const sub15 = Number(initialData.subtotal_15) || 0;
+      const result: ExpenseItemRow[] = [];
+      if (sub15 > 0) {
+        result.push({
+          id: "init-15",
+          description: initialData.description || "Bienes / Servicios gravados IVA",
+          quantity: 1,
+          unit_price: sub15,
+          iva_rate: 15,
+        });
+      }
+      if (sub0 > 0) {
+        result.push({
+          id: "init-0",
+          description: initialData.description || "Bienes / Servicios tarifa 0%",
+          quantity: 1,
+          unit_price: sub0,
+          iva_rate: 0,
+        });
+      }
+      if (result.length > 0) return result;
+    }
+    return [
+      {
+        id: "item-1",
+        description: "",
+        quantity: 1,
+        unit_price: "",
+        iva_rate: 15,
+      },
+    ];
+  });
+
+  // Totales calculados en tiempo real desde el detalle
+  const totals = calculateExpenseTotals(items);
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Respaldo digital (solo botón y chip)
   const initialReceipt = resolveReceiptUrl(initialData || {});
@@ -76,6 +140,64 @@ export default function NuevaCompraForm({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Pre-cargar factura recibida si viene por parámetro inicial
+  useEffect(() => {
+    if (initialFacturaClave && pendingFacturas.length > 0 && !isEditing) {
+      const match = pendingFacturas.find((f) => f.clave_acceso === initialFacturaClave);
+      if (match) {
+        aplicarFacturaRecibida(match);
+      }
+    }
+  }, [initialFacturaClave, pendingFacturas, isEditing]);
+
+  function aplicarFacturaRecibida(factura: FacturaRecibida) {
+    setSelectedFacturaClave(factura.clave_acceso);
+    setSupplierRuc(factura.ruc_emisor || "");
+    setSupplierName(factura.razon_social || "");
+    setDocNumber(factura.numero_comprobante || "");
+    if (factura.fecha_emision) setExpenseDate(factura.fecha_emision);
+    setAuthNumber(factura.clave_acceso || "");
+    setDocType("factura");
+
+    // Construir filas de detalle con base en los montos de la factura
+    const subtotal = Number(factura.subtotal) || 0;
+    const iva = Number(factura.iva) || 0;
+    const total = Number(factura.total) || 0;
+
+    const newRows: ExpenseItemRow[] = [];
+    if (subtotal > 0) {
+      newRows.push({
+        id: `fac-${Date.now()}-1`,
+        description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        quantity: 1,
+        unit_price: subtotal,
+        iva_rate: iva > 0 ? 15 : 0,
+      });
+    } else if (total > 0) {
+      newRows.push({
+        id: `fac-${Date.now()}-1`,
+        description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        quantity: 1,
+        unit_price: total,
+        iva_rate: 0,
+      });
+    } else {
+      newRows.push({
+        id: `fac-${Date.now()}-1`,
+        description: factura.razon_social || "Factura electrónica SRI",
+        quantity: 1,
+        unit_price: "",
+        iva_rate: 15,
+      });
+    }
+    setItems(newRows);
+    setFacturaDropdownOpen(false);
+  }
+
+  function desvincularFactura() {
+    setSelectedFacturaClave(null);
+  }
+
   function handleRucChange(val: string) {
     setSupplierRuc(val);
     const cleanRuc = val.trim();
@@ -85,9 +207,45 @@ export default function NuevaCompraForm({
     }
   }
 
-  const numSubtotal = Number(subtotal) || 0;
-  const numIva = Number(ivaAmount) || 0;
-  const calculatedTotal = Math.round((numSubtotal + numIva) * 100) / 100;
+  // Manejo de filas de detalle
+  function addItemRow() {
+    setItems((prev) => [
+      ...prev,
+      {
+        id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        description: "",
+        quantity: 1,
+        unit_price: "",
+        iva_rate: docType === "factura" ? 15 : 0,
+      },
+    ]);
+  }
+
+  function updateItemRow(id: string, field: keyof ExpenseItemRow, val: any) {
+    setItems((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        return { ...row, [field]: val };
+      })
+    );
+  }
+
+  function removeItemRow(id: string) {
+    if (items.length <= 1) {
+      // Dejar una fila limpia en lugar de vaciar
+      setItems([
+        {
+          id: `item-${Date.now()}`,
+          description: "",
+          quantity: 1,
+          unit_price: "",
+          iva_rate: docType === "factura" ? 15 : 0,
+        },
+      ]);
+      return;
+    }
+    setItems((prev) => prev.filter((r) => r.id !== id));
+  }
 
   const needsAccount = method === "efectivo" || method === "transferencia";
   const needsReference = method === "transferencia";
@@ -95,13 +253,6 @@ export default function NuevaCompraForm({
   const accountLabel = method === "efectivo" ? "Caja Chica" : "Cuenta Bancaria";
 
   const isSinDocumento = docType === "sin_documento";
-
-  function handleAutoCalcIva() {
-    if (numSubtotal > 0) {
-      const calc = Math.round(numSubtotal * 0.15 * 100) / 100;
-      setIvaAmount(calc.toFixed(2));
-    }
-  }
 
   function handleFileSelected(file: File) {
     const isImage = file.type.startsWith("image/");
@@ -144,9 +295,43 @@ export default function NuevaCompraForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (totals.total <= 0) {
+      setErrorMsg("El total del gasto debe ser mayor a cero.");
+      return;
+    }
+
     setLoading(true);
     try {
       const formData = new FormData(e.currentTarget);
+      // Adjuntar los ítems como JSON estructurado
+      const validItems = items
+        .filter((it) => (Number(it.unit_price) > 0 || it.description.trim() !== ""))
+        .map((it) => {
+          const calc = calculateItemRow(it);
+          return {
+            description: it.description.trim() || "Item de gasto",
+            quantity: calc.qty || 1,
+            unit_price: calc.price || 0,
+            iva_rate: it.iva_rate,
+            subtotal: calc.subtotal,
+            iva_amount: calc.iva,
+            total: calc.total,
+          };
+        });
+
+      formData.set("items_json", JSON.stringify(validItems));
+      formData.set("subtotal_0", totals.subtotal0.toString());
+      formData.set("subtotal_15", totals.subtotal15.toString());
+      formData.set("iva_amount", totals.ivaAmount.toString());
+      formData.set("total", totals.total.toString());
+      if (selectedFacturaClave) {
+        formData.set("factura_recibida_clave_acceso", selectedFacturaClave);
+      }
+      if (authNumber) {
+        formData.set("authorization_number", authNumber);
+      }
+
       const res = (await saveExpense(formData)) as { success?: boolean; error?: string; url?: string };
       if (res?.success) {
         window.location.href = res.url || "/erp/gastos";
@@ -167,16 +352,32 @@ export default function NuevaCompraForm({
         existingReceiptUrl.toLowerCase().includes("application/pdf"))
   );
 
+  // Filtrado de facturas pendientes para el buscador
+  const filteredFacturas = pendingFacturas.filter((f) => {
+    if (!facturaSearch.trim()) return true;
+    const q = facturaSearch.toLowerCase();
+    return (
+      (f.razon_social || "").toLowerCase().includes(q) ||
+      (f.ruc_emisor || "").toLowerCase().includes(q) ||
+      (f.numero_comprobante || "").toLowerCase().includes(q)
+    );
+  });
+
+  const facturaVinculada = selectedFacturaClave
+    ? pendingFacturas.find((f) => f.clave_acceso === selectedFacturaClave)
+    : null;
+
   return (
     <>
       <form onSubmit={handleSubmit} noValidate className="bg-white border border-lilac-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         {isEditing && <input type="hidden" name="id" value={initialData.id} />}
         {existingReceiptUrl && <input type="hidden" name="existing_receipt_url" value={existingReceiptUrl} />}
-        {/* Categoría automática para la base de datos */}
         <input type="hidden" name="category" value={initialData?.category || (area === "clinica" ? "Insumos dentales" : area === "cursos" ? "Cursos" : "General")} />
+        <input type="hidden" name="factura_recibida_clave_acceso" value={selectedFacturaClave || ""} />
+        <input type="hidden" name="authorization_number" value={authNumber || ""} />
 
         {errorMsg && (
-          <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3.5 py-2 rounded-xl font-medium flex items-center justify-between">
+          <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3.5 py-2.5 rounded-xl font-medium flex items-center justify-between">
             <span>⚠️ {errorMsg}</span>
             <button type="button" onClick={() => setErrorMsg(null)} className="text-red-500 hover:text-red-700 p-1">
               <X size={14} />
@@ -184,9 +385,114 @@ export default function NuevaCompraForm({
           </div>
         )}
 
-        {/* 1. Fila de Encabezado: Destino del Gasto y Tipo de Comprobante en una sola franja */}
+        {/* ── PANEL DE VINCULACIÓN CON FACTURAS RECIBIDAS DEL SRI ── */}
+        {!isEditing && pendingFacturas.length > 0 && (
+          <div className="bg-gradient-to-r from-lilac-50/70 via-indigo-50/40 to-teal-50/50 border border-lilac-200/90 rounded-2xl p-3.5 space-y-2.5 transition">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-lilac-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Receipt size={15} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-ink-900 tracking-tight">
+                      Vincular Factura Electrónica Recibida (SRI)
+                    </span>
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-lilac-200/70 text-lilac-900">
+                      {pendingFacturas.length} pendientes
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-500">
+                    Selecciona una factura descargada del SRI para autocompletar cabecera, montos y detalle
+                  </p>
+                </div>
+              </div>
+
+              {facturaVinculada ? (
+                <div className="flex items-center gap-2 bg-white/90 border border-teal-300 rounded-xl px-2.5 py-1 text-xs">
+                  <CheckCircle2 size={14} className="text-teal-600 shrink-0" />
+                  <span className="font-semibold text-teal-950 font-mono text-[11px]">
+                    {facturaVinculada.numero_comprobante || "Factura SRI"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={desvincularFactura}
+                    className="text-ink-400 hover:text-red-600 p-0.5 rounded transition"
+                    title="Desvincular factura"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setFacturaDropdownOpen(!facturaDropdownOpen)}
+                  className="inline-flex items-center gap-1.5 bg-white border border-lilac-300 hover:border-lilac-400 text-lilac-700 px-3 py-1.5 rounded-xl text-xs font-bold shadow-2xs hover:bg-lilac-50/50 transition"
+                >
+                  <Sparkles size={13} className="text-lilac-600" />
+                  {facturaDropdownOpen ? "Cerrar catálogo" : "Elegir factura recibida"}
+                </button>
+              )}
+            </div>
+
+            {/* Menú desplegable o buscador de facturas pendientes */}
+            {facturaDropdownOpen && (
+              <div className="bg-white border border-lilac-200 rounded-xl p-3 shadow-md space-y-2 mt-2 animate-fadeIn">
+                <div className="relative">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                  <input
+                    type="text"
+                    value={facturaSearch}
+                    onChange={(e) => setFacturaSearch(e.target.value)}
+                    placeholder="Buscar por proveedor, RUC o N° comprobante..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-lilac-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-lilac-50/30 font-medium"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="max-h-56 overflow-y-auto divide-y divide-lilac-50 text-xs">
+                  {filteredFacturas.length === 0 ? (
+                    <p className="text-ink-400 text-center py-4 text-[11px]">No se encontraron facturas coincidentes.</p>
+                  ) : (
+                    filteredFacturas.map((fac) => (
+                      <div
+                        key={fac.clave_acceso}
+                        className="py-2 px-2 hover:bg-lilac-50/60 rounded-lg flex items-center justify-between gap-3 transition cursor-pointer"
+                        onClick={() => aplicarFacturaRecibida(fac)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-ink-900 truncate">
+                              {fac.razon_social || "Sin Razón Social"}
+                            </span>
+                            <span className="text-[10px] text-ink-500 font-mono">
+                              RUC: {fac.ruc_emisor}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-ink-400 mt-0.5 font-mono">
+                            <span>#{fac.numero_comprobante || "N/A"}</span>
+                            <span>{fac.fecha_emision}</span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-mono font-bold text-ink-950 text-sm block">
+                            ${Number(fac.total || 0).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] text-lilac-600 font-semibold hover:underline">
+                            Cargar datos →
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 1. Encabezado: Destino del Gasto y Tipo de Comprobante ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-lilac-100">
-          {/* Destino (3 pills limpias) */}
           <div className="space-y-1">
             <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wide block">
               Destino del Gasto *
@@ -234,7 +540,6 @@ export default function NuevaCompraForm({
             <input type="hidden" name="area" value={area} />
           </div>
 
-          {/* Tipo de Comprobante Simple */}
           <div className="space-y-1 sm:text-right">
             <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wide block">
               Comprobante
@@ -244,7 +549,10 @@ export default function NuevaCompraForm({
               onChange={(e) => {
                 const val = e.target.value as any;
                 setDocType(val);
-                if (val !== "factura") setIvaAmount(0);
+                if (val !== "factura") {
+                  // Si no es factura, setear tarifa iva 0 en ítems
+                  setItems((prev) => prev.map((it) => ({ ...it, iva_rate: 0 })));
+                }
               }}
               className="border border-lilac-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-ink-800 bg-white focus:outline-none focus:ring-2 focus:ring-lilac-400"
             >
@@ -255,7 +563,7 @@ export default function NuevaCompraForm({
           </div>
         </div>
 
-        {/* 2. RUC y Proveedor */}
+        {/* ── 2. RUC y Proveedor ── */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           <div className="sm:col-span-4 space-y-1">
             <label className="text-xs font-semibold text-ink-700">
@@ -294,7 +602,7 @@ export default function NuevaCompraForm({
           </div>
         </div>
 
-        {/* 3. N° Documento y Fecha */}
+        {/* ── 3. N° Documento y Fecha ── */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {!isSinDocumento ? (
             <>
@@ -304,7 +612,8 @@ export default function NuevaCompraForm({
                 </label>
                 <input
                   name="document_number"
-                  defaultValue={initialData?.document_number || ""}
+                  value={docNumber}
+                  onChange={(e) => setDocNumber(e.target.value)}
                   placeholder={docType === "factura" ? "001-001-000000001" : "001-001-000001"}
                   className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
                 />
@@ -317,7 +626,8 @@ export default function NuevaCompraForm({
                   type="date"
                   name="expense_date"
                   required
-                  defaultValue={initialData?.expense_date || today}
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
                   className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
                 />
               </div>
@@ -331,7 +641,8 @@ export default function NuevaCompraForm({
                 type="date"
                 name="expense_date"
                 required
-                defaultValue={initialData?.expense_date || today}
+                value={expenseDate}
+                onChange={(e) => setExpenseDate(e.target.value)}
                 className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
               />
               <input type="hidden" name="document_number" value="" />
@@ -339,18 +650,149 @@ export default function NuevaCompraForm({
           )}
         </div>
 
-        {/* 4. Descripción del Gasto */}
+        {/* ── 4. Descripción General ── */}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-ink-700">Descripción / Justificación</label>
+          <label className="text-xs font-semibold text-ink-700">Descripción / Justificación General</label>
           <input
             name="description"
             defaultValue={initialData?.description || ""}
-            placeholder="Detalle o descripción de los bienes o servicios adquiridos"
+            placeholder="Resumen o justificación del gasto (opcional)"
             className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
           />
         </div>
 
-        {/* 5. Forma de Pago en una sola fila compacta */}
+        {/* ── 5. DETALLE DE ÍTEMS / LÍNEAS DEL GASTO (CABECERA Y DETALLE) ── */}
+        <div className="border border-lilac-200 rounded-2xl p-3 sm:p-4 bg-lilac-50/20 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-bold text-ink-900 uppercase tracking-wide flex items-center gap-1.5">
+                <FileCheck2 size={15} className="text-lilac-600" />
+                Detalle de Ítems / Bienes o Servicios
+              </h3>
+              <p className="text-[11px] text-ink-500">
+                Desglose de productos o servicios adquiridos
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addItemRow}
+              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
+            >
+              <Plus size={13} /> Agregar Ítem
+            </button>
+          </div>
+
+          {/* Tabla de ítems */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
+                  <th className="py-2 pr-2 font-bold">Descripción del Bien / Servicio</th>
+                  <th className="py-2 px-2 w-20 text-center font-bold">Cant.</th>
+                  <th className="py-2 px-2 w-28 text-right font-bold">P. Unitario ($)</th>
+                  {docType === "factura" && (
+                    <th className="py-2 px-2 w-24 text-center font-bold">IVA</th>
+                  )}
+                  <th className="py-2 pl-2 pr-1 w-24 text-right font-bold">Subtotal</th>
+                  <th className="py-2 pl-1 w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-lilac-100">
+                {items.map((item, idx) => {
+                  const calc = calculateItemRow(item);
+                  return (
+                    <tr key={item.id} className="group hover:bg-white/60">
+                      <td className="py-2 pr-2">
+                        <input
+                          type="text"
+                          required
+                          value={item.description}
+                          onChange={(e) => updateItemRow(item.id, "description", e.target.value)}
+                          placeholder={`Ej. Ítem ${idx + 1}`}
+                          className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          required
+                          value={item.quantity}
+                          onChange={(e) => updateItemRow(item.id, "quantity", e.target.value)}
+                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-center text-ink-900 text-xs font-mono focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={item.unit_price}
+                          onChange={(e) => updateItemRow(item.id, "unit_price", e.target.value)}
+                          placeholder="0.00"
+                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-right text-ink-900 text-xs font-mono focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                        />
+                      </td>
+                      {docType === "factura" && (
+                        <td className="py-2 px-2 text-center">
+                          <select
+                            value={item.iva_rate}
+                            onChange={(e) => updateItemRow(item.id, "iva_rate", Number(e.target.value))}
+                            className="border border-lilac-200 rounded-lg px-1.5 py-1.5 bg-white text-xs font-semibold text-ink-800 focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                          >
+                            <option value={15}>15%</option>
+                            <option value={0}>0%</option>
+                          </select>
+                        </td>
+                      )}
+                      <td className="py-2 pl-2 pr-1 text-right font-mono font-bold text-ink-900 text-xs">
+                        ${calc.subtotal.toFixed(2)}
+                      </td>
+                      <td className="py-2 pl-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeItemRow(item.id)}
+                          className="text-ink-300 hover:text-red-600 p-1 rounded transition"
+                          title="Eliminar fila"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Resumen dinámico del detalle */}
+          <div className="pt-2 border-t border-lilac-200/60 flex flex-wrap items-center justify-end gap-x-6 gap-y-1.5 text-xs text-ink-600 font-medium">
+            <div>
+              <span>Subtotal 0%: </span>
+              <strong className="font-mono text-ink-900">${totals.subtotal0.toFixed(2)}</strong>
+            </div>
+            {docType === "factura" && (
+              <>
+                <div>
+                  <span>Subtotal 15%: </span>
+                  <strong className="font-mono text-ink-900">${totals.subtotal15.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span>IVA 15%: </span>
+                  <strong className="font-mono text-lilac-700">${totals.ivaAmount.toFixed(2)}</strong>
+                </div>
+              </>
+            )}
+            <div className="text-sm font-bold text-ink-950">
+              <span>Total Detalle: </span>
+              <span className="font-mono text-lilac-700 font-black">${totals.total.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 6. Forma de Pago ── */}
         <div className="bg-lilac-50/40 border border-lilac-100 rounded-xl p-3 space-y-2.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-[11px] font-bold text-ink-600 uppercase tracking-wide">Forma de Pago</span>
@@ -377,7 +819,6 @@ export default function NuevaCompraForm({
           </div>
           <input type="hidden" name="payment_method" value={method} />
 
-          {/* Subcampos dinámicos según el método */}
           {needsAccount && (
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
               <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
@@ -450,60 +891,6 @@ export default function NuevaCompraForm({
           )}
         </div>
 
-        {/* 6. Importes (Subtotal + IVA) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-ink-700">
-              Monto Sin IVA / Subtotal ($) *
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 font-bold text-sm">$</span>
-              <input
-                type="number"
-                name="subtotal_0"
-                min="0"
-                step="0.01"
-                value={subtotal}
-                onChange={(e) => setSubtotal(e.target.value)}
-                placeholder="0.00"
-                className="w-full border border-lilac-200 rounded-xl pl-8 pr-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono font-bold text-ink-950"
-              />
-            </div>
-          </div>
-
-          {docType === "factura" ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-ink-700">IVA ($)</label>
-                {numSubtotal > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleAutoCalcIva}
-                    className="text-[11px] text-lilac-700 hover:text-lilac-900 font-bold px-1.5 py-0.5 rounded bg-lilac-50 border border-lilac-200"
-                  >
-                    +15% IVA
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 font-bold text-sm">$</span>
-                <input
-                  type="number"
-                  name="iva_amount"
-                  min="0"
-                  step="0.01"
-                  value={ivaAmount}
-                  onChange={(e) => setIvaAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full border border-lilac-200 rounded-xl pl-8 pr-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono font-semibold text-ink-900"
-                />
-              </div>
-            </div>
-          ) : (
-            <input type="hidden" name="iva_amount" value="0" />
-          )}
-        </div>
-
         {/* Input oculto para adjuntar archivo nativo */}
         <input
           ref={fileInputRef}
@@ -514,9 +901,8 @@ export default function NuevaCompraForm({
           className="hidden"
         />
 
-        {/* 7. Franja Inferior: Botón de Respaldo + Total a Pagar + Botón Guardar */}
+        {/* ── 7. Franja Inferior: Respaldo + Total + Botón Guardar ── */}
         <div className="pt-3 border-t border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {/* Botón de Adjuntar Respaldo (Simple y directo) */}
           <div>
             {!receiptFile && !existingReceiptUrl ? (
               <button
@@ -555,14 +941,13 @@ export default function NuevaCompraForm({
             )}
           </div>
 
-          {/* Total y Botón de Guardado */}
           <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
             <div className="text-left sm:text-right">
               <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wider block">
                 Total a Pagar
               </span>
-              <span className="text-xl font-black text-lilac-700 font-mono">
-                ${calculatedTotal.toFixed(2)}
+              <span className="text-2xl font-black text-lilac-700 font-mono">
+                ${totals.total.toFixed(2)}
               </span>
             </div>
 

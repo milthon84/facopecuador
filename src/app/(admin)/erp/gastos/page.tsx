@@ -1,8 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { ShoppingCart, Plus, TrendingDown, Calendar, Tag, Stethoscope, GraduationCap, Building2, Filter, Paperclip } from "lucide-react";
+import {
+  ShoppingCart,
+  Plus,
+  TrendingDown,
+  Calendar,
+  Tag,
+  Stethoscope,
+  GraduationCap,
+  Building2,
+  Filter,
+  Paperclip,
+  Receipt,
+  ArrowRight,
+} from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
+import { FacturaRecibida } from "@/lib/expense-types";
 
 export const dynamic = "force-dynamic";
 
@@ -41,11 +55,11 @@ function AreaBadge({ area }: { area: ExpenseArea }) {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  efectivo:     "Efectivo",
-  transferencia:"Transferencia",
-  tarjeta:      "Tarjeta",
+  efectivo:        "Efectivo",
+  transferencia:   "Transferencia",
+  tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
-  credito:      "Crédito",
+  credito:         "Crédito",
 };
 
 export default async function GastosPage({
@@ -73,7 +87,24 @@ export default async function GastosPage({
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
-  const [{ data: monthlyRecords }, { data: annualRecords }, { data: expenses }] = await Promise.all([
+  let pendingFacturas: FacturaRecibida[] = [];
+  try {
+    const { data: recData } = await supabase
+      .from("facturas_recibidas")
+      .select("*")
+      .or("estado_facop.eq.pendiente,estado_facop.is.null")
+      .order("fecha_emision", { ascending: false })
+      .limit(10);
+    if (recData) pendingFacturas = recData as FacturaRecibida[];
+  } catch {
+    // Si la tabla no existe o error
+  }
+
+  const [
+    { data: monthlyRecords },
+    { data: annualRecords },
+    { data: expenses },
+  ] = await Promise.all([
     supabase.from("monthly_closures").select("period").eq("status", "closed"),
     supabase.from("annual_closures").select("year").eq("status", "closed"),
     supabase
@@ -88,21 +119,21 @@ export default async function GastosPage({
   const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
   const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
-  const rawItems = (expenses ?? []).map((exp) => ({
+  const rawItems = (expenses ?? []).map((exp: any) => ({
     ...exp,
     resolvedArea: resolveExpenseArea(exp),
   }));
 
-  const totalMes      = rawItems.reduce((s, e) => s + Number(e.total), 0);
-  const totalClinica  = rawItems.filter((e) => e.resolvedArea === "clinica").reduce((s, e) => s + Number(e.total), 0);
-  const totalCursos   = rawItems.filter((e) => e.resolvedArea === "cursos").reduce((s, e) => s + Number(e.total), 0);
-  const totalGeneral  = rawItems.filter((e) => e.resolvedArea === "general").reduce((s, e) => s + Number(e.total), 0);
-  const totalIva      = rawItems.reduce((s, e) => s + Number(e.iva_amount), 0);
+  const totalMes      = rawItems.reduce((s: number, e: any) => s + Number(e.total), 0);
+  const totalClinica  = rawItems.filter((e: any) => e.resolvedArea === "clinica").reduce((s: number, e: any) => s + Number(e.total), 0);
+  const totalCursos   = rawItems.filter((e: any) => e.resolvedArea === "cursos").reduce((s: number, e: any) => s + Number(e.total), 0);
+  const totalGeneral  = rawItems.filter((e: any) => e.resolvedArea === "general").reduce((s: number, e: any) => s + Number(e.total), 0);
+  const totalIva      = rawItems.reduce((s: number, e: any) => s + Number(e.iva_amount), 0);
 
   // Filtrar según área seleccionada
   const items = activeAreaFilter === "all"
     ? rawItems
-    : rawItems.filter((e) => e.resolvedArea === activeAreaFilter);
+    : rawItems.filter((e: any) => e.resolvedArea === activeAreaFilter);
 
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
 
@@ -123,6 +154,77 @@ export default async function GastosPage({
           </Link>
         )}
       </div>
+
+      {/* ── BANNER DE FACTURAS ELECTRÓNICAS SRI PENDIENTES ── */}
+      {pendingFacturas.length > 0 && (
+        <div className="bg-gradient-to-r from-lilac-50/90 via-indigo-50/50 to-teal-50/50 border border-lilac-200 rounded-2xl p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-lilac-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                <Receipt size={17} />
+              </div>
+              <div>
+                <h2 className="text-xs font-bold text-ink-900 uppercase tracking-wide flex items-center gap-2">
+                  Facturas Electrónicas SRI Recibidas Pendientes
+                  <span className="bg-lilac-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                    {pendingFacturas.length}
+                  </span>
+                </h2>
+                <p className="text-[11px] text-ink-500">
+                  Facturas descargadas del SRI listas para ser registradas como gastos contables
+                </p>
+              </div>
+            </div>
+
+            {canEdit && (
+              <Link
+                href={`/erp/gastos/nuevo?factura=${pendingFacturas[0].clave_acceso}`}
+                className="inline-flex items-center gap-1.5 text-xs font-bold bg-white text-lilac-700 hover:text-lilac-900 border border-lilac-200 hover:bg-lilac-50 px-3 py-1.5 rounded-xl shadow-2xs transition"
+              >
+                <span>Registrar la primera</span>
+                <ArrowRight size={13} />
+              </Link>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {pendingFacturas.slice(0, 6).map((fac) => (
+              <div
+                key={fac.clave_acceso}
+                className="bg-white border border-lilac-100 rounded-xl p-3 flex flex-col justify-between shadow-2xs hover:border-lilac-300 transition group"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-bold text-ink-900 truncate">
+                      {fac.razon_social || "Proveedor"}
+                    </span>
+                    <span className="text-xs font-mono font-black text-ink-950">
+                      ${Number(fac.total || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-ink-400 font-mono mt-0.5 flex items-center justify-between">
+                    <span>#{fac.numero_comprobante || "N/A"}</span>
+                    <span>{fac.fecha_emision}</span>
+                  </div>
+                </div>
+                <div className="mt-2.5 pt-2 border-t border-lilac-50 flex items-center justify-between">
+                  <span className="text-[10px] text-ink-400 font-mono truncate max-w-[120px]">
+                    RUC: {fac.ruc_emisor}
+                  </span>
+                  {canEdit && (
+                    <Link
+                      href={`/erp/gastos/nuevo?factura=${fac.clave_acceso}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 px-2 py-0.5 rounded-lg transition"
+                    >
+                      Registrar Gasto →
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Selector de mes */}
       <div className="flex items-center gap-2">
@@ -173,7 +275,7 @@ export default async function GastosPage({
         </div>
       </div>
 
-      {/* Tarjetas de Desglose por Destino (Clínica vs Cursos vs General) */}
+      {/* Tarjetas de Desglose por Destino */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="bg-white rounded-2xl p-3 border border-lilac-100 shadow-xs">
           <div className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Total Mes</div>
@@ -221,9 +323,9 @@ export default async function GastosPage({
         <div className="flex items-center gap-1">
           {[
             { id: "all", label: `Todos (${rawItems.length})` },
-            { id: "clinica", label: `Clínica (${rawItems.filter((e) => e.resolvedArea === "clinica").length})` },
-            { id: "cursos", label: `Cursos (${rawItems.filter((e) => e.resolvedArea === "cursos").length})` },
-            { id: "general", label: `General (${rawItems.filter((e) => e.resolvedArea === "general").length})` },
+            { id: "clinica", label: `Clínica (${rawItems.filter((e: any) => e.resolvedArea === "clinica").length})` },
+            { id: "cursos", label: `Cursos (${rawItems.filter((e: any) => e.resolvedArea === "cursos").length})` },
+            { id: "general", label: `General (${rawItems.filter((e: any) => e.resolvedArea === "general").length})` },
           ].map((btn) => (
             <Link
               key={btn.id}
@@ -254,7 +356,7 @@ export default async function GastosPage({
           </div>
         ) : (
           <div className="divide-y divide-lilac-50">
-            {items.map((exp) => (
+            {items.map((exp: any) => (
               <Link
                 key={exp.id}
                 href={`/erp/gastos/${exp.id}`}
@@ -265,6 +367,11 @@ export default async function GastosPage({
                     <span className="font-medium text-sm text-ink-900 truncate">{exp.supplier_name}</span>
                     <AreaBadge area={exp.resolvedArea} />
                     <CategoryBadge category={exp.category} />
+                    {exp.factura_recibida_clave_acceso && (
+                      <span className="inline-flex items-center gap-1 text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-1.5 py-0.5 rounded-md font-semibold" title="Factura SRI vinculada">
+                        <Receipt size={10} /> SRI
+                      </span>
+                    )}
                     {resolveReceiptUrl(exp) && (
                       <span className="inline-flex items-center gap-1 text-[10px] bg-lilac-50 text-lilac-700 border border-lilac-200 px-1.5 py-0.5 rounded-md font-semibold" title="Comprobante digital adjunto">
                         <Paperclip size={10} /> Respaldo

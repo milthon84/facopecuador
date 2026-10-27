@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import NuevaCompraForm from "./NuevaCompraForm";
 import { assertWritePermission } from "@/lib/auth-action";
+import { FacturaRecibida } from "@/lib/expense-types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,24 +20,15 @@ async function saveExpense(formData: FormData) {
   const authClient = createClient();
   const { data: { user } } = await authClient.auth.getUser();
 
-  const rawSubtotal = Number(formData.get("subtotal_0") || 0);
-  const rawIva      = Number(formData.get("iva_amount") || 0);
+  const rawSubtotal0  = Number(formData.get("subtotal_0") || 0);
+  const rawSubtotal15 = Number(formData.get("subtotal_15") || 0);
+  const rawIva        = Number(formData.get("iva_amount") || 0);
+  const rawTotal      = Number(formData.get("total") || 0);
 
-  let subtotal0  = rawSubtotal;
-  let subtotal15 = 0;
+  let subtotal0  = Math.round(rawSubtotal0 * 100) / 100;
+  let subtotal15 = Math.round(rawSubtotal15 * 100) / 100;
   let ivaAmount  = Math.round(rawIva * 100) / 100;
-
-  if (ivaAmount > 0) {
-    subtotal15 = Math.round((ivaAmount / 0.15) * 100) / 100;
-    if (rawSubtotal >= subtotal15) {
-      subtotal0 = Math.round((rawSubtotal - subtotal15) * 100) / 100;
-    } else {
-      subtotal15 = rawSubtotal;
-      subtotal0 = 0;
-    }
-  }
-
-  const total = Math.round((rawSubtotal + ivaAmount) * 100) / 100;
+  let total      = rawTotal > 0 ? Math.round(rawTotal * 100) / 100 : Math.round((subtotal0 + subtotal15 + ivaAmount) * 100) / 100;
 
   const category          = formData.get("category") as string;
   const area              = ((formData.get("area") as string) || "clinica").toLowerCase();
@@ -53,6 +45,7 @@ async function saveExpense(formData: FormData) {
   }
 
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
+  const factura_recibida_clave_acceso = (formData.get("factura_recibida_clave_acceso") as string)?.trim() || null;
   let description = (formData.get("description") as string)?.trim() || null;
 
   // Manejo de archivo de respaldo / comprobante digital
@@ -116,6 +109,9 @@ async function saveExpense(formData: FormData) {
   if (receiptUrl) {
     notes += ` [COMPROBANTE:${receiptUrl}]`;
   }
+  if (factura_recibida_clave_acceso) {
+    notes += ` [FACTURA_SRI:${factura_recibida_clave_acceso}]`;
+  }
 
   const insertPayload: Record<string, any> = {
     supplier_name,
@@ -137,6 +133,7 @@ async function saveExpense(formData: FormData) {
     created_by_id:     user?.id ?? null,
     created_by_email:  user?.email ?? null,
     receipt_url:       receiptUrl || null,
+    factura_recibida_clave_acceso: factura_recibida_clave_acceso || null,
   };
 
   let { data: expense, error: expenseError } = await supabase
@@ -144,6 +141,13 @@ async function saveExpense(formData: FormData) {
     .insert(insertPayload)
     .select()
     .single();
+
+  if (expenseError && (expenseError.message.includes("factura_recibida_clave_acceso") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
+    delete insertPayload.factura_recibida_clave_acceso;
+    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
+    expense = retry.data;
+    expenseError = retry.error;
+  }
 
   if (expenseError && (expenseError.message.includes("receipt_url") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
     delete insertPayload.receipt_url;
@@ -170,6 +174,56 @@ async function saveExpense(formData: FormData) {
   }
 
   if (expenseError || !expense) throw new Error(expenseError?.message ?? "Error al guardar la compra");
+
+  // Guardar detalle de ítems (expense_items)
+  const itemsJson = formData.get("items_json") as string | null;
+  if (itemsJson) {
+    try {
+      const parsedItems = JSON.parse(itemsJson);
+      if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+        const itemsToInsert = parsedItems.map((it: any) => ({
+          expense_id: expense.id,
+          description: it.description || "Item de gasto",
+          quantity: Number(it.quantity) || 1,
+          unit_price: Number(it.unit_price) || 0,
+          iva_rate: Number(it.iva_rate) || 0,
+          subtotal: Number(it.subtotal) || 0,
+          iva_amount: Number(it.iva_amount) || 0,
+          total: Number(it.total) || 0,
+        }));
+        const { error: itemsErr } = await supabase.from("expense_items").insert(itemsToInsert);
+        if (itemsErr) {
+          console.warn("No se pudieron registrar las líneas en expense_items:", itemsErr.message);
+        }
+      }
+    } catch (itParseErr) {
+      console.error("Error al procesar líneas de detalle de gasto:", itParseErr);
+    }
+  }
+
+  // Si viene vinculada una factura recibida del SRI, marcarla como registrada
+  if (factura_recibida_clave_acceso) {
+    try {
+      const updateData: Record<string, any> = {
+        estado_facop: "registrado",
+        expense_id: expense.id,
+      };
+      const { error: facUpdateErr } = await supabase
+        .from("facturas_recibidas")
+        .update(updateData)
+        .eq("clave_acceso", factura_recibida_clave_acceso);
+
+      if (facUpdateErr && (facUpdateErr.message.includes("expense_id") || facUpdateErr.code === "42703")) {
+        delete updateData.expense_id;
+        await supabase
+          .from("facturas_recibidas")
+          .update(updateData)
+          .eq("clave_acceso", factura_recibida_clave_acceso);
+      }
+    } catch (facErr) {
+      console.warn("No se pudo actualizar estado_facop en facturas_recibidas:", facErr);
+    }
+  }
 
   // Transacción bancaria automática (egreso) — no aplica a crédito
   if (bank_account_id && payment_method !== "credito") {
@@ -210,12 +264,33 @@ async function saveExpense(formData: FormData) {
   return { success: true };
 }
 
-export default async function NuevoGastoPage() {
+export default async function NuevoGastoPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams?: Promise<{ factura?: string }>;
+}) {
   await assertWritePermission("/erp/gastos");
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   const today    = new Date().toISOString().split("T")[0];
   const supabase = createAdminClient();
 
-  const [{ data: allAccounts }, { data: pastExpenses }] = await Promise.all([
+  let pendingFacturas: FacturaRecibida[] = [];
+  try {
+    const { data: recData } = await supabase
+      .from("facturas_recibidas")
+      .select("*")
+      .or("estado_facop.eq.pendiente,estado_facop.is.null")
+      .order("fecha_emision", { ascending: false })
+      .limit(60);
+    if (recData) pendingFacturas = recData as FacturaRecibida[];
+  } catch {
+    // Si la tabla no está creada aún
+  }
+
+  const [
+    { data: allAccounts },
+    { data: pastExpenses },
+  ] = await Promise.all([
     supabase
       .from("bank_accounts")
       .select("id, bank_name, account_number, account_type, notes")
@@ -229,8 +304,24 @@ export default async function NuevoGastoPage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const bankAccounts = (allAccounts || []).filter(a => a.account_type !== "caja");
-  const cajaAccounts = (allAccounts || []).filter(a => a.account_type === "caja");
+  // Si se solicitó una factura específica por URL y no está en la lista de pendientes
+  if (searchParams.factura && !pendingFacturas.some((f) => f.clave_acceso === searchParams.factura)) {
+    try {
+      const { data: specificFac } = await supabase
+        .from("facturas_recibidas")
+        .select("*")
+        .eq("clave_acceso", searchParams.factura)
+        .maybeSingle();
+      if (specificFac) {
+        pendingFacturas = [specificFac as FacturaRecibida, ...pendingFacturas];
+      }
+    } catch {
+      // Ignorar si la tabla no existe aún
+    }
+  }
+
+  const bankAccounts = (allAccounts || []).filter((a: any) => a.account_type !== "caja");
+  const cajaAccounts = (allAccounts || []).filter((a: any) => a.account_type === "caja");
 
   const knownSuppliersMap: Record<string, string> = {};
   const knownSuppliersList: { ruc: string; name: string }[] = [];
@@ -245,7 +336,7 @@ export default async function NuevoGastoPage() {
   });
 
   return (
-    <div className="max-w-3xl mx-auto space-y-3.5">
+    <div className="max-w-4xl mx-auto space-y-3.5">
       <div className="flex items-center gap-3">
         <Link
           href="/erp/gastos"
@@ -255,7 +346,7 @@ export default async function NuevoGastoPage() {
         </Link>
         <div>
           <h1 className="text-xl font-bold text-ink-900 tracking-tight">Registrar Gasto / Compra</h1>
-          <p className="text-xs text-ink-500">Gestión de egresos contables, centros de costo y archivo de respaldo digital</p>
+          <p className="text-xs text-ink-500">Cabecera, detalle de ítems, vinculación con facturas recibidas del SRI y respaldo digital</p>
         </div>
       </div>
 
@@ -264,6 +355,8 @@ export default async function NuevoGastoPage() {
         bankAccounts={bankAccounts}
         cajaAccounts={cajaAccounts}
         knownSuppliersList={knownSuppliersList}
+        pendingFacturas={pendingFacturas}
+        initialFacturaClave={searchParams.factura || null}
         saveExpense={saveExpense}
       />
     </div>
