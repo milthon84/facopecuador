@@ -182,7 +182,15 @@ export default function CoworkingDetailClient({
     }
   }
 
-  const invoiceLink = `/erp/facturacion/nueva?client_name=${encodeURIComponent(doctorName || rental.doctor_name)}&client_document=${encodeURIComponent(doctorDocument || rental.doctor_document || "")}&client_email=${encodeURIComponent(doctorEmail || rental.doctor_email || "")}&client_phone=${encodeURIComponent(doctorPhone || rental.doctor_phone || "")}&item_description=${encodeURIComponent(`Alquiler ${resConfig.name} - ${rental.rental_date} (${rental.start_time.slice(0, 5)} a ${rental.end_time.slice(0, 5)})`)}&item_price=${rental.total_price}&rental_id=${rental.id}&return_url=${encodeURIComponent(`/erp/coworking/${rental.id}`)}`;
+  const deposit = Number(rental.deposit_amount || 0);
+  const total = Number(rental.total_price || 0);
+  const balance = Math.max(0, Math.round((total - deposit) * 100) / 100);
+  const invoicePrice = balance > 0 ? balance : total;
+  const invoiceDesc = `Alquiler ${resConfig.name} - ${rental.rental_date} (${rental.start_time.slice(0, 5)} a ${rental.end_time.slice(0, 5)})${
+    deposit > 0 ? ` [Anticipo previo registrado: $${deposit.toFixed(2)}]` : ""
+  }`;
+
+  const invoiceLink = `/erp/facturacion/nueva?client_name=${encodeURIComponent(doctorName || rental.doctor_name)}&client_document=${encodeURIComponent(doctorDocument || rental.doctor_document || "")}&client_email=${encodeURIComponent(doctorEmail || rental.doctor_email || "")}&client_phone=${encodeURIComponent(doctorPhone || rental.doctor_phone || "")}&item_description=${encodeURIComponent(invoiceDesc)}&item_price=${invoicePrice}&rental_id=${rental.id}&return_url=${encodeURIComponent(`/erp/coworking/${rental.id}`)}`;
 
   return (
     <div className="space-y-4">
@@ -276,17 +284,31 @@ export default function CoworkingDetailClient({
           </div>
 
           <div className="bg-lilac-50/40 p-3 rounded-xl border border-lilac-100/60">
-            <span className="text-[10px] text-ink-400 font-bold uppercase tracking-wider block">Tipo de Cobro</span>
-            <span className="font-semibold text-ink-900 text-sm mt-0.5 block capitalize">
-              {rental.rate_type} {rental.rate_type === "hora" ? `($${rental.hourly_rate}/h)` : ""}
+            <span className="text-[10px] text-ink-400 font-bold uppercase tracking-wider block">Total Acordado</span>
+            <span className="font-mono font-black text-ink-900 text-base mt-0.5 block">
+              ${total.toFixed(2)}
             </span>
+            <span className="text-[10px] text-ink-500">Tarifa: ${rental.hourly_rate}/h</span>
           </div>
 
           <div className="bg-lilac-50/40 p-3 rounded-xl border border-lilac-100/60">
-            <span className="text-[10px] text-ink-400 font-bold uppercase tracking-wider block">Total Acordado</span>
-            <span className="font-mono font-black text-lilac-700 text-lg mt-0.5 block">
-              ${Number(rental.total_price || 0).toFixed(2)}
+            <span className="text-[10px] text-ink-400 font-bold uppercase tracking-wider block">
+              {deposit > 0 ? "Anticipo & Saldo" : "Cobro / Saldo"}
             </span>
+            {deposit > 0 ? (
+              <div>
+                <span className="font-mono font-bold text-emerald-700 text-xs block">
+                  ✓ Anticipo: ${deposit.toFixed(2)}
+                </span>
+                <span className="font-mono font-bold text-amber-800 text-xs block mt-0.5">
+                  Saldo pendiente: ${balance.toFixed(2)}
+                </span>
+              </div>
+            ) : (
+              <span className="font-mono font-bold text-ink-700 text-sm mt-0.5 block">
+                Total por pagar: ${total.toFixed(2)}
+              </span>
+            )}
           </div>
 
           <div className="bg-lilac-50/40 p-3 rounded-xl border border-lilac-100/60 flex flex-col justify-between">
@@ -300,7 +322,7 @@ export default function CoworkingDetailClient({
                   href={`/erp/facturacion/${rental.invoice_id}`}
                   className="text-[11px] font-bold text-lilac-700 hover:underline"
                 >
-                  Ver factura →
+                  Ver factura SRI →
                 </Link>
               </div>
             ) : (
@@ -316,6 +338,24 @@ export default function CoworkingDetailClient({
             )}
           </div>
         </div>
+
+        {deposit > 0 && (
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs text-emerald-900 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">✓ Anticipo Registrado:</span>
+              <span className="font-mono font-bold">${deposit.toFixed(2)}</span>
+              {rental.deposit_payment_method && (
+                <span className="capitalize text-emerald-700 font-medium">({rental.deposit_payment_method})</span>
+              )}
+              {rental.deposit_notes && (
+                <span className="text-ink-600 italic">— Ref: {rental.deposit_notes}</span>
+              )}
+            </div>
+            <div className="font-mono font-bold text-amber-800">
+              Saldo restante por cobrar: ${balance.toFixed(2)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 2. SECCIÓN DE DOCUMENTOS (CONTRATO Y DESCARGO DE RESPONSABILIDAD) ── */}

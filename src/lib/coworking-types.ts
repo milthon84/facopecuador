@@ -45,6 +45,12 @@ export interface CoworkingRental {
   rate_type: string;
   hourly_rate: number;
   total_price: number;
+
+  // Anticipo
+  deposit_amount?: number | null;
+  deposit_payment_method?: string | null;
+  deposit_notes?: string | null;
+
   invoice_id?: string | null;
   invoice_number?: string | null;
 

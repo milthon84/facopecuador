@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS public.coworking_rentals (
   rate_type                   TEXT DEFAULT 'hora' CHECK (rate_type IN ('hora', 'turno', 'dia', 'evento')),
   hourly_rate                 NUMERIC(10,2) DEFAULT 0.00,
   total_price                 NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+
+  -- Anticipo
+  deposit_amount              NUMERIC(10,2) DEFAULT 0.00,
+  deposit_payment_method      TEXT, -- 'efectivo', 'transferencia', 'tarjeta_credito', etc.
+  deposit_notes               TEXT, -- referencia bancaria o notas del anticipo
+
   invoice_id                  UUID REFERENCES public.invoices(id) ON DELETE SET NULL,
   invoice_number              TEXT,
 
@@ -83,6 +89,12 @@ CREATE POLICY "coworking_rentals_authenticated_all"
   TO authenticated
   USING (true)
   WITH CHECK (true);
+
+-- Idempotencia para tablas ya creadas:
+ALTER TABLE public.coworking_rentals
+  ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(10,2) DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS deposit_payment_method TEXT,
+  ADD COLUMN IF NOT EXISTS deposit_notes TEXT;
 
 -- Notificar a PostgREST para recargar la caché de esquema
 NOTIFY pgrst, 'reload schema';

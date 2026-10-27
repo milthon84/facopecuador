@@ -182,8 +182,9 @@ export default async function CoworkingDetailPage({ params }: { params: Promise<
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
         <Link
-          href="/erp/coworking"
+          href={`/erp/coworking?date=${rental.rental_date}`}
           className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-xs"
+          title="Volver a la Agenda de Coworking"
         >
           <ArrowLeft size={18} />
         </Link>

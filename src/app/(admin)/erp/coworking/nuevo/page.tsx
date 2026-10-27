@@ -1,11 +1,17 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { assertWritePermission } from "@/lib/auth-action";
 import NuevaReservaClientForm from "./NuevaReservaClientForm";
 
 export const dynamic = "force-dynamic";
+
+const EC_TZ = "America/Guayaquil";
+
+function todayInEcuador(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: EC_TZ });
+}
 
 async function createRental(formData: FormData) {
   "use server";
@@ -23,6 +29,11 @@ async function createRental(formData: FormData) {
   const rate_type = (formData.get("rate_type") as string) || "hora";
   const hourly_rate = Number(formData.get("hourly_rate")) || 0;
   const total_price = Number(formData.get("total_price")) || 0;
+
+  // Anticipo
+  const deposit_amount = Number(formData.get("deposit_amount")) || 0;
+  const deposit_payment_method = (formData.get("deposit_payment_method") as string)?.trim() || null;
+  const deposit_notes = (formData.get("deposit_notes") as string)?.trim() || null;
 
   const doctor_name = (formData.get("doctor_name") as string)?.trim();
   const doctor_document = (formData.get("doctor_document") as string)?.trim() || null;
@@ -50,6 +61,9 @@ async function createRental(formData: FormData) {
       rate_type,
       hourly_rate,
       total_price,
+      deposit_amount: deposit_amount > 0 ? deposit_amount : 0,
+      deposit_payment_method: deposit_amount > 0 ? deposit_payment_method : null,
+      deposit_notes: deposit_amount > 0 ? deposit_notes : null,
       doctor_name,
       doctor_document,
       doctor_phone,
@@ -61,19 +75,27 @@ async function createRental(formData: FormData) {
       created_by_id: user?.id || null,
       created_by_email: user?.email || null,
     })
-    .select("id")
+    .select("id, rental_date")
     .single();
 
   if (error || !data) {
     return { error: error?.message || "No se pudo registrar la reserva de alquiler." };
   }
 
-  return { success: true, id: data.id };
+  return { success: true, id: data.id, rentalDate: data.rental_date };
 }
 
-export default async function NuevaReservaPage() {
+export default async function NuevaReservaPage({
+  searchParams: searchParamsPromise,
+}: {
+  searchParams: Promise<{ date?: string; resource?: string }>;
+}) {
   await assertWritePermission("/erp/coworking");
-  const today = new Date().toISOString().split("T")[0];
+  const searchParams = await searchParamsPromise;
+  const today = searchParams?.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
+    ? searchParams.date
+    : todayInEcuador();
+
   const supabase = createAdminClient();
 
   const { data: specialists } = await supabase
@@ -82,24 +104,26 @@ export default async function NuevaReservaPage() {
     .order("full_name");
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-3xl mx-auto space-y-4">
       <div className="flex items-center gap-3">
         <Link
-          href="/erp/coworking"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-xs"
+          href={`/erp/coworking?date=${today}`}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-2xs"
+          title="Volver a la Agenda de Coworking"
         >
           <ArrowLeft size={18} />
         </Link>
         <div>
           <h1 className="text-xl font-bold text-ink-900 tracking-tight">Agendar Alquiler / Coworking</h1>
           <p className="text-xs text-ink-500">
-            Reserva de puesto de trabajo (sillón), clínica completa o aulas para capacitaciones
+            Reserva ágil de puesto clínico o aula con horario y anticipo opcional
           </p>
         </div>
       </div>
 
       <NuevaReservaClientForm
         today={today}
+        initialResource={(searchParams?.resource as any) || "puesto_trabajo"}
         specialists={(specialists || []) as any}
         createRental={createRental}
       />
