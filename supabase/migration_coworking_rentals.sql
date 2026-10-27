@@ -96,5 +96,15 @@ ALTER TABLE public.coworking_rentals
   ADD COLUMN IF NOT EXISTS deposit_payment_method TEXT,
   ADD COLUMN IF NOT EXISTS deposit_notes TEXT;
 
+-- Permisos por defecto para roles en el panel
+INSERT INTO public.role_permissions (role_name, path)
+VALUES
+  ('admin', '/erp/coworking'),
+  ('admin', '/erp/coworking/modificar'),
+  ('recepcionista', '/erp/coworking'),
+  ('recepcionista', '/erp/coworking/modificar'),
+  ('socios', '/erp/coworking')
+ON CONFLICT DO NOTHING;
+
 -- Notificar a PostgREST para recargar la caché de esquema
 NOTIFY pgrst, 'reload schema';

@@ -2,7 +2,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
+import { getCachedUserAndPermissions } from "@/lib/auth-cache";
+import { hasPermission } from "@/lib/roles";
+import { assertWritePermission } from "@/lib/auth-action";
 import CoworkingDetailClient from "./CoworkingDetailClient";
 import { CoworkingRental, CoworkingRentalStatus } from "@/lib/coworking-types";
 
@@ -164,8 +166,27 @@ async function changeStatus(id: string, newStatus: CoworkingRentalStatus) {
 }
 
 export default async function CoworkingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await assertPermission("/erp/coworking");
-  const canEdit = await hasWritePermission("/erp/coworking");
+  const authData = await getCachedUserAndPermissions();
+  const { user, role, allowedPaths } = authData;
+
+  if (!user) {
+    redirect("/erp/login");
+  }
+
+  const hasAccess =
+    role === "admin" ||
+    role === "recepcionista" ||
+    hasPermission(role, "/erp/coworking", allowedPaths);
+
+  if (!hasAccess) {
+    redirect("/erp/coworking?denied=1");
+  }
+
+  const canEdit =
+    role === "admin" ||
+    role === "recepcionista" ||
+    hasPermission(role, "/erp/coworking/modificar", allowedPaths) ||
+    hasPermission(role, "/erp/modificar", allowedPaths);
   const { id } = await params;
   const supabase = createAdminClient();
 

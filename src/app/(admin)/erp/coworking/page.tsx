@@ -1,38 +1,33 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   Building2,
   Plus,
-  Calendar,
   Clock,
   User,
   Stethoscope,
   GraduationCap,
   Presentation,
-  FileCheck2,
-  FileText,
-  AlertCircle,
   Receipt,
   PlayCircle,
   CheckCircle2,
-  XCircle,
   Filter,
   ChevronLeft,
   ChevronRight,
-  DollarSign,
-  CreditCard,
-  Banknote,
   Check,
+  ShieldAlert,
 } from "lucide-react";
-import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import { getCachedUserAndPermissions } from "@/lib/auth-cache";
+import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import {
   CoworkingRental,
   COWORKING_RESOURCES,
   COWORKING_STATUS_CONFIG,
   CoworkingResourceType,
-  CoworkingRentalStatus,
 } from "@/lib/coworking-types";
 import QuickCoworkingActions from "./QuickCoworkingActions";
+import CoworkingDatePicker from "./CoworkingDatePicker";
 
 export const dynamic = "force-dynamic";
 
@@ -54,17 +49,51 @@ export default async function CoworkingAgendaPage({
     status?: string;
   }>;
 }) {
-  await assertPermission("/erp/coworking");
-  const canEdit = await hasWritePermission("/erp/coworking");
-  const searchParams = await searchParamsPromise;
+  const authData = await getCachedUserAndPermissions();
+  const { user, role, allowedPaths } = authData;
+
+  if (!user) {
+    redirect("/erp/login");
+  }
+
+  const hasAccess =
+    role === "admin" ||
+    role === "recepcionista" ||
+    hasPermission(role, "/erp/coworking", allowedPaths);
+
+  if (!hasAccess) {
+    const firstAllowed = getFirstAllowedPath(role, allowedPaths);
+    if (firstAllowed && firstAllowed !== "/erp/coworking") {
+      redirect(firstAllowed);
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h1 className="text-xl font-bold text-ink-900 mb-2">Acceso Denegado</h1>
+        <p className="text-sm text-ink-600 max-w-md">
+          No tienes permisos asignados para acceder al módulo de Alquiler y Coworking. Por favor, solicita a un administrador que configure los permisos de tu rol.
+        </p>
+      </div>
+    );
+  }
+
+  const canEdit =
+    role === "admin" ||
+    hasPermission(role, "/erp/coworking/modificar", allowedPaths) ||
+    hasPermission(role, "/erp/modificar", allowedPaths);
+
+  const searchParams = (await searchParamsPromise) || {};
   const supabase = createAdminClient();
 
   const todayEc = todayInEcuador();
-  const activeView = searchParams.view || "day";
+  const activeView = searchParams.view === "month" ? "month" : "day";
 
   // Fecha seleccionada para la vista diaria
   const targetEcDate =
-    searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
+    typeof searchParams.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
       ? searchParams.date
       : todayEc;
 
@@ -86,14 +115,16 @@ export default async function CoworkingAgendaPage({
       });
 
   // Filtros
-  const activeResource = searchParams.resource || "all";
-  const activeStatus = searchParams.status || "all";
+  const activeResource = typeof searchParams.resource === "string" ? searchParams.resource : "all";
+  const activeStatus = typeof searchParams.status === "string" ? searchParams.status : "all";
 
   // Rango mensual para la vista mensual alternativa
   const now = new Date();
   const activeMonth =
-    searchParams.month ||
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    typeof searchParams.month === "string" && /^\d{4}-\d{2}$/.test(searchParams.month)
+      ? searchParams.month
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   const [mYear, mMonth] = activeMonth.split("-").map(Number);
   const monthFrom = new Date(mYear, mMonth - 1, 1).toISOString().split("T")[0];
   const monthTo = new Date(mYear, mMonth, 0).toISOString().split("T")[0];
@@ -312,19 +343,11 @@ export default async function CoworkingAgendaPage({
           </div>
 
           {activeView === "day" && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-ink-400">Ir a fecha:</span>
-              <input
-                type="date"
-                className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg text-ink-700 font-mono shadow-2xs focus:outline-none focus:ring-1 focus:ring-lilac-500"
-                value={targetEcDate}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    window.location.href = `/erp/coworking?date=${e.target.value}&resource=${activeResource}&status=${activeStatus}&view=day`;
-                  }
-                }}
-              />
-            </div>
+            <CoworkingDatePicker
+              targetDate={targetEcDate}
+              resource={activeResource}
+              status={activeStatus}
+            />
           )}
         </div>
 
@@ -371,9 +394,12 @@ export default async function CoworkingAgendaPage({
                 }
               );
 
+              const sTime = (r.start_time || "00:00").slice(0, 5);
+              const eTime = (r.end_time || "00:00").slice(0, 5);
+
               // URL para facturar directamente
               const invoiceUrl = `/erp/facturacion/nueva?client_name=${encodeURIComponent(
-                r.doctor_name
+                r.doctor_name || ""
               )}&client_document=${encodeURIComponent(
                 r.doctor_document || ""
               )}&client_email=${encodeURIComponent(
@@ -381,7 +407,7 @@ export default async function CoworkingAgendaPage({
               )}&client_phone=${encodeURIComponent(
                 r.doctor_phone || ""
               )}&item_description=${encodeURIComponent(
-                `Alquiler ${resConfig.name} - ${r.rental_date} (${r.start_time.slice(0, 5)} a ${r.end_time.slice(0, 5)})${
+                `Alquiler ${resConfig.name} - ${r.rental_date} (${sTime} a ${eTime})${
                   deposit > 0 ? ` [Anticipo previo: $${deposit.toFixed(2)}]` : ""
                 }`
               )}&item_price=${balance > 0 ? balance : total}&rental_id=${r.id}&return_url=${encodeURIComponent(
@@ -398,7 +424,7 @@ export default async function CoworkingAgendaPage({
                     <div className="flex items-center gap-1.5 font-bold text-sm text-ink-950 font-mono">
                       <Clock size={13} className="text-lilac-600 shrink-0" />
                       <span>
-                        {r.start_time.slice(0, 5)} - {r.end_time.slice(0, 5)}
+                        {sTime} - {eTime}
                       </span>
                     </div>
                     <div className="text-[11px] text-ink-500 font-medium">

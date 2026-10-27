@@ -1,7 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { getCachedUserAndPermissions } from "@/lib/auth-cache";
+import { hasPermission } from "@/lib/roles";
 import { assertWritePermission } from "@/lib/auth-action";
 import NuevaReservaClientForm from "./NuevaReservaClientForm";
 
@@ -90,8 +93,24 @@ export default async function NuevaReservaPage({
 }: {
   searchParams: Promise<{ date?: string; resource?: string }>;
 }) {
-  await assertWritePermission("/erp/coworking");
-  const searchParams = await searchParamsPromise;
+  const authData = await getCachedUserAndPermissions();
+  const { user, role, allowedPaths } = authData;
+
+  if (!user) {
+    redirect("/erp/login");
+  }
+
+  const canEdit =
+    role === "admin" ||
+    role === "recepcionista" ||
+    hasPermission(role, "/erp/coworking/modificar", allowedPaths) ||
+    hasPermission(role, "/erp/modificar", allowedPaths);
+
+  if (!canEdit) {
+    redirect("/erp/coworking?denied=1");
+  }
+
+  const searchParams = (await searchParamsPromise) || {};
   const today = searchParams?.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date)
     ? searchParams.date
     : todayInEcuador();
