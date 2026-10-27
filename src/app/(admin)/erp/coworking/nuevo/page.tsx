@@ -117,10 +117,42 @@ export default async function NuevaReservaPage({
 
   const supabase = createAdminClient();
 
-  const { data: specialists } = await supabase
-    .from("profesores")
-    .select("id, full_name, document_number, email, phone, specialty")
-    .order("full_name");
+  const [specialistsRes, servicesRes] = await Promise.all([
+    supabase
+      .from("profesores")
+      .select("id, full_name, document_number, email, phone, specialty")
+      .order("full_name"),
+    supabase
+      .from("services")
+      .select("id, name, price")
+      .eq("category", "Alquiler y Coworking")
+      .eq("active", true),
+  ]);
+
+  const specialists = specialistsRes.data || [];
+  const coworkingServices = servicesRes.data || [];
+
+  // Mapear tarifas por hora configuradas en el Catálogo de Servicios (/erp/servicios)
+  const catalogRates: Record<string, number> = {
+    puesto_trabajo: 20.0,
+    clinica_completa: 70.0,
+    aula_pequena: 25.0,
+    aula_grande: 45.0,
+  };
+
+  coworkingServices.forEach((s) => {
+    const n = s.name.toLowerCase();
+    const p = Number(s.price) || 0;
+    if (n.includes("puesto") || n.includes("sillón") || n.includes("sillon")) {
+      catalogRates.puesto_trabajo = p;
+    } else if (n.includes("clínica") || n.includes("clinica")) {
+      catalogRates.clinica_completa = p;
+    } else if (n.includes("pequeña") || n.includes("pequena")) {
+      catalogRates.aula_pequena = p;
+    } else if (n.includes("grande") || n.includes("auditorio")) {
+      catalogRates.aula_grande = p;
+    }
+  });
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
@@ -135,7 +167,7 @@ export default async function NuevaReservaPage({
         <div>
           <h1 className="text-xl font-bold text-ink-900 tracking-tight">Agendar Alquiler / Coworking</h1>
           <p className="text-xs text-ink-500">
-            Reserva ágil de puesto clínico o aula con horario y anticipo opcional
+            Reserva ágil con control de horas y anticipo (costos vinculados al Catálogo de Servicios)
           </p>
         </div>
       </div>
@@ -143,6 +175,7 @@ export default async function NuevaReservaPage({
       <NuevaReservaClientForm
         today={today}
         initialResource={(searchParams?.resource as any) || "puesto_trabajo"}
+        catalogRates={catalogRates}
         specialists={(specialists || []) as any}
         createRental={createRental}
       />

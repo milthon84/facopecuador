@@ -160,20 +160,14 @@ export default async function CoworkingAgendaPage({
     console.warn("Error consultando coworking_rentals:", err);
   }
 
-  // KPIs
+  // KPIs operativos (horas y estado)
   const totalCount = rentals.length;
   const enCursoCount = rentals.filter((r) => r.status === "en_curso").length;
   const pendientesFacturarCount = rentals.filter(
     (r) => r.status === "finalizado" || (r.status === "reservado" && !r.invoice_id)
   ).length;
   const facturadasCount = rentals.filter((r) => r.status === "facturado").length;
-  const totalAnticipos = rentals.reduce(
-    (acc, r) => acc + Number(r.deposit_amount || 0),
-    0
-  );
-  const totalFacturadoSRI = rentals
-    .filter((r) => r.status === "facturado")
-    .reduce((acc, r) => acc + Number(r.total_price || 0), 0);
+  const totalHoras = rentals.reduce((acc, r) => acc + Number(r.hours || 0), 0);
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -261,7 +255,7 @@ export default async function CoworkingAgendaPage({
         </div>
       </div>
 
-      {/* ── KPIs Rápidos ── */}
+      {/* ── KPIs Rápidos Operativos (Horas y Reservas) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="bg-white border border-lilac-100 rounded-2xl p-3 shadow-2xs">
           <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block">
@@ -288,11 +282,11 @@ export default async function CoworkingAgendaPage({
           </span>
         </div>
         <div className="bg-white border border-teal-100 rounded-2xl p-3 shadow-2xs">
-          <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">
-            Facturado SRI {totalAnticipos > 0 ? `(Anticipos: $${totalAnticipos.toFixed(0)})` : ""}
+          <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1">
+            <Clock size={11} /> Horas de Uso {activeView === "day" ? "Hoy" : "Mes"}
           </span>
           <span className="text-2xl font-black text-teal-800 font-mono mt-0.5 block">
-            ${totalFacturadoSRI.toFixed(2)}
+            {totalHoras} hrs
           </span>
         </div>
       </div>
@@ -464,30 +458,22 @@ export default async function CoworkingAgendaPage({
                       )}
                     </div>
 
-                    {/* Subtítulo: Contacto & Anticipo / Saldo */}
+                    {/* Subtítulo: Contacto & Anticipo */}
                     <div className="flex items-center gap-2.5 mt-1 text-xs text-ink-600 flex-wrap">
                       {r.doctor_phone && <span>📞 {r.doctor_phone}</span>}
                       {r.doctor_document && (
                         <span className="font-mono text-ink-500">ID: {r.doctor_document}</span>
                       )}
 
-                      {/* Desglose de Valores y Anticipo */}
-                      <span className="inline-flex items-center gap-1 font-mono">
-                        <strong className="text-ink-900">Total: ${total.toFixed(2)}</strong>
+                      <span className="text-[11px] font-semibold text-ink-700 bg-lilac-50/80 px-2 py-0.5 rounded-md border border-lilac-200">
+                        ⏱️ {r.hours} {r.hours === 1 ? "hora" : "horas"} reservadas
                       </span>
 
-                      {deposit > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {deposit > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                           <Check size={11} className="text-emerald-600" />
-                          <span>
-                            Anticipo: ${deposit.toFixed(2)} ({r.deposit_payment_method || "Registrado"})
-                          </span>
-                          <span className="text-amber-800 font-bold ml-1">
-                            · Saldo: ${balance.toFixed(2)}
-                          </span>
+                          <span>Con anticipo ({r.deposit_payment_method || "Registrado"})</span>
                         </span>
-                      ) : (
-                        <span className="text-[11px] text-ink-400">Sin anticipo previo</span>
                       )}
                     </div>
                   </div>

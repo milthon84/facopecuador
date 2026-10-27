@@ -37,6 +37,7 @@ interface Specialist {
 interface Props {
   today: string;
   initialResource?: CoworkingResourceType;
+  catalogRates?: Record<string, number>;
   specialists: Specialist[];
   createRental: (formData: FormData) => Promise<{ success?: boolean; error?: string; id?: string; rentalDate?: string }>;
 }
@@ -44,6 +45,7 @@ interface Props {
 export default function NuevaReservaClientForm({
   today,
   initialResource = "puesto_trabajo",
+  catalogRates,
   specialists,
   createRental,
 }: Props) {
@@ -55,11 +57,12 @@ export default function NuevaReservaClientForm({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
 
-  // Tarifas
-  const [hourlyRate, setHourlyRate] = useState<number>(
-    COWORKING_RESOURCES[initialResource]?.defaultRate || 20.0
-  );
-  const [customTotal, setCustomTotal] = useState<string>("");
+  // Tarifas del catálogo de servicios
+  const defaultRate =
+    catalogRates?.[initialResource] ||
+    COWORKING_RESOURCES[initialResource]?.defaultRate ||
+    20.0;
+  const [hourlyRate, setHourlyRate] = useState<number>(defaultRate);
 
   // Doctor
   const [doctorName, setDoctorName] = useState("");
@@ -78,13 +81,14 @@ export default function NuevaReservaClientForm({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const hours = calculateHoursBetween(startTime, endTime);
-  const calculatedTotal = customTotal !== "" ? Number(customTotal) || 0 : Math.round(hours * hourlyRate * 100) / 100;
+  const calculatedTotal = Math.round(hours * hourlyRate * 100) / 100;
   const numDeposit = hasDeposit ? Number(depositAmount) || 0 : 0;
   const remainingBalance = Math.max(0, Math.round((calculatedTotal - numDeposit) * 100) / 100);
 
   function handleSelectResource(type: CoworkingResourceType) {
     setResource(type);
-    setHourlyRate(COWORKING_RESOURCES[type].defaultRate);
+    const rate = catalogRates?.[type] || COWORKING_RESOURCES[type].defaultRate;
+    setHourlyRate(rate);
     if (type === "clinica_completa") setResourceId("Toda la Clínica");
     else if (type === "aula_pequena") setResourceId("Aula A");
     else if (type === "aula_grande") setResourceId("Auditorio");
@@ -212,9 +216,6 @@ export default function NuevaReservaClientForm({
                     {key === "aula_pequena" && <Presentation size={14} />}
                     {key === "aula_grande" && <GraduationCap size={14} />}
                   </div>
-                  <span className="text-[11px] font-mono font-bold text-ink-600">
-                    ${item.defaultRate}/h
-                  </span>
                 </div>
                 <span className="text-xs font-bold text-ink-900 leading-tight">
                   {item.shortName}
@@ -363,63 +364,39 @@ export default function NuevaReservaClientForm({
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-ink-500 px-1 pt-0.5">
+        <div className="flex items-center justify-between text-xs text-ink-600 px-1 pt-0.5">
           <span>
-            Duración estimada: <strong className="text-ink-800">{hours} horas</strong> ({startTime} a {endTime})
+            Duración calculada: <strong className="text-ink-900 font-bold text-sm">{hours} {hours === 1 ? "hora" : "horas"}</strong> ({startTime} a {endTime})
           </span>
-          <span className="font-mono text-lilac-700 font-semibold">
-            ${hourlyRate}/h
+          <span className="text-[11px] text-ink-400">
+            Costos según Catálogo de Servicios
           </span>
         </div>
       </div>
 
-      {/* ── 4. Valor Total y Anticipo Opcional ── */}
-      <div className="bg-lilac-50/40 border border-lilac-100 rounded-2xl p-4 space-y-4">
+      {/* ── 4. Anticipo Opcional ── */}
+      <div className="bg-lilac-50/40 border border-lilac-100 rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-bold text-ink-700 uppercase tracking-wider block">
-              Precio Total del Alquiler
-            </span>
-            <span className="text-xs text-ink-500">
-              Calculado automáticamente ({hours}h × ${hourlyRate})
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-bold text-ink-400">$</span>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
-              type="number"
-              step="0.01"
-              min="0"
-              className="w-24 text-right text-base font-bold font-mono px-2.5 py-1.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 text-ink-900"
-              value={customTotal !== "" ? customTotal : calculatedTotal.toFixed(2)}
-              onChange={(e) => setCustomTotal(e.target.value)}
+              type="checkbox"
+              checked={hasDeposit}
+              onChange={(e) => {
+                setHasDeposit(e.target.checked);
+                if (!e.target.checked) setDepositAmount("");
+              }}
+              className="w-4 h-4 text-lilac-600 rounded border-lilac-300 focus:ring-lilac-500 cursor-pointer"
             />
-          </div>
+            <span className="text-xs font-bold text-ink-800">
+              ¿Registrar un anticipo del doctor para esta reserva?
+            </span>
+          </label>
+          {hasDeposit && (
+            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+              Anticipo activo
+            </span>
+          )}
         </div>
-
-        {/* Bloque de Anticipo */}
-        <div className="pt-3 border-t border-lilac-200/60 space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={hasDeposit}
-                onChange={(e) => {
-                  setHasDeposit(e.target.checked);
-                  if (!e.target.checked) setDepositAmount("");
-                }}
-                className="w-4 h-4 text-lilac-600 rounded border-lilac-300 focus:ring-lilac-500 cursor-pointer"
-              />
-              <span className="text-xs font-bold text-ink-800">
-                ¿Registrar un anticipo inicial ahora?
-              </span>
-            </label>
-            {hasDeposit && (
-              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                Anticipo activo
-              </span>
-            )}
-          </div>
 
           {hasDeposit && (
             <div className="bg-white border border-lilac-200/80 rounded-2xl p-3.5 space-y-3 animate-in fade-in duration-150">
@@ -483,7 +460,6 @@ export default function NuevaReservaClientForm({
               </div>
             </div>
           )}
-        </div>
       </div>
 
       {/* ── 5. Observaciones Rápidas (Opcional) ── */}

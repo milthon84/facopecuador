@@ -106,5 +106,14 @@ VALUES
   ('socios', '/erp/coworking')
 ON CONFLICT DO NOTHING;
 
+-- Servicios base en el Catálogo de Servicios (/erp/servicios)
+INSERT INTO public.services (name, description, price, iva_code, category, active)
+VALUES
+  ('Alquiler Puesto de Trabajo (Sillón Dental)', 'Tarifa por hora de sillón odontológico e instrumental', 20.00, '4', 'Alquiler y Coworking', true),
+  ('Alquiler Clínica Completa', 'Tarifa por hora de clínica completa con todas las instalaciones', 70.00, '4', 'Alquiler y Coworking', true),
+  ('Alquiler Aula Pequeña (Capacitaciones)', 'Tarifa por hora de aula para grupos de hasta 12 personas', 25.00, '4', 'Alquiler y Coworking', true),
+  ('Alquiler Aula Grande (Auditorio)', 'Tarifa por hora de auditorio académico para workshops', 45.00, '4', 'Alquiler y Coworking', true)
+ON CONFLICT DO NOTHING;
+
 -- Notificar a PostgREST para recargar la caché de esquema
 NOTIFY pgrst, 'reload schema';
