@@ -47,6 +47,60 @@ export default async function NewInvoicePage({
     }
   }
 
+  // Pre-cargar datos del doctor desde la reserva de alquiler si viene rental_id
+  let rentalDoctor = {
+    name: searchParams.client_name || "",
+    document: searchParams.client_document || "",
+    email: searchParams.client_email || "",
+    phone: searchParams.client_phone || "",
+    address: searchParams.client_address || "",
+  };
+
+  if (searchParams.rental_id) {
+    try {
+      const { data: rental } = await supabase
+        .from("coworking_rentals")
+        .select("*, doctor:doctor_id(*)")
+        .eq("id", searchParams.rental_id)
+        .maybeSingle();
+
+      if (rental) {
+        const doc = rental.doctor as any;
+        if (!rentalDoctor.name) rentalDoctor.name = rental.doctor_name || doc?.full_name || "";
+        if (!rentalDoctor.document) rentalDoctor.document = rental.doctor_document || doc?.document_number || "";
+        if (!rentalDoctor.email) rentalDoctor.email = rental.doctor_email || doc?.email || "";
+        if (!rentalDoctor.phone) rentalDoctor.phone = rental.doctor_phone || doc?.phone || "";
+        if (!rentalDoctor.address) rentalDoctor.address = doc?.address || "";
+      }
+    } catch (rErr) {
+      console.warn("No se pudo pre-cargar datos de la reserva de alquiler:", rErr);
+    }
+  }
+
+  // Si tenemos cédula o RUC pero falta dirección o datos fiscales, buscar en la última factura previa
+  if (rentalDoctor.document && (!rentalDoctor.address || !rentalDoctor.email || !rentalDoctor.phone)) {
+    try {
+      const cleanDoc = rentalDoctor.document.replace(/[\s\-]/g, "");
+      const variants = /^\d{10}$/.test(cleanDoc) ? [cleanDoc, `${cleanDoc}001`] : [cleanDoc];
+      const { data: lastInv } = await supabase
+        .from("invoices")
+        .select("client_name, client_document, client_email, client_phone, client_address")
+        .in("client_document", variants)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastInv) {
+        if (!rentalDoctor.address && lastInv.client_address) rentalDoctor.address = lastInv.client_address;
+        if (!rentalDoctor.email && lastInv.client_email) rentalDoctor.email = lastInv.client_email;
+        if (!rentalDoctor.phone && lastInv.client_phone) rentalDoctor.phone = lastInv.client_phone;
+        if (!rentalDoctor.name && lastInv.client_name) rentalDoctor.name = lastInv.client_name;
+      }
+    } catch {
+      // Ignorar fallback de factura previa
+    }
+  }
+
   return (
     <NewInvoiceForm
       patients={patients ?? []}
@@ -55,11 +109,11 @@ export default async function NewInvoicePage({
       bankAccounts={bankAccounts ?? []}
       cashDiscountPercent={cashDiscountPercent}
       appointmentId={searchParams.appointment_id ?? null}
-      initialClientName={searchParams.client_name}
-      initialClientDocument={searchParams.client_document}
-      initialClientEmail={searchParams.client_email}
-      initialClientPhone={searchParams.client_phone}
-      initialClientAddress={searchParams.client_address}
+      initialClientName={rentalDoctor.name || searchParams.client_name}
+      initialClientDocument={rentalDoctor.document || searchParams.client_document}
+      initialClientEmail={rentalDoctor.email || searchParams.client_email}
+      initialClientPhone={rentalDoctor.phone || searchParams.client_phone}
+      initialClientAddress={rentalDoctor.address || searchParams.client_address}
       initialModuleEnrollmentIds={searchParams.module_enrollment_ids}
       initialCourseEnrollmentId={searchParams.course_enrollment_id}
       initialFullCoursePayment={searchParams.full_course_payment === "true"}

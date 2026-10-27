@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cleanDocumentNumber } from "@/lib/validators";
 
 /**
  * Busca datos completos de un cliente por cédula o RUC.
@@ -10,13 +11,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const raw = searchParams.get("document")?.trim();
-  if (!raw) return NextResponse.json({ found: false });
+  const raw = searchParams.get("document");
+  const clean = cleanDocumentNumber(raw);
+  if (!clean) return NextResponse.json({ found: false });
 
   const supabase = createAdminClient();
 
   // Variantes a buscar: exacto + cédula→RUC
-  const variants = /^\d{10}$/.test(raw) ? [raw, `${raw}001`] : [raw];
+  const variants = /^\d{10}$/.test(clean) ? [clean, `${clean}001`] : [clean];
 
   // ── 1. Buscar paciente en cualquier variante ───────────────────────────────
   let patientId: string | null = null;

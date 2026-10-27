@@ -487,6 +487,19 @@ export default function NewInvoiceForm({
             </div>
           )}
 
+          {/* Indicador de alquiler coworking seleccionado */}
+          {rentalId && (
+            <div className="flex items-center justify-between mb-4 px-3.5 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex-wrap gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="text-indigo-600 font-bold">🏢 Alquiler & Coworking:</span>
+                <span>Facturando al profesional: <strong>{clientName || "Doctor Arrendatario"}</strong></span>
+              </span>
+              <span className="text-[11px] font-mono font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                Reserva vinculada
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* ── Documento con check de pasaporte ── */}
             <div className="space-y-1 md:col-span-2">

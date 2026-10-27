@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Award, AlertCircle, Loader2, FileText, Stethoscope, GraduationCap, Landmark, CreditCard } from "lucide-react";
+import { Plus, Award, AlertCircle, Loader2, FileText, Stethoscope, GraduationCap, Landmark, CreditCard, ChevronDown, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import StandardModal from "@/components/StandardModal";
+import { cleanDocumentNumber } from "@/lib/validators";
 
 interface Props {
   action: (formData: FormData) => Promise<void>;
@@ -15,6 +16,9 @@ export default function NuevoProfesorModal({ action }: Props) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isDoctor, setIsDoctor] = useState(true);
   const [isTeacher, setIsTeacher] = useState(true);
+  const [docNumber, setDocNumber] = useState("");
+  const [bankId, setBankId] = useState("");
+  const [bankOpen, setBankOpen] = useState(false);
   const router = useRouter();
 
   function handleClose() {
@@ -51,6 +55,9 @@ export default function NuevoProfesorModal({ action }: Props) {
           setErrorMsg(null);
           setIsDoctor(true);
           setIsTeacher(true);
+          setDocNumber("");
+          setBankId("");
+          setBankOpen(false);
           setIsOpen(true);
         }}
         className="inline-flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
@@ -134,6 +141,7 @@ export default function NuevoProfesorModal({ action }: Props) {
             </div>
           </div>
 
+          {/* ── 1. Datos Personales y Profesionales ── */}
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">Nombre completo *</label>
             <input
@@ -141,39 +149,44 @@ export default function NuevoProfesorModal({ action }: Props) {
               required
               disabled={loading}
               placeholder="Ej: Dr. Alejandro Peralta"
-              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+              className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500 font-medium"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-ink-700 mb-1">Cédula / Documento de Identidad</label>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Cédula o RUC *</label>
               <input
                 name="documentNumber"
+                required
+                maxLength={13}
                 disabled={loading}
+                value={docNumber}
+                onChange={(e) => setDocNumber(e.target.value.replace(/\s+/g, ""))}
                 placeholder="Ej: 1712345678"
                 className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad</label>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Especialidad *</label>
               <input
                 name="specialty"
+                required
                 disabled={loading}
                 placeholder="Ej: Implantología, Ortodoncia"
-                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500 font-medium"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-ink-700 mb-1">Teléfono</label>
+              <label className="block text-xs font-semibold text-ink-700 mb-1">Teléfono / Celular</label>
               <input
                 name="phone"
                 disabled={loading}
                 placeholder="Ej: 0998765432"
-                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
               />
             </div>
             <div>
@@ -188,109 +201,130 @@ export default function NuevoProfesorModal({ action }: Props) {
             </div>
           </div>
 
-          {/* Sección Datos Bancarios */}
-          <div className="p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-              <Landmark size={15} className="text-emerald-700" />
-              <span>Datos Bancarios (Para Transferencias / Honorarios)</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Banco o Entidad Financiera
-                </label>
-                <input
-                  name="bankName"
-                  list="bancos-especialista-modal-list"
-                  disabled={loading}
-                  placeholder="Ej: Banco Pichincha"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
-                />
-                <datalist id="bancos-especialista-modal-list">
-                  <option value="Banco Pichincha" />
-                  <option value="Banco Guayaquil" />
-                  <option value="Produbanco" />
-                  <option value="Banco del Pacífico" />
-                  <option value="Banco Internacional" />
-                  <option value="Banco Bolivariano" />
-                  <option value="Banco Solidario" />
-                  <option value="Banco General Rumiñahui" />
-                  <option value="Banco del Austro" />
-                  <option value="Cooperativa JEP" />
-                  <option value="Cooperativa Policía Nacional" />
-                  <option value="Cooperativa Alianza del Valle" />
-                  <option value="Mutualista Pichincha" />
-                  <option value="Cooperativa 29 de Octubre" />
-                </datalist>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Tipo de Cuenta
-                </label>
-                <select
-                  name="bankAccountType"
-                  disabled={loading}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
-                >
-                  <option value="">- Seleccionar tipo -</option>
-                  <option value="Ahorros">Cuenta de Ahorros</option>
-                  <option value="Corriente">Cuenta Corriente</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                Número de Cuenta
-              </label>
-              <input
-                name="bankAccountNumber"
-                disabled={loading}
-                placeholder="Ej: 2200123456"
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Titular de la Cuenta
-                </label>
-                <input
-                  name="bankAccountOwner"
-                  disabled={loading}
-                  placeholder="Nombre del titular"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                  Cédula / RUC del Titular
-                </label>
-                <input
-                  name="bankAccountId"
-                  disabled={loading}
-                  placeholder="Cédula o RUC del titular"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-ink-700 mb-1 flex items-center gap-1">
-              <FileText size={13} className="text-lilac-600" /> Hoja de Vida / CV (PDF u Opcional)
+          {/* ── 2. Hoja de Vida / CV (Inmediatamente después de datos personales) ── */}
+          <div className="p-3 bg-lilac-50/30 border border-lilac-100 rounded-2xl space-y-1">
+            <label className="block text-xs font-bold text-ink-800 mb-1 flex items-center gap-1.5">
+              <FileText size={14} className="text-lilac-600" />
+              <span>Hoja de Vida / CV (PDF o Documento)</span>
             </label>
             <input
               name="cvFile"
               type="file"
               accept=".pdf,.doc,.docx,application/pdf"
               disabled={loading}
-              className="w-full text-xs text-ink-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none"
+              className="w-full text-xs text-ink-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lilac-50 file:text-lilac-700 hover:file:bg-lilac-100 bg-white border border-lilac-200 rounded-xl p-1 focus:outline-none cursor-pointer"
             />
+            <p className="text-[10px] text-ink-400">Adjunta el currículum vitae en formato PDF o Word</p>
+          </div>
+
+          {/* ── 3. Datos Bancarios (Al final y Colapsable) ── */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setBankOpen(!bankOpen)}
+              className="w-full px-3.5 py-2.5 bg-slate-50/90 hover:bg-slate-100/80 transition flex items-center justify-between text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                <Landmark size={15} className="text-emerald-700 shrink-0" />
+                <span>Datos Bancarios (Para Transferencias / Honorarios)</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-500 text-xs font-semibold">
+                <span className="text-[10px] font-mono text-slate-400">
+                  {bankOpen ? "Ocultar" : "Opcional"}
+                </span>
+                {bankOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </div>
+            </button>
+
+            {bankOpen && (
+              <div className="p-3.5 bg-slate-50/40 border-t border-slate-200 space-y-3 animate-in fade-in duration-150">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Banco o Entidad Financiera
+                    </label>
+                    <input
+                      name="bankName"
+                      list="bancos-especialista-modal-list"
+                      disabled={loading}
+                      placeholder="Ej: Banco Pichincha"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                    <datalist id="bancos-especialista-modal-list">
+                      <option value="Banco Pichincha" />
+                      <option value="Banco Guayaquil" />
+                      <option value="Produbanco" />
+                      <option value="Banco del Pacífico" />
+                      <option value="Banco Internacional" />
+                      <option value="Banco Bolivariano" />
+                      <option value="Banco Solidario" />
+                      <option value="Banco General Rumiñahui" />
+                      <option value="Banco del Austro" />
+                      <option value="Cooperativa JEP" />
+                      <option value="Cooperativa Policía Nacional" />
+                      <option value="Cooperativa Alianza del Valle" />
+                      <option value="Mutualista Pichincha" />
+                      <option value="Cooperativa 29 de Octubre" />
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Tipo de Cuenta
+                    </label>
+                    <select
+                      name="bankAccountType"
+                      disabled={loading}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    >
+                      <option value="">- Seleccionar tipo -</option>
+                      <option value="Ahorros">Cuenta de Ahorros</option>
+                      <option value="Corriente">Cuenta Corriente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Número de Cuenta
+                  </label>
+                  <input
+                    name="bankAccountNumber"
+                    disabled={loading}
+                    placeholder="Ej: 2200123456"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Titular de la Cuenta
+                    </label>
+                    <input
+                      name="bankAccountOwner"
+                      disabled={loading}
+                      placeholder="Nombre del titular"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Cédula / RUC del Titular
+                    </label>
+                    <input
+                      name="bankAccountId"
+                      disabled={loading}
+                      value={bankId}
+                      onChange={(e) => setBankId(e.target.value.replace(/\s+/g, ""))}
+                      placeholder="Cédula o RUC del titular"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">

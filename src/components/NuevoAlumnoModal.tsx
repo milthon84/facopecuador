@@ -92,7 +92,9 @@ export default function NuevoAlumnoModal({ activeCourses, action }: Props) {
               <input
                 name="documentNumber"
                 required
+                maxLength={13}
                 disabled={loading}
+                onChange={(e) => (e.target.value = e.target.value.replace(/\s+/g, ""))}
                 placeholder="Ej: 1712345678"
                 className="w-full bg-lilac-50/50 border border-lilac-100 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-lilac-500"
               />

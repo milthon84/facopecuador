@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { validateDocumento, isPassportDocument } from "@/lib/validators";
+import { validateDocumento, isPassportDocument, cleanDocumentNumber } from "@/lib/validators";
 import {
   Pencil,
   Save,
@@ -91,7 +91,7 @@ export default function EditPatientModal({ patient }: Props) {
           full_name: fullName,
           phone,
           email,
-          document_number: docNumber,
+          document_number: cleanDocumentNumber(docNumber) || null,
         }),
       });
 
@@ -179,8 +179,8 @@ export default function EditPatientModal({ patient }: Props) {
               value={docNumber}
               onChange={(e) => {
                 const val = isPassport
-                  ? e.target.value.toUpperCase()
-                  : e.target.value.replace(/[^0-9]/g, "");
+                  ? e.target.value.replace(/\s+/g, "").toUpperCase()
+                  : e.target.value.replace(/\D/g, "");
                 setDocNumber(val);
               }}
               disabled={loading}

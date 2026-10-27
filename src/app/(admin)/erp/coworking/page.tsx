@@ -25,6 +25,7 @@ import {
   COWORKING_RESOURCES,
   COWORKING_STATUS_CONFIG,
   CoworkingResourceType,
+  hasCoworkingDocuments,
 } from "@/lib/coworking-types";
 import QuickCoworkingActions from "./QuickCoworkingActions";
 import CoworkingDatePicker from "./CoworkingDatePicker";
@@ -255,37 +256,37 @@ export default async function CoworkingAgendaPage({
         </div>
       </div>
 
-      {/* ── KPIs Rápidos Operativos (Horas y Reservas) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white border border-lilac-100 rounded-2xl p-3 shadow-2xs">
-          <span className="text-[10px] font-bold text-ink-400 uppercase tracking-wider block">
+      {/* ── KPIs Rápidos Operativos (Horas y Reservas) - Optimizados y compactos en móvil ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+        <div className="bg-white border border-lilac-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
+          <span className="text-[9px] sm:text-[10px] font-bold text-ink-400 uppercase tracking-wider block truncate">
             {activeView === "day" ? "Reservas del Día" : "Reservas del Mes"}
           </span>
-          <span className="text-2xl font-black text-ink-950 font-mono mt-0.5 block">
+          <span className="text-lg sm:text-2xl font-black text-ink-950 font-mono mt-0.5 block">
             {totalCount}
           </span>
         </div>
-        <div className="bg-white border border-amber-100 rounded-2xl p-3 shadow-2xs">
-          <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">
-            <PlayCircle size={11} /> En Atención Ahora
+        <div className="bg-white border border-amber-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
+          <span className="text-[9px] sm:text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1 truncate">
+            <PlayCircle size={10} className="shrink-0" /> En Atención Ahora
           </span>
-          <span className="text-2xl font-black text-amber-900 font-mono mt-0.5 block">
+          <span className="text-lg sm:text-2xl font-black text-amber-900 font-mono mt-0.5 block">
             {enCursoCount}
           </span>
         </div>
-        <div className="bg-white border border-indigo-100 rounded-2xl p-3 shadow-2xs">
-          <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
-            <Receipt size={11} /> Pendiente Facturar
+        <div className="bg-white border border-indigo-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
+          <span className="text-[9px] sm:text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1 truncate">
+            <Receipt size={10} className="shrink-0" /> Pendiente Facturar
           </span>
-          <span className="text-2xl font-black text-indigo-900 font-mono mt-0.5 block">
+          <span className="text-lg sm:text-2xl font-black text-indigo-900 font-mono mt-0.5 block">
             {pendientesFacturarCount}
           </span>
         </div>
-        <div className="bg-white border border-teal-100 rounded-2xl p-3 shadow-2xs">
-          <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1">
-            <Clock size={11} /> Horas de Uso {activeView === "day" ? "Hoy" : "Mes"}
+        <div className="bg-white border border-teal-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
+          <span className="text-[9px] sm:text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1 truncate">
+            <Clock size={10} className="shrink-0" /> Horas {activeView === "day" ? "Hoy" : "Mes"}
           </span>
-          <span className="text-2xl font-black text-teal-800 font-mono mt-0.5 block">
+          <span className="text-lg sm:text-2xl font-black text-teal-800 font-mono mt-0.5 block">
             {totalHoras} hrs
           </span>
         </div>
@@ -478,12 +479,15 @@ export default async function CoworkingAgendaPage({
                     </div>
                   </div>
 
-                  {/* Acciones Rápidas (Iniciar/Finalizar) */}
+                  {/* Acciones Rápidas (Iniciar/Finalizar/Cancelar) */}
                   <div className="shrink-0 flex items-center gap-2">
                     <QuickCoworkingActions
                       rentalId={r.id}
                       currentStatus={r.status}
                       canEdit={canEdit}
+                      resourceType={r.resource_type}
+                      hasContracts={hasCoworkingDocuments(r.contract_url)}
+                      hasWaivers={hasCoworkingDocuments(r.waiver_url)}
                     />
                   </div>
 

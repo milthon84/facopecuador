@@ -11,6 +11,7 @@ import TeacherDetailClient from "./TeacherDetailClient";
 import { optimizeImageForWeb } from "@/lib/image-optimizer";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import { warmLocalStorageCache } from "@/lib/storage-cache-server";
+import { cleanDocumentNumber } from "@/lib/validators";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,8 @@ async function addTeacher(formData: FormData) {
   await assertWritePermission("/erp/cursos/profesores");
   
   const fullName = (formData.get("fullName") as string)?.trim();
-  const documentNumber = (formData.get("documentNumber") as string)?.trim();
+  const rawDocument = (formData.get("documentNumber") as string)?.trim();
+  const documentNumber = cleanDocumentNumber(rawDocument);
   const specialty = (formData.get("specialty") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -78,20 +80,29 @@ async function addTeacher(formData: FormData) {
   const bankAccountType = (formData.get("bankAccountType") as string)?.trim();
   const bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim();
   const bankAccountOwner = (formData.get("bankAccountOwner") as string)?.trim();
-  const bankAccountId = (formData.get("bankAccountId") as string)?.trim();
+  const rawBankAccountId = (formData.get("bankAccountId") as string)?.trim();
+  const bankAccountId = cleanDocumentNumber(rawBankAccountId);
 
   const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
   const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
 
-  if (!fullName) return;
+  if (!fullName) {
+    throw new Error("El nombre completo del especialista es obligatorio.");
+  }
+  if (!documentNumber) {
+    throw new Error("La cédula o RUC del especialista es obligatoria.");
+  }
+  if (!specialty) {
+    throw new Error("La especialidad del especialista es obligatoria.");
+  }
 
   const photoUrl = await uploadTeacherFile(photoFile, "teacher_photo");
   const cvUrl = await uploadTeacherFile(cvFile, "teacher_cv");
 
   const insertPayload: any = {
     full_name: fullName,
-    document_number: documentNumber || null,
-    specialty: specialty || null,
+    document_number: documentNumber,
+    specialty: specialty,
     phone: phone || null,
     email: email || null,
     is_doctor: isDoctor,
@@ -125,7 +136,8 @@ async function updateTeacher(formData: FormData) {
 
   const id = formData.get("id") as string;
   const fullName = (formData.get("fullName") as string)?.trim();
-  const documentNumber = (formData.get("documentNumber") as string)?.trim();
+  const rawDocument = (formData.get("documentNumber") as string)?.trim();
+  const documentNumber = cleanDocumentNumber(rawDocument);
   const specialty = (formData.get("specialty") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -139,20 +151,30 @@ async function updateTeacher(formData: FormData) {
   const bankAccountType = (formData.get("bankAccountType") as string)?.trim();
   const bankAccountNumber = (formData.get("bankAccountNumber") as string)?.trim();
   const bankAccountOwner = (formData.get("bankAccountOwner") as string)?.trim();
-  const bankAccountId = (formData.get("bankAccountId") as string)?.trim();
+  const rawBankAccountId = (formData.get("bankAccountId") as string)?.trim();
+  const bankAccountId = cleanDocumentNumber(rawBankAccountId);
 
   const isDoctor = formData.get("is_doctor") === "on" || formData.get("is_doctor") === "true";
   const isTeacher = formData.get("is_teacher") === "on" || formData.get("is_teacher") === "true";
 
-  if (!id || !fullName) return;
+  if (!id) throw new Error("ID de especialista no válido.");
+  if (!fullName) {
+    throw new Error("El nombre completo del especialista es obligatorio.");
+  }
+  if (!documentNumber) {
+    throw new Error("La cédula o RUC del especialista es obligatoria.");
+  }
+  if (!specialty) {
+    throw new Error("La especialidad del especialista es obligatoria.");
+  }
 
   const newPhotoUrl = await uploadTeacherFile(photoFile, "teacher_photo");
   const newCvUrl = await uploadTeacherFile(cvFile, "teacher_cv");
 
   const updatePayload: any = {
     full_name: fullName,
-    document_number: documentNumber || null,
-    specialty: specialty || null,
+    document_number: documentNumber,
+    specialty: specialty,
     phone: phone || null,
     email: email || null,
     is_doctor: isDoctor,
@@ -168,7 +190,10 @@ async function updateTeacher(formData: FormData) {
   };
 
   const supabase = createAdminClient();
-  await supabase.from("profesores").update(updatePayload).eq("id", id);
+  const { error } = await supabase.from("profesores").update(updatePayload).eq("id", id);
+  if (error) {
+    throw new Error(parseDbError(error.message));
+  }
 
   revalidatePath(`/erp/cursos/profesores?id=${id}`);
   revalidatePath("/erp/cursos/profesores");

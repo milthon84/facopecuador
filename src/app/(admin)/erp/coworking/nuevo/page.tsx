@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import { hasPermission } from "@/lib/roles";
 import { assertWritePermission } from "@/lib/auth-action";
+import { cleanDocumentNumber } from "@/lib/validators";
 import NuevaReservaClientForm from "./NuevaReservaClientForm";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,8 @@ async function createRental(formData: FormData) {
   const deposit_notes = (formData.get("deposit_notes") as string)?.trim() || null;
 
   const doctor_name = (formData.get("doctor_name") as string)?.trim();
-  const doctor_document = (formData.get("doctor_document") as string)?.trim() || null;
+  const rawDocument = (formData.get("doctor_document") as string)?.trim();
+  const doctor_document = cleanDocumentNumber(rawDocument) || null;
   const doctor_phone = (formData.get("doctor_phone") as string)?.trim() || null;
   const doctor_email = (formData.get("doctor_email") as string)?.trim() || null;
   const doctor_specialty = (formData.get("doctor_specialty") as string)?.trim() || null;
@@ -49,6 +51,15 @@ async function createRental(formData: FormData) {
 
   if (!doctor_name) {
     return { error: "El nombre del doctor es obligatorio." };
+  }
+  if (!doctor_document) {
+    return { error: "La cédula o RUC del solicitante de alquiler es obligatoria." };
+  }
+  if (!doctor_phone) {
+    return { error: "El teléfono o celular del solicitante es obligatorio." };
+  }
+  if (!doctor_email) {
+    return { error: "El correo electrónico del solicitante es obligatorio." };
   }
 
   const { data, error } = await supabase

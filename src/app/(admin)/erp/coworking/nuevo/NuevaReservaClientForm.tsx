@@ -68,6 +68,7 @@ export default function NuevaReservaClientForm({
   const [doctorName, setDoctorName] = useState("");
   const [doctorPhone, setDoctorPhone] = useState("");
   const [doctorDocument, setDoctorDocument] = useState("");
+  const [doctorEmail, setDoctorEmail] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
   // Anticipo
@@ -105,6 +106,7 @@ export default function NuevaReservaClientForm({
       setDoctorName(spec.full_name);
       if (spec.phone) setDoctorPhone(spec.phone);
       if (spec.document_number) setDoctorDocument(spec.document_number);
+      if (spec.email) setDoctorEmail(spec.email);
     }
   }
 
@@ -114,6 +116,22 @@ export default function NuevaReservaClientForm({
 
     if (!doctorName.trim()) {
       setErrorMsg("El nombre del doctor es obligatorio.");
+      return;
+    }
+
+    const cleanDoc = doctorDocument.replace(/\s+/g, "");
+    if (!cleanDoc) {
+      setErrorMsg("La cédula o RUC del solicitante de alquiler es obligatoria.");
+      return;
+    }
+
+    if (!doctorPhone.trim()) {
+      setErrorMsg("El número de teléfono o celular del solicitante es obligatorio.");
+      return;
+    }
+
+    if (!doctorEmail.trim()) {
+      setErrorMsg("El correo electrónico del solicitante es obligatorio.");
       return;
     }
 
@@ -136,8 +154,9 @@ export default function NuevaReservaClientForm({
       formData.set("total_price", calculatedTotal.toString());
 
       formData.set("doctor_name", doctorName.trim());
-      formData.set("doctor_document", doctorDocument.trim());
+      formData.set("doctor_document", cleanDoc);
       formData.set("doctor_phone", doctorPhone.trim());
+      formData.set("doctor_email", doctorEmail.trim());
       formData.set("doctor_id", selectedDoctorId || "");
 
       // Anticipo
@@ -274,13 +293,14 @@ export default function NuevaReservaClientForm({
           </select>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <div className="sm:col-span-2">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+          <div className="sm:col-span-7">
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Nombre Completo del Doctor *</label>
             <input
               type="text"
               required
               className="w-full text-xs px-3.5 py-2.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-900 font-semibold"
-              placeholder="Nombre completo del Doctor *"
+              placeholder="Ej: Dr. Roberto Mendoza"
               value={doctorName}
               onChange={(e) => {
                 setDoctorName(e.target.value);
@@ -288,13 +308,38 @@ export default function NuevaReservaClientForm({
               }}
             />
           </div>
-          <div>
+          <div className="sm:col-span-5">
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Teléfono / Celular *</label>
             <input
               type="tel"
-              className="w-full text-xs px-3.5 py-2.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800"
-              placeholder="Teléfono / Celular"
+              required
+              className="w-full text-xs px-3.5 py-2.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
+              placeholder="Ej: 0991234567"
               value={doctorPhone}
               onChange={(e) => setDoctorPhone(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-6">
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Cédula o RUC (sin espacios) *</label>
+            <input
+              type="text"
+              required
+              maxLength={13}
+              className="w-full text-xs px-3.5 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
+              placeholder="Ej: 1712345678 o 1712345678001"
+              value={doctorDocument}
+              onChange={(e) => setDoctorDocument(e.target.value.replace(/\s+/g, ""))}
+            />
+          </div>
+          <div className="sm:col-span-6">
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Correo Electrónico (para Factura SRI) *</label>
+            <input
+              type="email"
+              required
+              className="w-full text-xs px-3.5 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800"
+              placeholder="Ej: doctor@ejemplo.com"
+              value={doctorEmail}
+              onChange={(e) => setDoctorEmail(e.target.value.trim())}
             />
           </div>
         </div>

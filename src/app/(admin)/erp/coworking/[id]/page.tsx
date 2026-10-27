@@ -4,166 +4,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import { hasPermission } from "@/lib/roles";
-import { assertWritePermission } from "@/lib/auth-action";
 import CoworkingDetailClient from "./CoworkingDetailClient";
-import { CoworkingRental, CoworkingRentalStatus } from "@/lib/coworking-types";
+import { CoworkingRental } from "@/lib/coworking-types";
 
 export const dynamic = "force-dynamic";
-
-// Server Action: Actualizar datos del doctor y paciente
-async function updateDoctorInfo(formData: FormData) {
-  "use server";
-  await assertWritePermission("/erp/coworking");
-  const id = formData.get("id") as string;
-  const doctor_name = (formData.get("doctor_name") as string)?.trim();
-  const doctor_document = (formData.get("doctor_document") as string)?.trim() || null;
-  const doctor_phone = (formData.get("doctor_phone") as string)?.trim() || null;
-  const doctor_email = (formData.get("doctor_email") as string)?.trim() || null;
-  const doctor_specialty = (formData.get("doctor_specialty") as string)?.trim() || null;
-  const doctor_registration_number = (formData.get("doctor_registration_number") as string)?.trim() || null;
-  const patient_name = (formData.get("patient_name") as string)?.trim() || null;
-  const patient_document = (formData.get("patient_document") as string)?.trim() || null;
-  const notes = (formData.get("notes") as string)?.trim() || null;
-
-  if (!doctor_name) {
-    return { error: "El nombre del doctor es obligatorio." };
-  }
-
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("coworking_rentals")
-    .update({
-      doctor_name,
-      doctor_document,
-      doctor_phone,
-      doctor_email,
-      doctor_specialty,
-      doctor_registration_number,
-      patient_name,
-      patient_document,
-      notes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) {
-    return { error: error.message };
-  }
-  return { success: true };
-}
-
-// Server Action: Subir Contrato o Descargo de Responsabilidad
-async function uploadDocument(formData: FormData) {
-  "use server";
-  await assertWritePermission("/erp/coworking");
-  const id = formData.get("id") as string;
-  const type = formData.get("type") as "contract" | "waiver";
-  const file = formData.get("file") as File;
-
-  if (!file || file.size === 0) {
-    return { error: "No se seleccionó ningún archivo." };
-  }
-
-  if (file.size > 20 * 1024 * 1024) {
-    return { error: "El archivo es demasiado grande (máximo 20MB)." };
-  }
-
-  const supabase = createAdminClient();
-  try {
-    const rawBytes = Buffer.from(await file.arrayBuffer());
-    let uploadBuffer: Buffer = rawBytes;
-    let contentType = file.type || "application/octet-stream";
-    let fileExt = file.name.split(".").pop()?.toLowerCase() || "pdf";
-
-    if (contentType.startsWith("image/")) {
-      try {
-        const { optimizeImageForWeb } = await import("@/lib/image-optimizer");
-        const optimized = await optimizeImageForWeb(rawBytes, {
-          maxWidth: 1600,
-          maxHeight: 1600,
-          quality: 85,
-          format: "webp",
-        });
-        uploadBuffer = optimized.buffer;
-        contentType = optimized.contentType;
-        fileExt = optimized.extension;
-      } catch (optErr) {
-        console.warn("No se pudo optimizar imagen del documento:", optErr);
-      }
-    }
-
-    const timestamp = Date.now();
-    const folder = type === "contract" ? "contratos" : "descargos";
-    const fileName = `coworking/${folder}/${id}_${timestamp}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("patient-documents")
-      .upload(fileName, uploadBuffer, {
-        contentType,
-        cacheControl: "31536000",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return { error: `Error de subida: ${uploadError.message}` };
-    }
-
-    try {
-      const { warmLocalStorageCache } = await import("@/lib/storage-cache-server");
-      await warmLocalStorageCache("patient-documents", fileName, uploadBuffer);
-    } catch {
-      // Cache opcional
-    }
-
-    const { data: urlData } = supabase.storage.from("patient-documents").getPublicUrl(fileName);
-    const publicUrl = urlData?.publicUrl || null;
-
-    const updatePayload: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-    };
-    if (type === "contract") {
-      updatePayload.contract_url = publicUrl;
-      updatePayload.contract_uploaded_at = new Date().toISOString();
-    } else {
-      updatePayload.waiver_url = publicUrl;
-      updatePayload.waiver_uploaded_at = new Date().toISOString();
-    }
-
-    const { error: dbError } = await supabase
-      .from("coworking_rentals")
-      .update(updatePayload)
-      .eq("id", id);
-
-    if (dbError) {
-      return { error: dbError.message };
-    }
-
-    return { success: true, url: publicUrl || undefined };
-  } catch (err: any) {
-    return { error: err.message || "Error procesando archivo." };
-  }
-}
-
-// Server Action: Eliminar documento
-async function removeDocument(type: "contract" | "waiver") {
-  "use server";
-  await assertWritePermission("/erp/coworking");
-  return { success: true };
-}
-
-// Server Action: Cambiar estado
-async function changeStatus(id: string, newStatus: CoworkingRentalStatus) {
-  "use server";
-  await assertWritePermission("/erp/coworking");
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("coworking_rentals")
-    .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return { error: error.message };
-  return { success: true };
-}
 
 export default async function CoworkingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const authData = await getCachedUserAndPermissions();
@@ -187,16 +31,39 @@ export default async function CoworkingDetailPage({ params }: { params: Promise<
     role === "recepcionista" ||
     hasPermission(role, "/erp/coworking/modificar", allowedPaths) ||
     hasPermission(role, "/erp/modificar", allowedPaths);
+
   const { id } = await params;
+  if (!id) notFound();
+
   const supabase = createAdminClient();
 
   const { data: rawRental, error } = await supabase
     .from("coworking_rentals")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (error || !rawRental) notFound();
+  if (error || !rawRental) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-8 bg-white rounded-2xl border border-lilac-200 text-center space-y-4 shadow-sm">
+        <div className="w-12 h-12 rounded-full bg-lilac-100 text-lilac-600 flex items-center justify-center mx-auto">
+          <ArrowLeft size={20} />
+        </div>
+        <h2 className="text-lg font-bold text-ink-900">Reserva de Coworking no encontrada</h2>
+        <p className="text-sm text-ink-600">
+          La reserva solicitada no existe o fue eliminada previamente del sistema.
+        </p>
+        <div>
+          <Link
+            href="/erp/coworking"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-lilac-600 text-white font-bold text-sm hover:bg-lilac-700 transition"
+          >
+            ← Volver a la Agenda de Coworking
+          </Link>
+        </div>
+      </div>
+    );
+  }
   const rental = rawRental as CoworkingRental;
 
   return (
@@ -218,19 +85,6 @@ export default async function CoworkingDetailPage({ params }: { params: Promise<
       <CoworkingDetailClient
         rental={rental}
         canEdit={canEdit}
-        updateDoctorInfo={updateDoctorInfo}
-        uploadDocument={uploadDocument}
-        removeDocument={async (type) => {
-          "use server";
-          await assertWritePermission("/erp/coworking");
-          const s = createAdminClient();
-          const patch = type === "contract"
-            ? { contract_url: null, contract_uploaded_at: null }
-            : { waiver_url: null, waiver_uploaded_at: null };
-          await s.from("coworking_rentals").update(patch).eq("id", id);
-          return { success: true };
-        }}
-        changeStatus={async (newStatus) => changeStatus(rental.id, newStatus)}
       />
     </div>
   );

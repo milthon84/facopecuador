@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Calendar, Clock, Loader2, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Stethoscope, UserCheck } from "lucide-react";
-import { validateDocumento, validateEmail, validateTelefono, isPassportDocument } from "@/lib/validators";
+import { validateDocumento, validateEmail, validateTelefono, isPassportDocument, cleanDocumentNumber } from "@/lib/validators";
 import type { TimeSlot } from "@/lib/types";
 import { formatDateLocal, formatTimeLocal } from "@/lib/availability";
 
@@ -182,7 +182,7 @@ export default function NewAppointmentForm({ initialDate, doctors = [] }: NewApp
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patient: {
-            document_number: documentNumber.trim(),
+            document_number: cleanDocumentNumber(documentNumber),
             full_name: fullName.trim(),
             phone: phone.trim(),
             email: email.trim().toLowerCase(),
@@ -420,7 +420,9 @@ export default function NewAppointmentForm({ initialDate, doctors = [] }: NewApp
                   placeholder={isPassport ? "Ej: PA987654" : "Ej: 1712345678"}
                   value={documentNumber}
                   onChange={(e) => {
-                    const val = isPassport ? e.target.value.toUpperCase() : e.target.value.replace(/[^0-9]/g, "");
+                    const val = isPassport
+                      ? e.target.value.replace(/\s+/g, "").toUpperCase()
+                      : e.target.value.replace(/\D/g, "");
                     setDocumentNumber(val);
                     if (lookupStatus !== "idle") setLookupStatus("idle");
                   }}

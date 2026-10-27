@@ -11,6 +11,14 @@ export type CoworkingRentalStatus =
   | "facturado"
   | "cancelado";
 
+export interface CoworkingDocumentItem {
+  id: string;
+  url: string;
+  name: string;
+  uploaded_at: string;
+  size?: number;
+}
+
 export interface CoworkingRental {
   id: string;
   resource_type: CoworkingResourceType;
@@ -154,4 +162,81 @@ export function calculateHoursBetween(start: string, end: string): number {
   const endMin = (eh || 0) * 60 + (em || 0);
   const diffMin = Math.max(endMin - startMin, 30);
   return Math.round((diffMin / 60) * 100) / 100;
+}
+
+/**
+ * Parsea documentos desde el campo de texto (soporta URL única heredada o array JSON de documentos).
+ */
+export function parseCoworkingDocuments(
+  rawUrl: string | null | undefined,
+  defaultNamePrefix = "Documento",
+  fallbackDate?: string | null
+): CoworkingDocumentItem[] {
+  if (!rawUrl || typeof rawUrl !== "string") return [];
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((item) => item && (typeof item === "string" || item.url))
+          .map((item, idx) => {
+            if (typeof item === "string") {
+              return {
+                id: String(idx + 1),
+                url: item,
+                name: `${defaultNamePrefix} ${idx + 1}`,
+                uploaded_at: fallbackDate || new Date().toISOString(),
+              };
+            }
+            return {
+              id: item.id || String(idx + 1),
+              url: item.url,
+              name: item.name || `${defaultNamePrefix} ${idx + 1}`,
+              uploaded_at: item.uploaded_at || fallbackDate || new Date().toISOString(),
+              size: item.size,
+            };
+          });
+      } else if (parsed && typeof parsed === "object" && parsed.url) {
+        return [
+          {
+            id: parsed.id || "1",
+            url: parsed.url,
+            name: parsed.name || defaultNamePrefix,
+            uploaded_at: parsed.uploaded_at || fallbackDate || new Date().toISOString(),
+            size: parsed.size,
+          },
+        ];
+      }
+    } catch {
+      // Fallback a URL regular si falla el parse
+    }
+  }
+
+  // URL regular (Supabase Storage o HTTP)
+  return [
+    {
+      id: "1",
+      url: trimmed,
+      name: defaultNamePrefix,
+      uploaded_at: fallbackDate || new Date().toISOString(),
+    },
+  ];
+}
+
+/**
+ * Serializa la lista de documentos para guardarla en el campo contract_url o waiver_url.
+ */
+export function serializeCoworkingDocuments(docs: CoworkingDocumentItem[]): string | null {
+  if (!docs || docs.length === 0) return null;
+  return JSON.stringify(docs);
+}
+
+/**
+ * Verifica si hay al menos un documento válido cargado.
+ */
+export function hasCoworkingDocuments(rawUrl: string | null | undefined): boolean {
+  return parseCoworkingDocuments(rawUrl).length > 0;
 }

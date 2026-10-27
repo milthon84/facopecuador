@@ -2,6 +2,7 @@ import { getSessionUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { logAudit, getIpFromRequest } from "@/lib/audit";
+import { hasCoworkingDocuments } from "@/lib/coworking-types";
 
 export async function PATCH(req: Request) {
   const user = await getSessionUser(req);
@@ -39,6 +40,30 @@ export async function PATCH(req: Request) {
 
     if (!prevRental) {
       return NextResponse.json({ error: "Reserva de coworking no encontrada" }, { status: 404 });
+    }
+
+    // Exigir contrato y descargo de responsabilidad para sillones y clínica completa al finalizar/completar
+    if (status === "finalizado") {
+      const isClinicalSpace =
+        prevRental.resource_type === "puesto_trabajo" || prevRental.resource_type === "clinica_completa";
+      if (isClinicalSpace) {
+        const hasContract = hasCoworkingDocuments(prevRental.contract_url);
+        const hasWaiver = hasCoworkingDocuments(prevRental.waiver_url);
+        if (!hasContract || !hasWaiver) {
+          const missing: string[] = [];
+          if (!hasContract) missing.push("Contrato de Arrendamiento");
+          if (!hasWaiver) missing.push("Descargo de Responsabilidad firmado");
+          return NextResponse.json(
+            {
+              error: `Para completar el alquiler de sillones dentales o clínica completa es obligatorio adjuntar: ${missing.join(" y ")}. Por favor carga los documentos requeridos antes de finalizar.`,
+              missingDocs: true,
+              hasContract,
+              hasWaiver,
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const updateData: Record<string, any> = {

@@ -60,7 +60,7 @@ export function validateRUC(ruc: string): boolean {
 }
 
 export function isPassportDocument(doc: string): boolean {
-  const clean = doc.trim();
+  const clean = cleanDocumentNumber(doc);
   if (!clean) return false;
   // Si contiene letras es pasaporte/documento extranjero
   if (/[a-zA-Z]/.test(clean)) return true;
@@ -69,8 +69,21 @@ export function isPassportDocument(doc: string): boolean {
   return false;
 }
 
+/**
+ * Normaliza y estandariza cualquier cédula o RUC eliminando espacios, guiones
+ * y caracteres inválidos para garantizar el mismo formato en toda la plataforma.
+ */
+export function cleanDocumentNumber(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (/[a-zA-Z]/.test(trimmed)) {
+    return trimmed.replace(/\s+/g, "").toUpperCase();
+  }
+  return trimmed.replace(/[\s\-]/g, "").replace(/\D/g, "");
+}
+
 export function validateDocumento(doc: string, isPassport?: boolean): string | null {
-  const clean = doc.trim();
+  const clean = cleanDocumentNumber(doc);
   if (!clean) return "Campo requerido";
 
   if (isPassport) {
@@ -83,7 +96,7 @@ export function validateDocumento(doc: string, isPassport?: boolean): string | n
     return null;
   }
 
-  const cleanDoc = clean.replace(/[\s\-]/g, "");
+  const cleanDoc = clean;
   if (cleanDoc.length === 10) {
     if (!/^\d{10}$/.test(cleanDoc)) return "La cédula debe tener 10 dígitos numéricos";
     if (!validateCedula(cleanDoc)) return "Cédula inválida — verifica el número";
