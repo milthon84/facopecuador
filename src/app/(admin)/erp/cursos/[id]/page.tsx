@@ -202,36 +202,46 @@ export default async function CursoDetallePage({
       </Link>
 
       {/* Info Banner Mejorado */}
-      <div className="bg-white border border-lilac-100 rounded-3xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-start sm:items-center gap-4.5">
+      <div className="bg-white border border-lilac-100 rounded-3xl p-4 sm:p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 flex-1 min-w-0">
           {course.image_url ? (
-            <img 
-              src={proxyStorageUrl(course.image_url)} 
-              alt={course.name} 
-              loading="lazy"
-              className="w-18 h-18 sm:w-20 sm:h-20 object-cover rounded-2xl border border-lilac-200 shadow-xs shrink-0" 
-            />
+            <a
+              href={proxyStorageUrl(course.image_url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Toca para ver el afiche completo en alta resolución"
+              className="shrink-0 group block"
+            >
+              <img 
+                src={proxyStorageUrl(course.image_url)} 
+                alt={course.name} 
+                loading="lazy"
+                className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-2xl border border-lilac-200 shadow-2xs group-hover:opacity-90 group-hover:scale-105 transition shrink-0" 
+              />
+            </a>
           ) : (
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <GraduationCap size={32} />
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-lilac-50 border border-lilac-200 text-lilac-700 flex items-center justify-center shrink-0 shadow-2xs">
+              <GraduationCap size={28} className="sm:w-8 sm:h-8" />
             </div>
           )}
-          <div className="space-y-2">
-            <h1 className="text-xl sm:text-2xl font-black text-ink-950 tracking-tight">{course.name}</h1>
+          <div className="space-y-1.5 sm:space-y-2 flex-1 min-w-0">
+            <h1 className="text-base sm:text-2xl font-black text-ink-950 tracking-tight leading-snug break-words">
+              {course.name}
+            </h1>
             
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-600">
+            <div className="flex flex-wrap items-center gap-x-3.5 sm:gap-x-4 gap-y-1 text-xs text-ink-600">
               <span className="flex items-center gap-1.5 font-medium">
-                <Calendar size={14} className="text-lilac-600 shrink-0" />
-                Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}
+                <Calendar size={13} className="text-lilac-600 shrink-0" />
+                <span>Del {formatDateES(course.start_date)} al {formatDateES(course.end_date)}</span>
               </span>
 
               <span className="flex items-center gap-1.5 font-medium">
-                <Users size={14} className="text-lilac-600 shrink-0" />
-                {students.length} {course.max_students ? `/ ${course.max_students}` : ""} matriculados
+                <Users size={13} className="text-lilac-600 shrink-0" />
+                <span>{students.length} {course.max_students ? `/ ${course.max_students}` : ""} matriculados</span>
               </span>
 
-              <div className="flex items-center gap-1 font-bold text-lilac-800 text-sm sm:text-base">
-                <DollarSign size={15} className="text-lilac-600 shrink-0" />
+              <div className="flex items-center gap-1 font-bold text-lilac-800 text-xs sm:text-base">
+                <DollarSign size={14} className="text-lilac-600 shrink-0" />
                 <span>{Number(course.total_cost).toLocaleString("es-EC", { minimumFractionDigits: 2 })}</span>
                 <span className="text-[10px] font-normal text-ink-400">USD</span>
               </div>
@@ -239,7 +249,7 @@ export default async function CursoDetallePage({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-lilac-100">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-lilac-100">
           <CourseStatusSelector
             courseId={id}
             currentStatus={course.status}
@@ -247,12 +257,12 @@ export default async function CursoDetallePage({
           />
 
           {canEdit && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Link
                 href="/erp/cursos?tab=agenda"
-                className="inline-flex items-center gap-1.5 bg-white border border-lilac-200 text-lilac-800 hover:bg-lilac-50 text-xs px-3 py-2 rounded-xl font-bold shadow-2xs transition"
+                className="inline-flex items-center gap-1.5 bg-white border border-lilac-200 text-lilac-800 hover:bg-lilac-50 text-xs px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold shadow-2xs transition"
               >
-                <Calendar size={14} className="text-lilac-600" />
+                <Calendar size={13} className="text-lilac-600" />
                 <span>Ver en Agenda</span>
               </Link>
               <EditCourseModal course={course} />

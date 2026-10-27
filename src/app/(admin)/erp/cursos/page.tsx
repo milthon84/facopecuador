@@ -77,24 +77,33 @@ export default async function CursosPage({
   const totalActiveOnly = cursos.filter(c => c.status === "active").length;
   const totalInProgress = cursos.filter(c => c.status === "in_progress").length;
 
-  // Asignar colores por curso para la agenda
+  // Asignar colores por curso para la agenda (excluyendo cursos cancelados)
+  const nonCancelledCourses = cursos.filter(
+    (c) => c.status !== "cancelled" && c.status !== "cancelado"
+  );
+  const activeCourseIdSet = new Set(nonCancelledCourses.map((c) => c.id));
+
   const courseColorMap = new Map<string, string>();
-  cursos.forEach((c, index) => {
+  nonCancelledCourses.forEach((c, index) => {
     courseColorMap.set(c.id, COURSE_COLOR_PALETTES[index % COURSE_COLOR_PALETTES.length]);
   });
 
-  const coursesForAgenda: CourseOption[] = cursos.map((c) => ({
+  const coursesForAgenda: CourseOption[] = nonCancelledCourses.map((c) => ({
     id: c.id,
     name: c.name,
     status: c.status,
     color: courseColorMap.get(c.id) || COURSE_COLOR_PALETTES[0],
   }));
 
-  // Consolidar clases para la agenda
+  // Consolidar clases para la agenda (solo de cursos vigentes / no cancelados)
   const agendaClasses: ScheduledClass[] = [];
 
   rawClasses.forEach((cls: any) => {
     const courseId = cls.curso_modulos?.course_id || cls.curso_modulos?.cursos?.id || "";
+    if (!activeCourseIdSet.has(courseId)) return;
+    const courseStatus = cls.curso_modulos?.cursos?.status;
+    if (courseStatus === "cancelled" || courseStatus === "cancelado") return;
+
     const courseName = cls.curso_modulos?.cursos?.name || "Curso";
     const moduleName = cls.curso_modulos ? `Módulo ${cls.curso_modulos.number}: ${cls.curso_modulos.name}` : "Módulo";
     const color = courseColorMap.get(courseId) || COURSE_COLOR_PALETTES[0];
@@ -116,9 +125,13 @@ export default async function CursosPage({
     });
   });
 
-  // Agregar fechas planificadas de módulos si no tienen sesiones individuales aún
+  // Agregar fechas planificadas de módulos si no tienen sesiones individuales aún (excluyendo cancelados)
   const existingDatesByModule = new Set(agendaClasses.map((c) => `${c.moduleId}_${c.date}`));
   rawModules.forEach((m: any) => {
+    if (!activeCourseIdSet.has(m.course_id)) return;
+    const courseStatus = m.cursos?.status;
+    if (courseStatus === "cancelled" || courseStatus === "cancelado") return;
+
     if (m.start_date && !existingDatesByModule.has(`${m.id}_${m.start_date}`)) {
       const color = courseColorMap.get(m.course_id) || COURSE_COLOR_PALETTES[0];
       agendaClasses.push({

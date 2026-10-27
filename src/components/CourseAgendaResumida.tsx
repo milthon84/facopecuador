@@ -51,11 +51,21 @@ export default function CourseAgendaResumida({ classes, courses }: Props) {
   const [onlyBusyFilter, setOnlyBusyFilter] = useState<boolean>(true);
   const [showHolidaysList, setShowHolidaysList] = useState<boolean>(false);
 
-  // Clases filtradas por curso
+  // Cursos válidos (excluir cancelados de la agenda)
+  const validCourses = useMemo(() => {
+    return courses.filter((c) => c.status !== "cancelled" && c.status !== "cancelado");
+  }, [courses]);
+
+  const validCourseIdSet = useMemo(() => {
+    return new Set(validCourses.map((c) => c.id));
+  }, [validCourses]);
+
+  // Clases filtradas por curso (excluyendo cancelados)
   const filteredClasses = useMemo(() => {
-    if (selectedCourseId === "all") return classes;
-    return classes.filter((c) => c.courseId === selectedCourseId);
-  }, [classes, selectedCourseId]);
+    const nonCancelledClasses = classes.filter((c) => validCourseIdSet.has(c.courseId));
+    if (selectedCourseId === "all") return nonCancelledClasses;
+    return nonCancelledClasses.filter((c) => c.courseId === selectedCourseId);
+  }, [classes, selectedCourseId, validCourseIdSet]);
 
   // Feriados del año y mes
   const yearHolidays = useMemo(() => getEcuadorHolidays(currentYear), [currentYear]);
@@ -376,8 +386,8 @@ export default function CourseAgendaResumida({ classes, courses }: Props) {
               onChange={(e) => setSelectedCourseId(e.target.value)}
               className="bg-transparent text-ink-800 font-bold outline-none cursor-pointer text-xs"
             >
-              <option value="all">Todos los cursos ({courses.length})</option>
-              {courses.map((c) => (
+              <option value="all">Todos los cursos ({validCourses.length})</option>
+              {validCourses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
