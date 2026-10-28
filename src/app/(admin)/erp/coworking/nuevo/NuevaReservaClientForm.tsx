@@ -51,8 +51,15 @@ export default function NuevaReservaClientForm({
 }: Props) {
   const router = useRouter();
 
+  const getInitialResourceId = (type: CoworkingResourceType) => {
+    if (type === "clinica_completa") return "Toda la Clínica";
+    if (type === "aula_pequena") return "Aula Pequeña";
+    if (type === "aula_grande") return "Auditorio";
+    return "Sillón";
+  };
+
   const [resource, setResource] = useState<CoworkingResourceType>(initialResource);
-  const [resourceId, setResourceId] = useState("Sillón 1");
+  const [resourceId, setResourceId] = useState<string>(() => getInitialResourceId(initialResource));
   const [rentalDate, setRentalDate] = useState(today);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
@@ -66,8 +73,8 @@ export default function NuevaReservaClientForm({
 
   // Doctor
   const [doctorName, setDoctorName] = useState("");
-  const [doctorPhone, setDoctorPhone] = useState("");
   const [doctorDocument, setDoctorDocument] = useState("");
+  const [doctorPhone, setDoctorPhone] = useState("");
   const [doctorEmail, setDoctorEmail] = useState("");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
 
@@ -90,10 +97,7 @@ export default function NuevaReservaClientForm({
     setResource(type);
     const rate = catalogRates?.[type] || COWORKING_RESOURCES[type].defaultRate;
     setHourlyRate(rate);
-    if (type === "clinica_completa") setResourceId("Toda la Clínica");
-    else if (type === "aula_pequena") setResourceId("Aula A");
-    else if (type === "aula_grande") setResourceId("Auditorio");
-    else setResourceId("Sillón 1");
+    setResourceId(getInitialResourceId(type));
   }
 
   function handleSelectSpecialist(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -104,8 +108,8 @@ export default function NuevaReservaClientForm({
     const spec = specialists.find((s) => s.id === sId);
     if (spec) {
       setDoctorName(spec.full_name);
-      if (spec.phone) setDoctorPhone(spec.phone);
       if (spec.document_number) setDoctorDocument(spec.document_number);
+      if (spec.phone) setDoctorPhone(spec.phone);
       if (spec.email) setDoctorEmail(spec.email);
     }
   }
@@ -122,16 +126,6 @@ export default function NuevaReservaClientForm({
     const cleanDoc = doctorDocument.replace(/\s+/g, "");
     if (!cleanDoc) {
       setErrorMsg("La cédula o RUC del solicitante de alquiler es obligatoria.");
-      return;
-    }
-
-    if (!doctorPhone.trim()) {
-      setErrorMsg("El número de teléfono o celular del solicitante es obligatorio.");
-      return;
-    }
-
-    if (!doctorEmail.trim()) {
-      setErrorMsg("El correo electrónico del solicitante es obligatorio.");
       return;
     }
 
@@ -189,10 +183,10 @@ export default function NuevaReservaClientForm({
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="bg-white border border-lilac-100 rounded-3xl p-5 sm:p-7 shadow-xs space-y-6"
+      className="bg-white border border-lilac-100 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 sm:space-y-5"
     >
       {errorMsg && (
-        <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-3 rounded-2xl font-medium flex items-center justify-between shadow-2xs">
+        <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-2.5 rounded-2xl font-medium flex items-center justify-between shadow-2xs">
           <span>⚠️ {errorMsg}</span>
           <button
             type="button"
@@ -205,11 +199,11 @@ export default function NuevaReservaClientForm({
       )}
 
       {/* ── 1. Espacio a Alquilar ── */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <label className="text-[11px] font-bold text-ink-700 uppercase tracking-wider block">
           Espacio a Reservar
         </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {(Object.keys(COWORKING_RESOURCES) as CoworkingResourceType[]).map((key) => {
             const item = COWORKING_RESOURCES[key];
             const isSelected = resource === key;
@@ -218,50 +212,33 @@ export default function NuevaReservaClientForm({
                 key={key}
                 type="button"
                 onClick={() => handleSelectResource(key)}
-                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                className={`p-2.5 rounded-2xl border text-left transition flex items-center gap-2.5 ${
                   isSelected
                     ? "border-lilac-600 bg-lilac-50/70 shadow-xs ring-1 ring-lilac-600"
                     : "border-lilac-100 bg-white hover:border-lilac-300 hover:bg-lilac-50/30"
                 }`}
               >
-                <div className="flex items-center justify-between w-full mb-1">
-                  <div
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center ${
-                      isSelected ? "bg-lilac-600 text-white" : "bg-lilac-100 text-lilac-700"
-                    }`}
-                  >
-                    {key === "puesto_trabajo" && <Stethoscope size={14} />}
-                    {key === "clinica_completa" && <Building2 size={14} />}
-                    {key === "aula_pequena" && <Presentation size={14} />}
-                    {key === "aula_grande" && <GraduationCap size={14} />}
-                  </div>
+                <div
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                    isSelected ? "bg-lilac-600 text-white" : "bg-lilac-100 text-lilac-700"
+                  }`}
+                >
+                  {key === "puesto_trabajo" && <Stethoscope size={14} />}
+                  {key === "clinica_completa" && <Building2 size={14} />}
+                  {key === "aula_pequena" && <Presentation size={14} />}
+                  {key === "aula_grande" && <GraduationCap size={14} />}
                 </div>
-                <span className="text-xs font-bold text-ink-900 leading-tight">
-                  {item.shortName}
-                </span>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-ink-900 block truncate">
+                    {key === "puesto_trabajo" ? "Sillón Dental" : item.shortName}
+                  </span>
+                  <span className="text-[10px] text-ink-500 block">
+                    ${(catalogRates?.[key] || item.defaultRate).toFixed(0)}/h
+                  </span>
+                </div>
               </button>
             );
           })}
-        </div>
-
-        {/* Detalle o número de puesto */}
-        <div className="pt-1">
-          <label className="text-[10px] font-semibold text-ink-500 block mb-1">
-            Ubicación / Identificador específico (opcional):
-          </label>
-          <input
-            type="text"
-            className="w-full text-xs px-3 py-2 bg-lilac-50/40 border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 text-ink-800"
-            placeholder={
-              resource === "puesto_trabajo"
-                ? "Ej: Sillón 1, Box Quirúrgico"
-                : resource === "clinica_completa"
-                ? "Ej: Toda la Clínica"
-                : "Ej: Aula A, Auditorio"
-            }
-            value={resourceId}
-            onChange={(e) => setResourceId(e.target.value)}
-          />
         </div>
       </div>
 
@@ -269,18 +246,18 @@ export default function NuevaReservaClientForm({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-[11px] font-bold text-ink-700 uppercase tracking-wider block">
-            Doctor / Arrendatario *
+            Doctor / Arrendatario
           </label>
           {specialists.length > 0 && (
             <span className="text-[10px] text-ink-400">
-              O elige de la lista de doctores registrados:
+              O autocompleta con un doctor registrado:
             </span>
           )}
         </div>
 
         {specialists.length > 0 && (
           <select
-            className="w-full text-xs px-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 text-ink-800 mb-2"
+            className="w-full text-xs px-3 py-1.5 bg-lilac-50/40 border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 text-ink-800"
             value={selectedDoctorId}
             onChange={handleSelectSpecialist}
           >
@@ -293,13 +270,16 @@ export default function NuevaReservaClientForm({
           </select>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-          <div className="sm:col-span-7">
-            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Nombre Completo del Doctor *</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* 1. Nombres completos */}
+          <div>
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">
+              Nombres Completos del Doctor *
+            </label>
             <input
               type="text"
               required
-              className="w-full text-xs px-3.5 py-2.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-900 font-semibold"
+              className="w-full text-xs px-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-900 font-semibold"
               placeholder="Ej: Dr. Roberto Mendoza"
               value={doctorName}
               onChange={(e) => {
@@ -308,35 +288,45 @@ export default function NuevaReservaClientForm({
               }}
             />
           </div>
-          <div className="sm:col-span-5">
-            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Teléfono / Celular *</label>
-            <input
-              type="tel"
-              required
-              className="w-full text-xs px-3.5 py-2.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
-              placeholder="Ej: 0991234567"
-              value={doctorPhone}
-              onChange={(e) => setDoctorPhone(e.target.value)}
-            />
-          </div>
-          <div className="sm:col-span-6">
-            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Cédula o RUC (sin espacios) *</label>
+
+          {/* 2. Cédula o RUC */}
+          <div>
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">
+              Cédula o RUC (sin espacios) *
+            </label>
             <input
               type="text"
               required
               maxLength={13}
-              className="w-full text-xs px-3.5 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
+              className="w-full text-xs px-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
               placeholder="Ej: 1712345678 o 1712345678001"
               value={doctorDocument}
               onChange={(e) => setDoctorDocument(e.target.value.replace(/\s+/g, ""))}
             />
           </div>
-          <div className="sm:col-span-6">
-            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Correo Electrónico (para Factura SRI) *</label>
+
+          {/* 3. Teléfono Celular (opcional) */}
+          <div>
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">
+              Teléfono Celular <span className="font-normal text-ink-400">(opcional)</span>
+            </label>
+            <input
+              type="tel"
+              className="w-full text-xs px-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800 font-mono"
+              placeholder="Ej: 0991234567"
+              value={doctorPhone}
+              onChange={(e) => setDoctorPhone(e.target.value)}
+            />
+          </div>
+
+          {/* 4. Correo Electrónico (opcional) */}
+          <div>
+            <label className="text-[10px] font-bold text-ink-600 block mb-0.5">
+              Correo Electrónico <span className="font-normal text-ink-400">(opcional)</span>
+            </label>
             <input
               type="email"
-              required
-              className="w-full text-xs px-3.5 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800"
+              className="w-full text-xs px-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-lilac-500 text-ink-800"
               placeholder="Ej: doctor@ejemplo.com"
               value={doctorEmail}
               onChange={(e) => setDoctorEmail(e.target.value.trim())}
@@ -346,24 +336,30 @@ export default function NuevaReservaClientForm({
       </div>
 
       {/* ── 3. Fecha y Horario ── */}
-      <div className="space-y-2">
-        <label className="text-[11px] font-bold text-ink-700 uppercase tracking-wider block">
-          Fecha y Horario
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-bold text-ink-700 uppercase tracking-wider block">
+            Fecha y Horario
+          </label>
+          <span className="text-[11px] font-medium text-lilac-800 bg-lilac-50 border border-lilac-200/80 px-2.5 py-0.5 rounded-lg">
+            Duración: <strong className="font-bold text-ink-900">{hours} {hours === 1 ? "hora" : "horas"}</strong> ({startTime} a {endTime})
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div>
-            <label className="text-[10px] font-semibold text-ink-500 block mb-1">
-              Fecha de Reserva
+            <label className="text-[10px] font-semibold text-ink-500 block mb-0.5">
+              Fecha de Reserva *
             </label>
             <div className="relative">
               <Calendar
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
               />
               <input
                 type="date"
                 required
-                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
+                className="w-full text-xs pl-7 pr-2.5 py-1.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
                 value={rentalDate}
                 onChange={(e) => setRentalDate(e.target.value)}
               />
@@ -371,18 +367,18 @@ export default function NuevaReservaClientForm({
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-ink-500 block mb-1">
-              Hora Inicio
+            <label className="text-[10px] font-semibold text-ink-500 block mb-0.5">
+              Hora Inicio *
             </label>
             <div className="relative">
               <Clock
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
               />
               <input
                 type="time"
                 required
-                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
+                className="w-full text-xs pl-7 pr-2.5 py-1.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
               />
@@ -390,32 +386,23 @@ export default function NuevaReservaClientForm({
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-ink-500 block mb-1">
-              Hora Fin
+            <label className="text-[10px] font-semibold text-ink-500 block mb-0.5">
+              Hora Fin *
             </label>
             <div className="relative">
               <Clock
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"
               />
               <input
                 type="time"
                 required
-                className="w-full text-xs pl-8 pr-3 py-2 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
+                className="w-full text-xs pl-7 pr-2.5 py-1.5 bg-white border border-lilac-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-lilac-500 font-mono text-ink-800"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
               />
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-ink-600 px-1 pt-0.5">
-          <span>
-            Duración calculada: <strong className="text-ink-900 font-bold text-sm">{hours} {hours === 1 ? "hora" : "horas"}</strong> ({startTime} a {endTime})
-          </span>
-          <span className="text-[11px] text-ink-400">
-            Costos según Catálogo de Servicios
-          </span>
         </div>
       </div>
 

@@ -1,10 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Stethoscope, Search, Tag } from "lucide-react";
+import { Stethoscope, Search } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import NuevoServicioModal from "@/components/NuevoServicioModal";
-import EditServiceModal from "@/components/EditServiceModal";
-import ConfirmDeleteButton from "@/components/ConfirmDeleteButton";
-import { toggleServiceAction, deleteServiceAction } from "./actions";
+import ServiciosListClient from "./ServiciosListClient";
 
 export const dynamic = "force-dynamic";
 
@@ -106,7 +104,7 @@ export default async function ServiciosPage({
         </form>
       </div>
 
-      {/* Lista de Servicios agrupados */}
+      {/* Lista de Servicios agrupados con soporte para colapsar por categoría */}
       {Object.keys(grouped).length === 0 ? (
         <div className="bg-white border border-dashed border-lilac-200 rounded-3xl p-12 text-center shadow-xs">
           <Stethoscope size={36} className="mx-auto text-lilac-300 mb-2" />
@@ -114,92 +112,12 @@ export default async function ServiciosPage({
           <p className="text-xs text-ink-500 mt-1">Prueba con otro término de búsqueda o crea uno nuevo.</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.entries(grouped).map(([category, items]) => (
-            <div key={category} className="bg-white border border-lilac-100 rounded-3xl shadow-sm overflow-hidden">
-              <div className="bg-lilac-50/40 px-6 py-3.5 border-b border-lilac-100 flex items-center justify-between">
-                <span className="text-xs font-bold text-ink-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Tag size={12} className="text-lilac-600" /> {category}
-                </span>
-                <span className="text-xs text-lilac-700 bg-lilac-50 border border-lilac-200/80 px-2.5 py-0.5 rounded-full font-bold">
-                  {items.length} {items.length === 1 ? "servicio" : "servicios"}
-                </span>
-              </div>
-
-              <div className="divide-y divide-lilac-50">
-                {items.map((s) => (
-                  <div
-                    key={s.id}
-                    className={`px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-                      s.active ? "hover:bg-lilac-50/20" : "bg-gray-50/80 opacity-60"
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-ink-900 truncate">{s.name}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${
-                          s.iva_code === "4" ? "bg-orange-50 text-orange-700 border border-orange-200" : "bg-gray-100 text-gray-700"
-                        }`}>
-                          IVA {s.iva_code === "4" ? "15%" : "0%"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end">
-                      <div className="text-right">
-                        <p className="text-[11px] text-ink-400 font-mono" title="PVP Oficial (Tarjeta)">
-                          PVP: ${Number(s.price).toFixed(2)}
-                        </p>
-                        {cashDiscountPercent > 0 && (
-                          <p className="text-xs font-bold text-green-700 font-mono" title={`Efectivo (${cashDiscountPercent}% Desc)`}>
-                            Efectivo: ${(Number(s.price) * (1 - cashDiscountPercent / 100)).toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-
-                      {canEdit && (
-                        <div className="flex items-center gap-1">
-                          <EditServiceModal
-                            service={{
-                              id: s.id,
-                              name: s.name,
-                              price: s.price,
-                              iva_code: s.iva_code,
-                              category: s.category,
-                            }}
-                            existingCategories={existingCategories}
-                            cashDiscountPercent={cashDiscountPercent}
-                          />
-
-                          <form action={toggleServiceAction}>
-                            <input type="hidden" name="id" value={s.id} />
-                            <input type="hidden" name="active" value={String(s.active)} />
-                            <button
-                              type="submit"
-                              title={s.active ? "Desactivar" : "Activar"}
-                              className={`p-1.5 rounded-lg transition text-sm font-bold cursor-pointer ${
-                                s.active ? "text-amber-500 hover:bg-amber-50" : "text-green-600 hover:bg-green-50"
-                              }`}
-                            >
-                              {s.active ? "●" : "○"}
-                            </button>
-                          </form>
-
-                          <ConfirmDeleteButton
-                            action={deleteServiceAction}
-                            idName="id"
-                            idValue={s.id}
-                            confirmMessage={`¿Estás seguro de eliminar el servicio "${s.name}"?`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ServiciosListClient
+          grouped={grouped}
+          existingCategories={existingCategories}
+          cashDiscountPercent={cashDiscountPercent}
+          canEdit={canEdit}
+        />
       )}
     </div>
   );

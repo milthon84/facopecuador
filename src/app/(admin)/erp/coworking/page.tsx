@@ -29,6 +29,8 @@ import {
 } from "@/lib/coworking-types";
 import QuickCoworkingActions from "./QuickCoworkingActions";
 import CoworkingDatePicker from "./CoworkingDatePicker";
+import CoworkingSpaceFilter from "./CoworkingSpaceFilter";
+import CoworkingMonthPicker from "./CoworkingMonthPicker";
 
 export const dynamic = "force-dynamic";
 
@@ -163,11 +165,12 @@ export default async function CoworkingAgendaPage({
 
   // KPIs operativos (horas y estado)
   const totalCount = rentals.length;
-  const enCursoCount = rentals.filter((r) => r.status === "en_curso").length;
-  const pendientesFacturarCount = rentals.filter(
-    (r) => r.status === "finalizado" || (r.status === "reservado" && !r.invoice_id)
+  const completadasCount = rentals.filter(
+    (r) => r.status === "finalizado" || r.status === "facturado"
   ).length;
-  const facturadasCount = rentals.filter((r) => r.status === "facturado").length;
+  const pendientesFacturarCount = rentals.filter(
+    (r) => (r.status === "finalizado" || r.status === "reservado") && !r.invoice_id
+  ).length;
   const totalHoras = rentals.reduce((acc, r) => acc + Number(r.hours || 0), 0);
 
   return (
@@ -256,7 +259,7 @@ export default async function CoworkingAgendaPage({
         </div>
       </div>
 
-      {/* ── KPIs Rápidos Operativos (Horas y Reservas) - Optimizados y compactos en móvil ── */}
+      {/* ── KPIs Rápidos Operativos (Horas y Reservas) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
         <div className="bg-white border border-lilac-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
           <span className="text-[9px] sm:text-[10px] font-bold text-ink-400 uppercase tracking-wider block truncate">
@@ -266,17 +269,17 @@ export default async function CoworkingAgendaPage({
             {totalCount}
           </span>
         </div>
-        <div className="bg-white border border-amber-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
-          <span className="text-[9px] sm:text-[10px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1 truncate">
-            <PlayCircle size={10} className="shrink-0" /> En Atención Ahora
+        <div className="bg-white border border-emerald-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
+          <span className="text-[9px] sm:text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1 truncate">
+            <CheckCircle2 size={11} className="shrink-0 text-emerald-600" /> Completadas
           </span>
-          <span className="text-lg sm:text-2xl font-black text-amber-900 font-mono mt-0.5 block">
-            {enCursoCount}
+          <span className="text-lg sm:text-2xl font-black text-emerald-800 font-mono mt-0.5 block">
+            {completadasCount}
           </span>
         </div>
         <div className="bg-white border border-indigo-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
           <span className="text-[9px] sm:text-[10px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1 truncate">
-            <Receipt size={10} className="shrink-0" /> Pendiente Facturar
+            <Receipt size={11} className="shrink-0 text-indigo-600" /> Pendiente Facturar
           </span>
           <span className="text-lg sm:text-2xl font-black text-indigo-900 font-mono mt-0.5 block">
             {pendientesFacturarCount}
@@ -284,7 +287,7 @@ export default async function CoworkingAgendaPage({
         </div>
         <div className="bg-white border border-teal-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-2xs">
           <span className="text-[9px] sm:text-[10px] font-bold text-teal-700 uppercase tracking-wider flex items-center gap-1 truncate">
-            <Clock size={10} className="shrink-0" /> Horas {activeView === "day" ? "Hoy" : "Mes"}
+            <Clock size={11} className="shrink-0 text-teal-600" /> Horas {activeView === "day" ? "Hoy" : "Mes"}
           </span>
           <span className="text-lg sm:text-2xl font-black text-teal-800 font-mono mt-0.5 block">
             {totalHoras} hrs
@@ -292,38 +295,9 @@ export default async function CoworkingAgendaPage({
         </div>
       </div>
 
-      {/* ── Filtros Rápidos de Recursos ── */}
-      <div className="flex items-center justify-between gap-2 flex-wrap bg-white px-3.5 py-2.5 rounded-2xl border border-lilac-100 shadow-2xs text-xs">
-        <div className="flex items-center gap-1.5 font-bold text-ink-700">
-          <Filter size={13} className="text-lilac-600" />
-          <span>Filtrar Espacio:</span>
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            { id: "all", label: "Todos los espacios" },
-            { id: "puesto_trabajo", label: "Puesto Dental (Sillón)" },
-            { id: "clinica_completa", label: "Clínica Completa" },
-            { id: "aula_pequena", label: "Aula Pequeña" },
-            { id: "aula_grande", label: "Aula Grande" },
-          ].map((tab) => (
-            <Link
-              key={tab.id}
-              href={`/erp/coworking?date=${targetEcDate}&month=${activeMonth}&resource=${tab.id}&status=${activeStatus}&view=${activeView}`}
-              className={`px-2.5 py-1 rounded-xl font-semibold transition ${
-                activeResource === tab.id
-                  ? "bg-lilac-600 text-white font-bold shadow-2xs"
-                  : "bg-lilac-50/70 text-ink-600 hover:bg-lilac-100"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
       {/* ── Lista Estilo Agenda de Reservas ── */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="px-5 py-3.5 border-b border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-bold text-base text-ink-900">
               {activeView === "day"
@@ -337,13 +311,29 @@ export default async function CoworkingAgendaPage({
             </p>
           </div>
 
-          {activeView === "day" && (
-            <CoworkingDatePicker
+          <div className="flex items-center gap-2 flex-wrap">
+            <CoworkingSpaceFilter
+              activeResource={activeResource}
               targetDate={targetEcDate}
-              resource={activeResource}
-              status={activeStatus}
+              activeMonth={activeMonth}
+              activeStatus={activeStatus}
+              activeView={activeView}
             />
-          )}
+            {activeView === "day" && (
+              <CoworkingDatePicker
+                targetDate={targetEcDate}
+                resource={activeResource}
+                status={activeStatus}
+              />
+            )}
+            {activeView === "month" && (
+              <CoworkingMonthPicker
+                activeMonth={activeMonth}
+                resource={activeResource}
+                status={activeStatus}
+              />
+            )}
+          </div>
         </div>
 
         {rentals.length === 0 ? (

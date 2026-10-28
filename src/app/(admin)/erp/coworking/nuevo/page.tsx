@@ -55,12 +55,6 @@ async function createRental(formData: FormData) {
   if (!doctor_document) {
     return { error: "La cédula o RUC del solicitante de alquiler es obligatoria." };
   }
-  if (!doctor_phone) {
-    return { error: "El teléfono o celular del solicitante es obligatorio." };
-  }
-  if (!doctor_email) {
-    return { error: "El correo electrónico del solicitante es obligatorio." };
-  }
 
   const { data, error } = await supabase
     .from("coworking_rentals")

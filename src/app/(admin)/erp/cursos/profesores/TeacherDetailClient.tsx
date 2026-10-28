@@ -81,8 +81,8 @@ export default function TeacherDetailClient({
   const isTeacher = teacher.is_teacher ?? true;
 
   // Determinar pestaña inicial según roles
-  const defaultTab = isDoctor && !isTeacher ? "atenciones" : "cursos";
-  const [activeTab, setActiveTab] = useState<"atenciones" | "cursos" | "clases" | "cv">(defaultTab);
+  const defaultTab = isDoctor ? "atenciones" : "cursos";
+  const [activeTab, setActiveTab] = useState<"atenciones" | "cursos" | "clases">(defaultTab);
   
   // Filtros en pestaña de atenciones
   const [apptStatusFilter, setApptStatusFilter] = useState<string>("all");
@@ -163,8 +163,8 @@ export default function TeacherDetailClient({
 
       {/* Ficha Principal del Especialista & Tarjetas KPI */}
       <div className="grid md:grid-cols-3 gap-6 items-start">
-        {/* Columna Izquierda: Ficha de Especialista */}
-        <div className="md:col-span-1">
+        {/* Columna Izquierda: Ficha de Especialista, Hoja de Vida y Datos Bancarios */}
+        <div className="md:col-span-1 space-y-4">
           <div className="card p-5 bg-white border border-lilac-100 shadow-sm rounded-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-lilac-50 pb-2">
               <span className="text-xs font-bold text-ink-400 uppercase tracking-wider">Ficha de Especialista</span>
@@ -263,18 +263,67 @@ export default function TeacherDetailClient({
                 </div>
               )}
             </div>
+          </div>
 
-            {teacher.cv_url && (
-              <div className="pt-3 border-t border-lilac-50">
+          {/* Tarjeta Hoja de Vida (CV) - Entre Ficha del Especialista y Datos Bancarios */}
+          <div className="card p-5 bg-white border border-lilac-100 rounded-3xl shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-lilac-50 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                  <FileText size={15} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-ink-900">Hoja de Vida (CV)</h3>
+                  <p className="text-[10px] text-ink-500">Documento profesional</p>
+                </div>
+              </div>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingModalOpen(true)}
+                  className="text-xs text-lilac-700 hover:text-lilac-800 font-bold flex items-center gap-1 cursor-pointer bg-lilac-50 border border-lilac-200 px-2 py-0.5 rounded-lg transition"
+                >
+                  <Pencil size={11} />
+                  <span>{teacher.cv_url ? "Actualizar" : "Subir"}</span>
+                </button>
+              )}
+            </div>
+
+            {teacher.cv_url ? (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between p-2.5 bg-amber-50/40 border border-amber-200/60 rounded-xl">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <FileText size={17} className="text-amber-600 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-ink-900 block truncate">Documento de Hoja de Vida</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Archivo registrado
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 <a
                   href={proxyStorageUrl(teacher.cv_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full inline-flex items-center justify-center gap-1.5 bg-lilac-50 hover:bg-lilac-100 text-lilac-700 text-xs px-3.5 py-2 rounded-xl transition font-bold border border-lilac-200 shadow-2xs"
                 >
-                  <FileText size={14} className="text-lilac-600" />
+                  <Download size={13} />
                   <span>Ver / Descargar Hoja de Vida (CV)</span>
                 </a>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50/50 border border-amber-200/60 rounded-xl text-center">
+                <p className="text-[11px] text-amber-800 font-medium">Sin Hoja de Vida registrada</p>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingModalOpen(true)}
+                    className="mt-1.5 text-[11px] font-bold text-lilac-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <Pencil size={11} /> Subir documento ahora
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -361,108 +410,79 @@ export default function TeacherDetailClient({
           </div>
         </div>
 
-        {/* Columna Derecha: KPI Cards según Roles */}
+        {/* Columna Derecha: Indicadores y Sección de Atenciones/Cursos */}
         <div className="md:col-span-2 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {isDoctor && (
-              <>
-                <div className="card p-3.5 bg-teal-50/40 border border-teal-100 rounded-2xl flex items-center gap-3 shadow-2xs">
-                  <div className="w-9 h-9 rounded-xl bg-white border border-teal-200 flex items-center justify-center text-teal-600 shrink-0">
-                    <Stethoscope size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-ink-500 font-medium">Atenciones</div>
-                    <div className="text-lg font-bold text-teal-950 leading-tight">
-                      {attendedAppointments.length} <span className="text-xs text-ink-400 font-normal">/ {assignedAppointments.length}</span>
-                    </div>
-                  </div>
+          {/* ── Indicadores Clave: Atenciones, Cursos Asignados, Facturación ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* 1. Atenciones */}
+            <div className="card p-3.5 bg-teal-50/40 border border-teal-100 rounded-2xl flex items-center gap-3 shadow-2xs">
+              <div className="w-10 h-10 rounded-xl bg-white border border-teal-200 flex items-center justify-center text-teal-600 shrink-0 shadow-2xs">
+                <Stethoscope size={19} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] text-ink-500 font-medium truncate">Atenciones</div>
+                <div className="text-lg font-bold text-teal-950 leading-tight">
+                  {attendedAppointments.length}{" "}
+                  <span className="text-xs text-ink-400 font-normal">/ {assignedAppointments.length}</span>
                 </div>
-
-                <div className="card p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-2xl flex items-center gap-3 shadow-2xs">
-                  <div className="w-9 h-9 rounded-xl bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
-                    <DollarSign size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-ink-500 font-medium">Facturado</div>
-                    <div className="text-base font-bold text-emerald-950 leading-tight">
-                      {formatCurrency(billedTotal)}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {isTeacher && (
-              <>
-                <div className="card p-3.5 bg-lilac-50/50 border border-lilac-100 rounded-2xl flex items-center gap-3 shadow-2xs">
-                  <div className="w-9 h-9 rounded-xl bg-white border border-lilac-200 flex items-center justify-center text-lilac-600 shrink-0">
-                    <GraduationCap size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-ink-500 font-medium">Cursos</div>
-                    <div className="text-lg font-bold text-ink-900 leading-tight">{assignedCourses.length}</div>
-                  </div>
-                </div>
-
-                <div className="card p-3.5 bg-blue-50/40 border border-blue-100 rounded-2xl flex items-center gap-3 shadow-2xs">
-                  <div className="w-9 h-9 rounded-xl bg-white border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
-                    <Calendar size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-ink-500 font-medium">Clases</div>
-                    <div className="text-lg font-bold text-ink-900 leading-tight">{totalClassesCount}</div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Hoja de vida card si no hay 4 cards llenas */}
-            {(!isDoctor || !isTeacher) && (
-              <div className="card p-3.5 bg-amber-50/40 border border-amber-100 rounded-2xl flex items-center gap-3 shadow-2xs">
-                <div className="w-9 h-9 rounded-xl bg-white border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
-                  <FileText size={18} />
-                </div>
-                <div>
-                  <div className="text-[11px] text-ink-500 font-medium">Hoja de Vida</div>
-                  <div className="text-xs font-bold text-ink-900 leading-tight mt-1">
-                    {teacher.cv_url ? (
-                      <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px] font-bold inline-flex items-center gap-1">
-                        <CheckCircle2 size={11} /> Subida
-                      </span>
-                    ) : (
-                      <span className="text-ink-400 font-normal">Sin CV</span>
-                    )}
-                  </div>
+                <div className="text-[10px] text-teal-700 font-medium">
+                  {attendedAppointments.length === 1 ? "1 atendida" : `${attendedAppointments.length} atendidas`}
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* 2. Cursos Asignados */}
+            <div className="card p-3.5 bg-lilac-50/50 border border-lilac-100 rounded-2xl flex items-center gap-3 shadow-2xs">
+              <div className="w-10 h-10 rounded-xl bg-white border border-lilac-200 flex items-center justify-center text-lilac-600 shrink-0 shadow-2xs">
+                <GraduationCap size={19} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] text-ink-500 font-medium truncate">Cursos Asignados</div>
+                <div className="text-lg font-bold text-ink-900 leading-tight">
+                  {assignedCourses.length}
+                </div>
+                <div className="text-[10px] text-lilac-700 font-medium">
+                  {totalClassesCount === 1 ? "1 clase dictada" : `${totalClassesCount} clases dictadas`}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Facturación */}
+            <div className="card p-3.5 bg-emerald-50/40 border border-emerald-100 rounded-2xl flex items-center gap-3 shadow-2xs">
+              <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0 shadow-2xs">
+                <DollarSign size={19} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] text-ink-500 font-medium truncate">Facturación</div>
+                <div className="text-base sm:text-lg font-bold text-emerald-950 leading-tight truncate">
+                  {formatCurrency(billedTotal)}
+                </div>
+                <div className="text-[10px] text-emerald-700 font-medium">
+                  total facturado
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* CONTENEDOR PRINCIPAL UNIFICADO CON PESTAÑAS */}
-      <div className="bg-white border border-lilac-100 rounded-3xl shadow-sm overflow-hidden">
-        {/* Encabezado de Pestañas Integrado */}
-        <div className="flex border-b border-lilac-100 bg-lilac-50/20 px-6 pt-3 gap-2 flex-wrap">
-          {/* Pestaña: Atenciones a Pacientes (Si isDoctor) */}
-          {isDoctor && (
-            <button
-              type="button"
-              onClick={() => setActiveTab("atenciones")}
-              className={`flex items-center gap-2 px-5 py-3 font-bold text-xs rounded-t-2xl transition cursor-pointer ${
-                activeTab === "atenciones"
-                  ? "bg-white text-teal-800 border-t-2 border-l border-r border-teal-300 shadow-2xs -mb-px"
-                  : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-              }`}
-            >
-              <Stethoscope size={16} className={activeTab === "atenciones" ? "text-teal-600" : "text-ink-400"} />
-              <span>Atenciones a Pacientes ({assignedAppointments.length})</span>
-            </button>
-          )}
+          {/* ── Contenedor de Atenciones y Cursos (Bajo los Indicadores) ── */}
+          <div className="bg-white border border-lilac-100 rounded-3xl shadow-sm overflow-hidden">
+            {/* Encabezado de Pestañas Integrado */}
+            <div className="flex border-b border-lilac-100 bg-lilac-50/20 px-6 pt-3 gap-2 flex-wrap">
+              {/* Pestaña: Atenciones a Pacientes */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("atenciones")}
+                className={`flex items-center gap-2 px-5 py-3 font-bold text-xs rounded-t-2xl transition cursor-pointer ${
+                  activeTab === "atenciones"
+                    ? "bg-white text-teal-800 border-t-2 border-l border-r border-teal-300 shadow-2xs -mb-px"
+                    : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
+                }`}
+              >
+                <Stethoscope size={16} className={activeTab === "atenciones" ? "text-teal-600" : "text-ink-400"} />
+                <span>Atenciones a Pacientes ({assignedAppointments.length})</span>
+              </button>
 
-          {/* Pestaña: Cursos Asignados (Si isTeacher) */}
-          {isTeacher && (
-            <>
+              {/* Pestaña: Cursos Asignados */}
               <button
                 type="button"
                 onClick={() => setActiveTab("cursos")}
@@ -476,6 +496,7 @@ export default function TeacherDetailClient({
                 <span>Cursos Asignados ({assignedCourses.length})</span>
               </button>
 
+              {/* Pestaña: Clases Dictadas */}
               <button
                 type="button"
                 onClick={() => setActiveTab("clases")}
@@ -488,23 +509,7 @@ export default function TeacherDetailClient({
                 <Calendar size={16} className={activeTab === "clases" ? "text-blue-600" : "text-ink-400"} />
                 <span>Clases Dictadas ({totalClassesCount})</span>
               </button>
-            </>
-          )}
-
-          {/* Pestaña: CV */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("cv")}
-            className={`flex items-center gap-2 px-5 py-3 font-bold text-xs rounded-t-2xl transition cursor-pointer ${
-              activeTab === "cv"
-                ? "bg-white text-amber-800 border-t-2 border-l border-r border-amber-300 shadow-2xs -mb-px"
-                : "text-ink-600 hover:text-ink-900 hover:bg-white/60"
-            }`}
-          >
-            <FileText size={16} className={activeTab === "cv" ? "text-amber-600" : "text-ink-400"} />
-            <span>Hoja de Vida (CV)</span>
-          </button>
-        </div>
+            </div>
 
         {/* Contenido de la Pestaña Activa */}
         <div className="p-6">
@@ -765,48 +770,10 @@ export default function TeacherDetailClient({
               )}
             </div>
           )}
-
-          {/* TAB 4: HOJA DE VIDA (CV) */}
-          {activeTab === "cv" && (
-            <div className="space-y-4">
-              <div className="p-6 bg-lilac-50/20 border border-lilac-100 rounded-2xl space-y-4">
-                <h3 className="font-bold text-ink-950 text-sm flex items-center gap-2">
-                  <FileText size={16} className="text-lilac-600" />
-                  Documento de Hoja de Vida (CV)
-                </h3>
-
-                {teacher.cv_url ? (
-                  <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-lilac-200 shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold shrink-0">
-                        <FileText size={20} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-ink-900">Hoja de Vida Registrada</p>
-                        <p className="text-[11px] text-ink-500">Documento PDF / Word adjunto</p>
-                      </div>
-                    </div>
-
-                    <a
-                      href={teacher.cv_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-primary text-xs py-2 px-4 shadow-sm inline-flex items-center gap-1.5"
-                    >
-                      <Download size={14} />
-                      <span>Ver / Descargar CV</span>
-                    </a>
-                  </div>
-                ) : (
-                  <div className="p-8 text-center text-sm text-ink-500 italic bg-white border border-lilac-100 rounded-2xl">
-                    No se ha subido la Hoja de Vida (CV) para este especialista. Haz clic en "Editar Perfil" en la ficha para adjuntar el archivo.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
+    </div>
+  </div>
 
       {/* MODAL POPUP PARA EDITAR ESPECIALISTA */}
       {isEditingModalOpen && (
