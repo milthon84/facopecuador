@@ -20,6 +20,8 @@ import {
   CheckCircle2,
   Receipt,
   FileCheck2,
+  Info,
+  HelpCircle,
 } from "lucide-react";
 import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
@@ -29,6 +31,8 @@ import {
   calculateItemRow,
   calculateExpenseTotals,
   EXPENSE_ITEM_CATEGORIES,
+  EXPENSE_CATEGORY_DETAILS,
+  normalizeCategoryName,
 } from "@/lib/expense-types";
 
 type Account = {
@@ -88,18 +92,21 @@ export default function NuevaCompraForm({
   const [facturaSearch, setFacturaSearch] = useState("");
   const [facturaDropdownOpen, setFacturaDropdownOpen] = useState(false);
 
+  // Guía interactiva de categorías
+  const [guiaCategoriasOpen, setGuiaCategoriasOpen] = useState(false);
+
   // Líneas de detalle del gasto (Cabecera y Detalle)
   const [items, setItems] = useState<ExpenseItemRow[]>(() => {
     if (initialItems && initialItems.length > 0) {
       return initialItems.map((it) => ({
         ...it,
-        category: it.category || "Materiales e Instrumental",
+        category: normalizeCategoryName(it.category),
       }));
     }
     if (initialData) {
       const sub0 = Number(initialData.subtotal_0) || 0;
       const sub15 = Number(initialData.subtotal_15) || 0;
-      const defaultCat = initialData.category || "Materiales e Instrumental";
+      const defaultCat = normalizeCategoryName(initialData.category);
       const result: ExpenseItemRow[] = [];
       if (sub15 > 0) {
         result.push({
@@ -127,7 +134,7 @@ export default function NuevaCompraForm({
       {
         id: "item-1",
         description: "",
-        category: "Materiales e Instrumental",
+        category: "Insumo y Material",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -179,7 +186,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
-        category: "Materiales e Instrumental",
+        category: "Insumo y Material",
         quantity: 1,
         unit_price: subtotal,
         iva_rate: iva > 0 ? 15 : 0,
@@ -188,7 +195,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
-        category: "Materiales e Instrumental",
+        category: "Insumo y Material",
         quantity: 1,
         unit_price: total,
         iva_rate: 0,
@@ -197,7 +204,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social || "Factura electrónica SRI",
-        category: "Materiales e Instrumental",
+        category: "Insumo y Material",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -222,7 +229,7 @@ export default function NuevaCompraForm({
 
   // Manejo de filas de detalle
   function addItemRow() {
-    const lastCategory = items[items.length - 1]?.category || "Materiales e Instrumental";
+    const lastCategory = items[items.length - 1]?.category || "Insumo y Material";
     setItems((prev) => [
       ...prev,
       {
@@ -326,7 +333,7 @@ export default function NuevaCompraForm({
           const calc = calculateItemRow(it);
           return {
             description: it.description.trim() || "Item de gasto",
-            category: it.category || "Materiales e Instrumental",
+            category: normalizeCategoryName(it.category),
             quantity: calc.qty || 1,
             unit_price: calc.price || 0,
             iva_rate: it.iva_rate,
@@ -341,7 +348,7 @@ export default function NuevaCompraForm({
       formData.set("subtotal_15", totals.subtotal15.toString());
       formData.set("iva_amount", totals.ivaAmount.toString());
       formData.set("total", totals.total.toString());
-      const mainCategory = validItems[0]?.category || initialData?.category || "Materiales e Instrumental";
+      const mainCategory = validItems[0]?.category || initialData?.category || (area === "clinica" ? "Insumo y Material" : "Suministro");
       formData.set("category", mainCategory);
       if (selectedFacturaClave) {
         formData.set("factura_recibida_clave_acceso", selectedFacturaClave);
@@ -390,7 +397,7 @@ export default function NuevaCompraForm({
       <form onSubmit={handleSubmit} noValidate className="bg-white border border-lilac-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         {isEditing && <input type="hidden" name="id" value={initialData.id} />}
         {existingReceiptUrl && <input type="hidden" name="existing_receipt_url" value={existingReceiptUrl} />}
-        <input type="hidden" name="category" value={items[0]?.category || initialData?.category || (area === "clinica" ? "Materiales e Instrumental" : "Suministro")} />
+        <input type="hidden" name="category" value={items[0]?.category || initialData?.category || (area === "clinica" ? "Insumo y Material" : "Suministro")} />
         <input type="hidden" name="factura_recibida_clave_acceso" value={selectedFacturaClave || ""} />
         <input type="hidden" name="authorization_number" value={authNumber || ""} />
 
@@ -691,13 +698,24 @@ export default function NuevaCompraForm({
                 Desglose de productos o servicios adquiridos
               </p>
             </div>
-            <button
-              type="button"
-              onClick={addItemRow}
-              className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
-            >
-              <Plus size={13} /> Agregar Ítem
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGuiaCategoriasOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-ink-600 hover:text-lilac-700 bg-white border border-lilac-200 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
+                title="Ver qué contempla cada una de las 6 categorías contables"
+              >
+                <HelpCircle size={13} className="text-lilac-600" />
+                <span>Guía de Categorías</span>
+              </button>
+              <button
+                type="button"
+                onClick={addItemRow}
+                className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
+              >
+                <Plus size={13} /> Agregar Ítem
+              </button>
+            </div>
           </div>
 
           {/* Tabla de ítems */}
@@ -706,7 +724,7 @@ export default function NuevaCompraForm({
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
                   <th className="py-2 pr-2 font-bold">Descripción del Bien / Servicio</th>
-                  <th className="py-2 px-2 w-44 font-bold">Categoría Contable</th>
+                  <th className="py-2 px-2 w-56 sm:w-64 font-bold">Categoría Contable</th>
                   <th className="py-2 px-2 w-20 text-center font-bold">Cant.</th>
                   <th className="py-2 px-2 w-28 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
@@ -719,9 +737,11 @@ export default function NuevaCompraForm({
               <tbody className="divide-y divide-lilac-100">
                 {items.map((item, idx) => {
                   const calc = calculateItemRow(item);
+                  const currentCat = normalizeCategoryName(item.category);
+                  const catDetail = EXPENSE_CATEGORY_DETAILS[currentCat];
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-2">
+                      <td className="py-2 pr-2 align-top">
                         <input
                           type="text"
                           required
@@ -731,20 +751,52 @@ export default function NuevaCompraForm({
                           className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 px-2">
-                        <select
-                          value={item.category || "Materiales e Instrumental"}
-                          onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
-                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none"
-                        >
-                          {EXPENSE_ITEM_CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
+                      <td className="py-2 px-2 align-top">
+                        <div className="space-y-1">
+                          <select
+                            value={currentCat}
+                            onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
+                            title={`${catDetail?.description} — Incluye: ${catDetail?.examples}`}
+                            className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                          >
+                            {EXPENSE_ITEM_CATEGORIES.map((cat) => (
+                              <option
+                                key={cat}
+                                value={cat}
+                                title={`${EXPENSE_CATEGORY_DETAILS[cat]?.description} (${EXPENSE_CATEGORY_DETAILS[cat]?.examples})`}
+                              >
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Descripción / Qué contempla al seleccionar o pasar el mouse */}
+                          {catDetail && (
+                            <div
+                              className="group/cat relative text-[10px] text-ink-500 bg-lilac-50/70 border border-lilac-100 rounded-md p-1 leading-tight flex items-center justify-between gap-1 cursor-help hover:bg-lilac-100/70 transition"
+                              title={`Contempla: ${catDetail.examples}`}
+                            >
+                              <span className="truncate flex-1">{catDetail.description}</span>
+                              <Info size={11} className="shrink-0 text-lilac-500 group-hover/cat:text-lilac-700" />
+
+                              {/* Tooltip flotante enriquecido al pasar el mouse */}
+                              <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover/cat:block w-72 p-2.5 bg-ink-950 text-white text-[11px] rounded-xl shadow-xl z-50 pointer-events-none">
+                                <div className="font-bold text-lilac-200 border-b border-ink-800 pb-1 mb-1 flex items-center justify-between">
+                                  <span>{catDetail.name}</span>
+                                  <span className="text-[10px] text-lilac-400 font-mono">Cta {catDetail.accountCode}</span>
+                                </div>
+                                <p className="text-ink-200 text-[10px] mb-1 leading-tight">
+                                  {catDetail.description}
+                                </p>
+                                <p className="text-[10px] text-ink-300 leading-tight">
+                                  <strong className="text-white">Contempla:</strong> {catDetail.examples}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2 px-2 align-top">
                         <input
                           type="number"
                           min="0.01"
@@ -1065,6 +1117,73 @@ export default function NuevaCompraForm({
                   />
                 )
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Guía de Categorías Contables */}
+      {guiaCategoriasOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setGuiaCategoriasOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-lilac-200 animate-scaleIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-lilac-100 flex items-center justify-between bg-lilac-50/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-lilac-600 text-white flex items-center justify-center shadow-xs">
+                  <HelpCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink-900">Guía de Categorías Contables</h3>
+                  <p className="text-[11px] text-ink-500">¿Qué contempla cada categoría y a qué cuenta NIIF se direcciona?</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGuiaCategoriasOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-lilac-100 flex items-center justify-center text-ink-500 hover:text-ink-700 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3">
+              {EXPENSE_ITEM_CATEGORIES.map((catKey) => {
+                const detail = EXPENSE_CATEGORY_DETAILS[catKey];
+                return (
+                  <div key={catKey} className="p-3.5 rounded-xl border border-lilac-100 bg-white hover:bg-lilac-50/40 transition space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-xs font-bold text-ink-950 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-lilac-600"></span>
+                        {detail.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold bg-lilac-100 text-lilac-800 px-2 py-0.5 rounded-full border border-lilac-200">
+                        Cta {detail.accountCode} · {detail.accountName}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-ink-700 font-medium leading-relaxed">
+                      {detail.description}
+                    </p>
+                    <div className="text-[11px] text-ink-600 bg-lilac-50/60 rounded-lg p-2 border border-lilac-100/80 leading-relaxed">
+                      <strong className="text-ink-900">¿Qué contempla?</strong> {detail.examples}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 border-t border-lilac-100 bg-lilac-50/30 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setGuiaCategoriasOpen(false)}
+                className="px-4 py-2 bg-ink-900 hover:bg-ink-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                Cerrar Guía
+              </button>
             </div>
           </div>
         </div>

@@ -23,7 +23,13 @@ import { assertPermission, assertWritePermission, hasWritePermission } from "@/l
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
 import { resolveExpenseArea, EXPENSE_AREA_CONFIG, resolveReceiptUrl, cleanVisibleNotes } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
-import { ExpenseItem, FacturaRecibida, parseItemCategoryAndDesc } from "@/lib/expense-types";
+import {
+  ExpenseItem,
+  FacturaRecibida,
+  parseItemCategoryAndDesc,
+  EXPENSE_CATEGORY_DETAILS,
+  normalizeCategoryName,
+} from "@/lib/expense-types";
 
 export const dynamic = "force-dynamic";
 
@@ -292,12 +298,16 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               <tbody className="divide-y divide-lilac-50">
                 {items.map((it, idx) => {
                   const parsed = parseItemCategoryAndDesc(it.description);
-                  const itemCat = it.category || parsed.category;
+                  const itemCat = normalizeCategoryName(it.category || parsed.category);
+                  const catDetail = EXPENSE_CATEGORY_DETAILS[itemCat];
                   return (
                     <tr key={it.id || idx} className="hover:bg-lilac-50/30">
                       <td className="py-2.5 pr-2 font-medium text-ink-900">{parsed.description}</td>
                       <td className="py-2.5 px-2 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200 cursor-help"
+                          title={`${catDetail?.description || itemCat} — Contempla: ${catDetail?.examples || ""}`}
+                        >
                           {itemCat}
                         </span>
                       </td>

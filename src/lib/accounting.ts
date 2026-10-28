@@ -10,23 +10,25 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 // ── Mapeo: categoría de gasto → cuenta contable ────────────────────────────
 export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: string }> = {
   // 6 Categorías oficiales solicitadas
-  "Materiales e Instrumental": { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
+  "Insumo y Material":         { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
   "Suministro":                { code: "5.2.05",    name: "Suministros Oficina y Aseo" },
   "Activo fijo":               { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
   "Servicio":                  { code: "5.2.03",    name: "Servicios Básicos (Luz, Agua, Internet)" },
   "Software y Licencias":      { code: "1.2.01.03", name: "Equipos de Computación y Software" },
-  "Seguros y Suscripciones":   { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
+  "Otros Gastos":              { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
 
-  // Compatibilidad con registros existentes
-  "Insumos dentales":    { code: "5.1.01", name: "Insumos y Materiales Clínicos" },
-  "Equipos":             { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
-  "Arriendo":            { code: "5.2.02", name: "Arriendo del Local / Consultorio" },
-  "Servicios básicos":   { code: "5.2.03", name: "Servicios Básicos (Luz, Agua, Internet)" },
-  "Salarios":            { code: "5.2.01", name: "Sueldos, Salarios y Beneficios" },
-  "Suministros oficina": { code: "5.2.05", name: "Suministros Oficina y Aseo" },
-  "Mantenimiento":       { code: "5.2.04", name: "Mantenimiento Equipos e Instalaciones" },
-  "Publicidad":          { code: "5.2.06", name: "Publicidad, Marketing y Comisiones" },
-  "Otros":               { code: "5.2.09", name: "Impuestos, Tasas y Otros Gastos" },
+  // Compatibilidad con nombres anteriores y registros existentes
+  "Materiales e Instrumental": { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
+  "Seguros y Suscripciones":   { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
+  "Insumos dentales":          { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
+  "Equipos":                   { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
+  "Arriendo":                  { code: "5.2.02",    name: "Arriendo del Local / Consultorio" },
+  "Servicios básicos":         { code: "5.2.03",    name: "Servicios Básicos (Luz, Agua, Internet)" },
+  "Salarios":                  { code: "5.2.01",    name: "Sueldos, Salarios y Beneficios" },
+  "Suministros oficina":       { code: "5.2.05",    name: "Suministros Oficina y Aseo" },
+  "Mantenimiento":             { code: "5.2.04",    name: "Mantenimiento Equipos e Instalaciones" },
+  "Publicidad":                { code: "5.2.06",    name: "Publicidad, Marketing y Comisiones" },
+  "Otros":                     { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
 };
 
 // ── Mapeo: forma de pago del gasto → cuenta de contrapartida ──────────────

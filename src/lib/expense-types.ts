@@ -1,13 +1,83 @@
 export const EXPENSE_ITEM_CATEGORIES = [
-  "Materiales e Instrumental",
+  "Insumo y Material",
   "Suministro",
   "Activo fijo",
   "Servicio",
   "Software y Licencias",
-  "Seguros y Suscripciones",
+  "Otros Gastos",
 ] as const;
 
 export type ExpenseItemCategory = (typeof EXPENSE_ITEM_CATEGORIES)[number];
+
+export interface CategoryDetail {
+  name: ExpenseItemCategory;
+  accountCode: string;
+  accountName: string;
+  description: string;
+  examples: string;
+}
+
+export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetail> = {
+  "Insumo y Material": {
+    name: "Insumo y Material",
+    accountCode: "5.1.01",
+    accountName: "Insumos y Materiales Clínicos",
+    description: "Insumos clínicos, odontológicos y materiales de atención",
+    examples: "Guantes, gasas, anestesias, resinas, suturas, jeringas, instrumental descartable o menor, biomateriales, brackets y fármacos.",
+  },
+  "Suministro": {
+    name: "Suministro",
+    accountCode: "5.2.05",
+    accountName: "Suministros Oficina y Aseo",
+    description: "Artículos de papelería, oficina, limpieza y cafetería",
+    examples: "Papel bond, tóner, archivadores, cloro, desinfectantes, papel higiénico, jabón, café, azúcar y útiles de oficina.",
+  },
+  "Activo fijo": {
+    name: "Activo fijo",
+    accountCode: "1.2.01.01",
+    accountName: "Equipos Médicos y Odontológicos / PPE",
+    description: "Equipamiento de larga duración, maquinaria y mobiliario",
+    examples: "Sillones dentales, rayos X, compresores, autoclaves, lámparas de fotocurado, mobiliario clínico, escritorios y computadoras físicas.",
+  },
+  "Servicio": {
+    name: "Servicio",
+    accountCode: "5.2.03",
+    accountName: "Servicios Básicos y Tercerizados",
+    description: "Servicios básicos, mantenimientos, fletes y servicios externos",
+    examples: "Agua potable, energía eléctrica, internet, telefonía, mantenimientos preventivos o correctivos de equipos, mensajería y seguridad.",
+  },
+  "Software y Licencias": {
+    name: "Software y Licencias",
+    accountCode: "1.2.01.03",
+    accountName: "Equipos de Computación y Software",
+    description: "Sistemas informáticos, plataformas digitales y software",
+    examples: "Sistemas odontológicos/médicos, Microsoft 365, Google Workspace, Adobe, antivirus, hosting web y suscripciones cloud.",
+  },
+  "Otros Gastos": {
+    name: "Otros Gastos",
+    accountCode: "5.2.09",
+    accountName: "Impuestos, Tasas y Otros Gastos",
+    description: "Seguros, suscripciones, tasas municipales y notariales",
+    examples: "Pólizas de seguros médicos o de infraestructura, tasas de bomberos, patentes municipales, notariales y suscripciones a gremios.",
+  },
+};
+
+/**
+ * Normaliza categorías previas o alias (ej. "Materiales e Instrumental" -> "Insumo y Material")
+ */
+export function normalizeCategoryName(cat: string | null | undefined): ExpenseItemCategory {
+  if (!cat) return "Insumo y Material";
+  const trimmed = cat.trim();
+  if (trimmed === "Materiales e Instrumental" || trimmed === "Insumos dentales") return "Insumo y Material";
+  if (trimmed === "Seguros y Suscripciones" || trimmed === "Otros") return "Otros Gastos";
+  if (trimmed === "Equipos") return "Activo fijo";
+  if (trimmed === "Servicios básicos") return "Servicio";
+  if (trimmed === "Suministros oficina") return "Suministro";
+  if (EXPENSE_ITEM_CATEGORIES.includes(trimmed as any)) {
+    return trimmed as ExpenseItemCategory;
+  }
+  return "Insumo y Material";
+}
 
 export interface FacturaRecibida {
   clave_acceso: string;
@@ -50,16 +120,15 @@ export interface ExpenseItemRow {
  * Parsea el prefijo [Categoría] en la descripción si la columna category no existe en BD
  */
 export function parseItemCategoryAndDesc(rawDesc: string | null | undefined): { category: string; description: string } {
-  if (!rawDesc) return { category: "Materiales e Instrumental", description: "" };
+  if (!rawDesc) return { category: "Insumo y Material", description: "" };
   const match = rawDesc.match(/^\[(.*?)\]\s*(.*)$/);
   if (match) {
     const cat = match[1].trim();
     const desc = match[2].trim();
-    if (EXPENSE_ITEM_CATEGORIES.includes(cat as any)) {
-      return { category: cat, description: desc };
-    }
+    const normalized = normalizeCategoryName(cat);
+    return { category: normalized, description: desc };
   }
-  return { category: "Materiales e Instrumental", description: rawDesc };
+  return { category: "Insumo y Material", description: rawDesc };
 }
 
 export function formatItemDescription(category: string | undefined | null, desc: string): string {

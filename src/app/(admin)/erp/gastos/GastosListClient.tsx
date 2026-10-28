@@ -30,14 +30,16 @@ import { linkExpenseToFactura } from "./actions";
 
 const CATEGORY_COLORS: Record<string, string> = {
   // 6 Categorías oficiales
-  "Materiales e Instrumental": "bg-lilac-100 text-lilac-800 border-lilac-200",
+  "Insumo y Material":         "bg-lilac-100 text-lilac-800 border-lilac-200",
   "Suministro":                "bg-amber-100 text-amber-800 border-amber-200",
   "Activo fijo":               "bg-blue-100 text-blue-800 border-blue-200",
   "Servicio":                  "bg-teal-100 text-teal-800 border-teal-200",
   "Software y Licencias":      "bg-indigo-100 text-indigo-800 border-indigo-200",
-  "Seguros y Suscripciones":   "bg-purple-100 text-purple-800 border-purple-200",
+  "Otros Gastos":              "bg-purple-100 text-purple-800 border-purple-200",
 
-  // Históricas
+  // Históricas / Alias
+  "Materiales e Instrumental": "bg-lilac-100 text-lilac-800 border-lilac-200",
+  "Seguros y Suscripciones":   "bg-purple-100 text-purple-800 border-purple-200",
   "Arriendo":            "bg-blue-100 text-blue-700 border-blue-200",
   "Servicios básicos":   "bg-cyan-100 text-cyan-700 border-cyan-200",
   "Insumos dentales":    "bg-lilac-100 text-lilac-700 border-lilac-200",
