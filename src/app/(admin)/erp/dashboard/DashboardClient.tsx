@@ -22,7 +22,8 @@ import {
   Building2,
   Coins,
   ArrowDownRight,
-  PieChart
+  PieChart,
+  Presentation,
 } from "lucide-react";
 import { formatTimeLocal } from "@/lib/availability";
 import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea } from "@/lib/expense-areas";
@@ -105,6 +106,31 @@ export interface OtherInvoiceData {
   description?: string;
 }
 
+export interface CoworkingRentalData {
+  id: string;
+  rental_date: string;
+  start_time: string;
+  end_time: string;
+  hours: number;
+  status: "reservado" | "en_curso" | "finalizado" | "facturado" | "cancelado";
+  resource_type: string;
+  resource_identifier?: string | null;
+  doctor_name: string;
+  doctor_document?: string | null;
+  doctor_phone?: string | null;
+  doctor_email?: string | null;
+  total_price: number;
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+  created_at?: string;
+  invoice?: {
+    id: string;
+    total: number;
+    invoice_number: string;
+    sri_status: string;
+  } | null;
+}
+
 type PeriodType = "day" | "week" | "month" | "year" | "custom";
 
 interface Props {
@@ -113,6 +139,7 @@ interface Props {
   courses?: CourseSummaryData[];
   expenses?: DoctorExpenseData[];
   otherInvoices?: OtherInvoiceData[];
+  coworkingRentals?: CoworkingRentalData[];
 }
 
 const COURSE_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -145,10 +172,12 @@ export default function DashboardClient({
   doctors,
   courses = [],
   expenses = [],
-  otherInvoices = []
+  otherInvoices = [],
+  coworkingRentals = [],
 }: Props) {
   // Period Mode
   const [period, setPeriod] = useState<PeriodType>("month");
+  const [coworkingViewMode, setCoworkingViewMode] = useState<"spaces" | "rentals">("spaces");
 
   // Date anchors (Ecuador UTC-5 base)
   const todayStr = useMemo(() => {
@@ -254,6 +283,15 @@ export default function DashboardClient({
     return periodOtherInvoices.reduce((acc, inv) => acc + (Number(inv.total) || 0), 0);
   }, [periodOtherInvoices]);
 
+  // Filter Coworking Rentals by Selected Range
+  const periodRentals = useMemo(() => {
+    return (coworkingRentals || []).filter((r) => {
+      if (!r.rental_date) return false;
+      const rDate = new Date(r.rental_date + "T12:00:00-05:00");
+      return rDate >= dateRange.start && rDate <= dateRange.end;
+    });
+  }, [coworkingRentals, dateRange]);
+
   // Aggregate Metrics for Clinic
   const stats = useMemo(() => {
     const total = periodAppointments.length;
@@ -275,6 +313,11 @@ export default function DashboardClient({
       }
     });
 
+    const pendingInvoices = periodAppointments.filter((a) => {
+      const b = Number(a.billed_amount || a.invoice?.total || 0);
+      return a.status === "attended" && (!a.invoice || b <= 0);
+    }).length;
+
     const formattedTotalBilled = new Intl.NumberFormat("es-EC", {
       style: "currency",
       currency: "USD",
@@ -285,6 +328,7 @@ export default function DashboardClient({
       attended,
       scheduled,
       completedConsultations,
+      pendingInvoices,
       totalBilled,
       billedInvoicesCount,
       formattedTotalBilled,
@@ -297,6 +341,7 @@ export default function DashboardClient({
       doctor: DoctorOption;
       total: number;
       attended: number;
+      pendingInvoices: number;
       billedTotal: number;
       formattedBilled: string;
       expensesPaid: number;
@@ -308,15 +353,18 @@ export default function DashboardClient({
 
     let unassignedTotal = 0;
     let unassignedAttended = 0;
+    let unassignedPendingInvoices = 0;
     let unassignedBilled = 0;
 
     // Inicializar doctores
     periodAppointments.forEach((a) => {
       const billed = Number(a.billed_amount || a.invoice?.total || 0);
+      const isPending = a.status === "attended" && (!a.invoice || billed <= 0);
 
       if (!a.doctor_id) {
         unassignedTotal++;
         if (a.status === "attended") unassignedAttended++;
+        if (isPending) unassignedPendingInvoices++;
         unassignedBilled += billed;
         return;
       }
@@ -332,6 +380,7 @@ export default function DashboardClient({
         doctor: docObj,
         total: 0,
         attended: 0,
+        pendingInvoices: 0,
         billedTotal: 0,
         formattedBilled: "$0.00",
         expensesPaid: 0,
@@ -343,6 +392,7 @@ export default function DashboardClient({
 
       curr.total++;
       if (a.status === "attended") curr.attended++;
+      if (isPending) curr.pendingInvoices++;
       curr.billedTotal += billed;
 
       map.set(a.doctor_id, curr);
@@ -373,6 +423,7 @@ export default function DashboardClient({
               doctor: doc,
               total: 0,
               attended: 0,
+              pendingInvoices: 0,
               billedTotal: 0,
               formattedBilled: "$0.00",
               expensesPaid: 0,
@@ -410,7 +461,7 @@ export default function DashboardClient({
       };
     });
 
-    list.sort((a, b) => b.billedTotal - a.billedTotal || b.netTotal - a.netTotal || b.attended - a.attended || b.total - a.total);
+    list.sort((a, b) => b.billedTotal - a.billedTotal || b.pendingInvoices - a.pendingInvoices || b.attended - a.attended || b.total - a.total);
 
     const totalDoctorExpenses = list.reduce((acc, d) => acc + d.expensesPaid, 0);
     const totalDoctorExpensesCount = list.reduce((acc, d) => acc + d.expensesCount, 0);
@@ -419,6 +470,7 @@ export default function DashboardClient({
       list,
       unassignedTotal,
       unassignedAttended,
+      unassignedPendingInvoices,
       unassignedBilled,
       totalDoctorExpenses,
       totalDoctorExpensesCount,
@@ -511,9 +563,133 @@ export default function DashboardClient({
     };
   }, [courses, expenseAreaStats]);
 
-  // Consolidado Financiero Global (Clínica + Cursos + Otros/General)
+  // Aggregate Metrics for Alquiler y Coworking
+  const coworkingStats = useMemo(() => {
+    const totalRentals = periodRentals.length;
+    const completedRentals = periodRentals.filter(
+      (r) => r.status === "finalizado" || r.status === "facturado"
+    ).length;
+    const activeRentals = periodRentals.filter(
+      (r) => r.status === "reservado" || r.status === "en_curso"
+    ).length;
+    const totalHours = periodRentals.reduce(
+      (sum, r) => sum + (Number(r.hours) || 0),
+      0
+    );
+
+    let totalBilled = 0;
+    let billedRentalsCount = 0;
+    let pendingBillingCount = 0;
+    let pendingBillingAmount = 0;
+
+    periodRentals.forEach((r) => {
+      const invTotal = Number(r.invoice?.total || 0);
+      const isBilled =
+        (r.status === "facturado" || Boolean(r.invoice_id)) &&
+        (invTotal > 0 || Number(r.total_price || 0) > 0);
+
+      if (isBilled) {
+        totalBilled += invTotal > 0 ? invTotal : Number(r.total_price || 0);
+        billedRentalsCount++;
+      } else if (r.status !== "cancelado") {
+        pendingBillingCount++;
+        pendingBillingAmount += Number(r.total_price || 0);
+      }
+    });
+
+    // Desglose por Espacio / Recurso
+    const resourceTypes = [
+      {
+        id: "puesto_trabajo",
+        name: "Puesto de Trabajo (Sillón / Box)",
+        shortName: "Puesto Dental",
+        badgeColor: "bg-teal-50 text-teal-800 border-teal-200",
+      },
+      {
+        id: "clinica_completa",
+        name: "Clínica Completa",
+        shortName: "Clínica Completa",
+        badgeColor: "bg-indigo-50 text-indigo-800 border-indigo-200",
+      },
+      {
+        id: "aula_pequena",
+        name: "Aula Pequeña (Capacitaciones)",
+        shortName: "Aula Pequeña",
+        badgeColor: "bg-amber-50 text-amber-800 border-amber-200",
+      },
+      {
+        id: "aula_grande",
+        name: "Aula Grande (Auditorio)",
+        shortName: "Aula Grande",
+        badgeColor: "bg-purple-50 text-purple-800 border-purple-200",
+      },
+    ];
+
+    const byResource = resourceTypes.map((res) => {
+      const match = periodRentals.filter((r) => r.resource_type === res.id);
+      const count = match.length;
+      const hours = match.reduce((sum, r) => sum + (Number(r.hours) || 0), 0);
+      const completed = match.filter(
+        (r) => r.status === "finalizado" || r.status === "facturado"
+      ).length;
+      let billed = 0;
+      let pending = 0;
+
+      match.forEach((r) => {
+        const invTotal = Number(r.invoice?.total || 0);
+        const isB =
+          (r.status === "facturado" || Boolean(r.invoice_id)) &&
+          (invTotal > 0 || Number(r.total_price || 0) > 0);
+
+        if (isB) {
+          billed += invTotal > 0 ? invTotal : Number(r.total_price || 0);
+        } else if (r.status !== "cancelado") {
+          pending++;
+        }
+      });
+
+      return {
+        ...res,
+        count,
+        hours,
+        completed,
+        pending,
+        billed,
+        formattedBilled: new Intl.NumberFormat("es-EC", {
+          style: "currency",
+          currency: "USD",
+        }).format(billed),
+      };
+    });
+
+    return {
+      totalRentals,
+      completedRentals,
+      activeRentals,
+      totalHours,
+      totalBilled,
+      billedRentalsCount,
+      pendingBillingCount,
+      pendingBillingAmount,
+      byResource,
+      formattedTotalBilled: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(totalBilled),
+      formattedPendingAmount: new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(pendingBillingAmount),
+    };
+  }, [periodRentals]);
+
+  // Consolidado Financiero Global (Clínica + Cursos + Coworking + Otros/General)
   const globalFinancials = useMemo(() => {
-    const totalBilled = stats.totalBilled + courseStats.totalBilledCourses + otherBilled;
+    const totalBilled =
+      stats.totalBilled +
+      courseStats.totalBilledCourses +
+      coworkingStats.totalBilled +
+      otherBilled;
     const totalExpenses = expenseAreaStats.totalExpenses;
     const netProfit = totalBilled - totalExpenses;
 
@@ -521,6 +697,8 @@ export default function DashboardClient({
     const clinicNetProfit = stats.totalBilled - expenseAreaStats.clinicaTotal;
     // Utilidad Cursos (Facturación Cursos - Gastos de Cursos)
     const coursesNetProfit = courseStats.totalBilledCourses - expenseAreaStats.cursosTotal;
+    // Utilidad Coworking
+    const coworkingNetProfit = coworkingStats.totalBilled;
     // Utilidad General / Otros (Facturación Otros - Gastos Generales)
     const otherNetProfit = otherBilled - expenseAreaStats.generalTotal;
 
@@ -530,6 +708,7 @@ export default function DashboardClient({
       netProfit,
       clinicNetProfit,
       coursesNetProfit,
+      coworkingNetProfit,
       otherNetProfit,
       otherBilled,
       otherInvoicesCount: periodOtherInvoices.length,
@@ -539,9 +718,17 @@ export default function DashboardClient({
       formattedNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(netProfit),
       formattedClinicNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(clinicNetProfit),
       formattedCoursesNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(coursesNetProfit),
+      formattedCoworkingNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(coworkingNetProfit),
       formattedOtherNetProfit: new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD" }).format(otherNetProfit),
     };
-  }, [stats.totalBilled, courseStats.totalBilledCourses, otherBilled, periodOtherInvoices.length, expenseAreaStats]);
+  }, [
+    stats.totalBilled,
+    courseStats.totalBilledCourses,
+    coworkingStats.totalBilled,
+    otherBilled,
+    periodOtherInvoices.length,
+    expenseAreaStats,
+  ]);
 
   // Navigation handlers
   const handlePrevPeriod = () => {
@@ -773,7 +960,8 @@ export default function DashboardClient({
             <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span>🏥 Clínica: {stats.formattedTotalBilled}</span>
               <span>🎓 Cursos: {courseStats.formattedTotalBilledCourses}</span>
-              <span className="text-amber-200">🏢 Otros: {globalFinancials.formattedOtherBilled}</span>
+              <span className="text-teal-300">🏢 Coworking: {coworkingStats.formattedTotalBilled}</span>
+              {otherBilled > 0 && <span className="text-amber-200">📦 Otros: {globalFinancials.formattedOtherBilled}</span>}
             </div>
           </div>
 
@@ -787,7 +975,7 @@ export default function DashboardClient({
             <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span className="text-teal-300">🏥 Clínica: {expenseAreaStats.formattedClinicaTotal}</span>
               <span className="text-indigo-300">🎓 Cursos: {expenseAreaStats.formattedCursosTotal}</span>
-              <span className="text-amber-300">🏢 Otros: {expenseAreaStats.formattedGeneralTotal}</span>
+              <span className="text-amber-300">🏢 General: {expenseAreaStats.formattedGeneralTotal}</span>
             </div>
           </div>
 
@@ -807,7 +995,8 @@ export default function DashboardClient({
             <div className="text-[10px] text-white/80 mt-1 flex items-center justify-between gap-1 flex-wrap">
               <span>🏥 Clínica: {globalFinancials.formattedClinicNetProfit}</span>
               <span>🎓 Cursos: {globalFinancials.formattedCoursesNetProfit}</span>
-              <span className="text-amber-200">🏢 Otros: {globalFinancials.formattedOtherNetProfit}</span>
+              <span className="text-teal-300">🏢 Coworking: {coworkingStats.formattedTotalBilled}</span>
+              {otherBilled > 0 && <span className="text-amber-200">📦 Otros: {globalFinancials.formattedOtherNetProfit}</span>}
             </div>
           </div>
         </div>
@@ -860,6 +1049,9 @@ export default function DashboardClient({
               <div className="text-xl font-black text-ink-950 leading-tight mt-0.5">{stats.formattedTotalBilled}</div>
               <div className="text-[10px] text-ink-500">
                 <span className="text-purple-700 font-semibold">{stats.billedInvoicesCount} facturas</span>
+                {stats.pendingInvoices > 0 && (
+                  <span className="text-amber-700 font-bold ml-1">· {stats.pendingInvoices} por facturar</span>
+                )}
               </div>
             </div>
             <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
@@ -890,6 +1082,7 @@ export default function DashboardClient({
                 <th className="pb-1 font-semibold">Doctor / Odontólogo</th>
                 <th className="pb-1 text-center font-semibold">Citas Asignadas</th>
                 <th className="pb-1 text-center font-semibold">Atenciones</th>
+                <th className="pb-1 text-center font-semibold text-amber-700">Por Facturar</th>
                 <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
               </tr>
             </thead>
@@ -921,6 +1114,15 @@ export default function DashboardClient({
                       {item.attended}
                     </span>
                   </td>
+                  <td className="py-1.5 text-center">
+                    {item.pendingInvoices > 0 ? (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]" title={`${item.pendingInvoices} atención(es) pendientes por facturar`}>
+                        {item.pendingInvoices}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-ink-300 font-medium">0</span>
+                    )}
+                  </td>
                   <td className="py-1.5 text-right font-extrabold text-ink-950 text-xs">
                     {item.formattedBilled}
                   </td>
@@ -940,6 +1142,15 @@ export default function DashboardClient({
                   </td>
                   <td className="py-1.5 text-center font-bold text-amber-900">{doctorStats.unassignedTotal}</td>
                   <td className="py-1.5 text-center font-bold text-emerald-700">{doctorStats.unassignedAttended}</td>
+                  <td className="py-1.5 text-center">
+                    {doctorStats.unassignedPendingInvoices > 0 ? (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]">
+                        {doctorStats.unassignedPendingInvoices}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-ink-300 font-medium">0</span>
+                    )}
+                  </td>
                   <td className="py-1.5 text-right font-extrabold text-amber-900 text-xs">
                     {doctorStats.formattedUnassignedBilled}
                   </td>
@@ -948,7 +1159,7 @@ export default function DashboardClient({
 
               {doctorStats.list.length === 0 && doctorStats.unassignedTotal === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-3 text-center text-xs text-ink-400 italic">
+                  <td colSpan={5} className="py-3 text-center text-xs text-ink-400 italic">
                     No hay registro de citas ni doctores en este período ({periodLabel}).
                   </td>
                 </tr>
@@ -1087,6 +1298,259 @@ export default function DashboardClient({
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* BLOQUE 3: ALQUILER Y COWORKING */}
+      <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-teal-100 shadow-xs space-y-2.5 print:border-gray-300 print:shadow-none print:p-2">
+        <div className="flex items-center justify-between border-b border-teal-50 pb-1.5">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-teal-900 uppercase tracking-wider">
+            <Building2 size={15} className="text-teal-600" />
+            <span>ALQUILER Y COWORKING</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-ink-500 font-medium">{periodLabel}</span>
+            <Link
+              href="/erp/coworking"
+              className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2.5 py-0.5 rounded-lg transition"
+            >
+              <span>Ir a Agenda Coworking</span>
+              <ArrowUpRight size={11} />
+            </Link>
+          </div>
+        </div>
+
+        {/* 4 KPIs de Coworking: Reservas, Completadas, Facturación y Por Facturar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 print:grid-cols-4 print:gap-1.5">
+          {/* Reservas Totales */}
+          <div className="bg-teal-50/40 p-2.5 rounded-xl border border-teal-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-teal-900 uppercase tracking-wider">Reservas Totales</div>
+              <div className="text-xl font-black text-teal-950 leading-tight mt-0.5">{coworkingStats.totalRentals}</div>
+              <div className="text-[10px] text-teal-700 font-medium">
+                {coworkingStats.totalHours > 0 ? `${coworkingStats.totalHours.toFixed(1)} hrs reservadas` : "0 hrs registradas"}
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+              <CalendarDays size={13} />
+            </div>
+          </div>
+
+          {/* Atenciones / Completadas */}
+          <div className="bg-emerald-50/40 p-2.5 rounded-xl border border-emerald-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider">Completadas</div>
+              <div className="text-xl font-black text-emerald-700 leading-tight mt-0.5">{coworkingStats.completedRentals}</div>
+              <div className="text-[10px] text-emerald-800 font-medium">
+                {coworkingStats.activeRentals} en curso / agendadas
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={13} />
+            </div>
+          </div>
+
+          {/* Facturación Coworking */}
+          <div className="bg-purple-50/40 p-2.5 rounded-xl border border-purple-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-purple-900 uppercase tracking-wider">Facturación</div>
+              <div className="text-xl font-black text-purple-950 leading-tight mt-0.5">{coworkingStats.formattedTotalBilled}</div>
+              <div className="text-[10px] text-purple-700 font-medium">
+                {coworkingStats.billedRentalsCount} facturas emitidas
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+              <TrendingUp size={13} />
+            </div>
+          </div>
+
+          {/* Por Facturar */}
+          <div className="bg-amber-50/40 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-amber-900 uppercase tracking-wider">Por Facturar</div>
+              <div className="text-xl font-black text-amber-900 leading-tight mt-0.5">{coworkingStats.pendingBillingCount}</div>
+              <div className="text-[10px] text-amber-700 font-medium truncate">
+                Por cobrar: <b className="text-amber-800">{coworkingStats.formattedPendingAmount}</b>
+              </div>
+            </div>
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <DollarSign size={13} />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla Resumen de Coworking */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-1 p-0.5 bg-teal-50/70 rounded-lg border border-teal-100 text-xs">
+              <button
+                type="button"
+                onClick={() => setCoworkingViewMode("spaces")}
+                className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition ${
+                  coworkingViewMode === "spaces"
+                    ? "bg-teal-600 text-white shadow-xs"
+                    : "text-ink-600 hover:text-ink-900"
+                }`}
+              >
+                Por Espacio / Recurso
+              </button>
+              <button
+                type="button"
+                onClick={() => setCoworkingViewMode("rentals")}
+                className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition ${
+                  coworkingViewMode === "rentals"
+                    ? "bg-teal-600 text-white shadow-xs"
+                    : "text-ink-600 hover:text-ink-900"
+                }`}
+              >
+                Detalle de Reservas ({periodRentals.length})
+              </button>
+            </div>
+          </div>
+
+          {coworkingViewMode === "spaces" ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-teal-100 text-ink-400 font-bold uppercase text-[10px]">
+                    <th className="pb-1 font-semibold">Espacio / Recurso</th>
+                    <th className="pb-1 text-center font-semibold">Reservas</th>
+                    <th className="pb-1 text-center font-semibold">Horas Alquiladas</th>
+                    <th className="pb-1 text-center font-semibold">Completadas</th>
+                    <th className="pb-1 text-center font-semibold text-amber-700">Por Facturar</th>
+                    <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-teal-50/70">
+                  {coworkingStats.byResource.map((res) => (
+                    <tr key={res.id} className="hover:bg-teal-50/20 transition">
+                      <td className="py-1.5 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold border ${res.badgeColor}`}>
+                            {res.id === "puesto_trabajo" ? <Stethoscope size={12} /> :
+                             res.id === "clinica_completa" ? <Building2 size={12} /> :
+                             res.id === "aula_pequena" ? <Presentation size={12} /> :
+                             <GraduationCap size={12} />}
+                          </span>
+                          <div>
+                            <div className="font-bold text-ink-900 text-xs">{res.name}</div>
+                            <div className="text-[10px] text-ink-400">
+                              {res.id === "puesto_trabajo" ? "Sillón odontológico equipado" :
+                               res.id === "clinica_completa" ? "Instalaciones clínicas integrales" :
+                               res.id === "aula_pequena" ? "Capacitaciones y grupos reducidos" :
+                               "Auditorio académico de conferencias"}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-1.5 text-center font-bold text-ink-900">{res.count}</td>
+                      <td className="py-1.5 text-center font-medium text-ink-700 text-[11px]">
+                        {res.hours > 0 ? `${res.hours.toFixed(1)} hrs` : "0 hrs"}
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px]">
+                          {res.completed}
+                        </span>
+                      </td>
+                      <td className="py-1.5 text-center">
+                        {res.pending > 0 ? (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]">
+                            {res.pending}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-ink-300 font-medium">0</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right font-extrabold text-ink-950 text-xs">
+                        {res.formattedBilled}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-teal-100 text-ink-400 font-bold uppercase text-[10px]">
+                    <th className="pb-1 font-semibold">Doctor / Profesional</th>
+                    <th className="pb-1 font-semibold">Espacio</th>
+                    <th className="pb-1 text-center font-semibold">Fecha y Horario</th>
+                    <th className="pb-1 text-center font-semibold">Horas</th>
+                    <th className="pb-1 text-center font-semibold">Estado</th>
+                    <th className="pb-1 text-right font-bold text-ink-900">Facturación / Monto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-teal-50/70">
+                  {periodRentals.map((rental) => {
+                    const isBilled = rental.status === "facturado" || Boolean(rental.invoice_id);
+                    const billedAmount = rental.invoice ? rental.invoice.total : rental.total_price;
+                    return (
+                      <tr key={rental.id} className="hover:bg-teal-50/20 transition">
+                        <td className="py-1.5 pr-2">
+                          <div className="font-bold text-ink-900 text-xs">{rental.doctor_name}</div>
+                          {rental.doctor_document && (
+                            <div className="text-[10px] text-ink-400">{rental.doctor_document}</div>
+                          )}
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <span className="text-[11px] font-semibold text-ink-700">
+                            {rental.resource_type === "puesto_trabajo" ? "Puesto Dental (Sillón)" :
+                             rental.resource_type === "clinica_completa" ? "Clínica Completa" :
+                             rental.resource_type === "aula_pequena" ? "Aula Pequeña" :
+                             "Aula Grande"}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-center text-[11px] text-ink-600 font-medium whitespace-nowrap">
+                          <div>{formatDateShort(rental.rental_date)}</div>
+                          <div className="text-[10px] text-ink-400">{rental.start_time?.slice(0, 5)} - {rental.end_time?.slice(0, 5)}</div>
+                        </td>
+                        <td className="py-1.5 text-center font-bold text-ink-900">
+                          {rental.hours}h
+                        </td>
+                        <td className="py-1.5 text-center">
+                          <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                            rental.status === "facturado" ? "bg-teal-50 text-teal-800 border-teal-200" :
+                            rental.status === "finalizado" ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
+                            rental.status === "en_curso" ? "bg-amber-50 text-amber-800 border-amber-200" :
+                            rental.status === "cancelado" ? "bg-rose-50 text-rose-800 border-rose-200" :
+                            "bg-blue-50 text-blue-800 border-blue-200"
+                          }`}>
+                            {rental.status === "facturado" ? "Facturado" :
+                             rental.status === "finalizado" ? "Finalizado" :
+                             rental.status === "en_curso" ? "En curso" :
+                             rental.status === "cancelado" ? "Cancelado" : "Reservado"}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <div className="font-extrabold text-ink-950 text-xs">
+                            ${Number(billedAmount || 0).toFixed(2)}
+                          </div>
+                          {isBilled ? (
+                            <div className="text-[10px] text-teal-700 font-mono">
+                              #{rental.invoice_number || rental.invoice?.invoice_number || "Facturado"}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-amber-600 font-medium">
+                              Por facturar
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {periodRentals.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-3 text-center text-xs text-ink-400 italic">
+                        No hay reservas de coworking en este período ({periodLabel}).
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

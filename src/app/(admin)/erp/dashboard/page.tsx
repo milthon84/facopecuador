@@ -3,7 +3,14 @@ import { redirect } from "next/navigation";
 import { hasPermission, getFirstAllowedPath } from "@/lib/roles";
 import { getCachedUserAndPermissions } from "@/lib/auth-cache";
 import DashboardClient from "./DashboardClient";
-import type { AppointmentData, DoctorOption, CourseSummaryData, DoctorExpenseData, OtherInvoiceData } from "./DashboardClient";
+import type {
+  AppointmentData,
+  DoctorOption,
+  CourseSummaryData,
+  DoctorExpenseData,
+  OtherInvoiceData,
+  CoworkingRentalData,
+} from "./DashboardClient";
 import { ShieldAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +46,8 @@ export default async function DashboardPage() {
 
   const supabase = createAdminClient();
 
-  // 2. Cargar doctores, citas históricas, facturas emitidas, cursos, inscripciones, módulos y gastos
-  const [apptsRes, doctorsRes, invoicesRes, cursosRes, enrolRes, moduloInscripcionesRes, expensesRes] = await Promise.all([
+  // 2. Cargar doctores, citas históricas, facturas emitidas, cursos, inscripciones, módulos, gastos y coworking
+  const [apptsRes, doctorsRes, invoicesRes, cursosRes, enrolRes, moduloInscripcionesRes, expensesRes, coworkingRes] = await Promise.all([
     supabase
       .from("appointments")
       .select(
@@ -70,6 +77,10 @@ export default async function DashboardPage() {
       .from("expenses")
       .select("id, expense_date, total, supplier_name, supplier_ruc, description, category, status, notes")
       .eq("status", "registered"),
+    supabase
+      .from("coworking_rentals")
+      .select("id, rental_date, start_time, end_time, hours, status, resource_type, resource_identifier, doctor_name, doctor_document, doctor_phone, doctor_email, total_price, invoice_id, invoice_number, created_at")
+      .order("rental_date", { ascending: false }),
   ]);
 
   const rawAppointments = apptsRes.data || [];
@@ -77,6 +88,7 @@ export default async function DashboardPage() {
   const rawCursos = cursosRes.data || [];
   const rawEnrollments = enrolRes.data || [];
   const rawModuloInscriptions = moduloInscripcionesRes.data || [];
+  const rawRentals = coworkingRes.data || [];
   const { resolveExpenseArea } = await import("@/lib/expense-areas");
   const rawExpenses = (expensesRes.data || []).map((e: any) => ({
     ...e,
@@ -242,7 +254,48 @@ export default async function DashboardPage() {
     };
   });
 
-  // Identificar facturas que NO pertenezcan ni a clínica (citas) ni a cursos
+  // Mapa de facturas por ID
+  const invoiceByIdMap = new Map<string, any>();
+  rawInvoices.forEach((inv: any) => {
+    invoiceByIdMap.set(inv.id, inv);
+  });
+
+  // Mapear alquileres coworking
+  const coworkingInvoiceIds = new Set<string>();
+  const coworkingRentals: CoworkingRentalData[] = rawRentals.map((r: any) => {
+    const inv = r.invoice_id ? invoiceByIdMap.get(r.invoice_id) : null;
+    if (r.invoice_id) {
+      coworkingInvoiceIds.add(r.invoice_id);
+    }
+    return {
+      id: r.id,
+      rental_date: r.rental_date,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      hours: Number(r.hours) || 0,
+      status: r.status,
+      resource_type: r.resource_type,
+      resource_identifier: r.resource_identifier,
+      doctor_name: r.doctor_name || "Profesional Externo",
+      doctor_document: r.doctor_document,
+      doctor_phone: r.doctor_phone,
+      doctor_email: r.doctor_email,
+      total_price: Number(r.total_price) || 0,
+      invoice_id: r.invoice_id,
+      invoice_number: r.invoice_number || inv?.invoice_number || null,
+      created_at: r.created_at,
+      invoice: inv
+        ? {
+            id: inv.id,
+            total: Number(inv.total) || 0,
+            invoice_number: inv.invoice_number,
+            sri_status: inv.sri_status,
+          }
+        : null,
+    };
+  });
+
+  // Identificar facturas que NO pertenezcan a clínica (citas), ni cursos, ni coworking
   const allCourseInvoiceIds = new Set<string>();
   Object.values(courseBilledMap).forEach((info) => {
     info.invoiceIds.forEach((id) => allCourseInvoiceIds.add(id));
@@ -254,7 +307,8 @@ export default async function DashboardPage() {
     .filter((inv: any) => {
       const isClinic = Boolean(inv.xml_url && apptIds.has(inv.xml_url));
       const isCourse = allCourseInvoiceIds.has(inv.id);
-      return !isClinic && !isCourse;
+      const isCoworking = coworkingInvoiceIds.has(inv.id);
+      return !isClinic && !isCourse && !isCoworking;
     })
     .map((inv: any) => ({
       id: inv.id,
@@ -271,6 +325,7 @@ export default async function DashboardPage() {
       courses={courses}
       expenses={rawExpenses}
       otherInvoices={otherInvoices}
+      coworkingRentals={coworkingRentals}
     />
   );
 }
