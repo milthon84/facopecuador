@@ -28,6 +28,7 @@ import {
   ExpenseItemRow,
   calculateItemRow,
   calculateExpenseTotals,
+  EXPENSE_ITEM_CATEGORIES,
 } from "@/lib/expense-types";
 
 type Account = {
@@ -89,15 +90,22 @@ export default function NuevaCompraForm({
 
   // Líneas de detalle del gasto (Cabecera y Detalle)
   const [items, setItems] = useState<ExpenseItemRow[]>(() => {
-    if (initialItems && initialItems.length > 0) return initialItems;
+    if (initialItems && initialItems.length > 0) {
+      return initialItems.map((it) => ({
+        ...it,
+        category: it.category || "Materiales e Instrumental",
+      }));
+    }
     if (initialData) {
       const sub0 = Number(initialData.subtotal_0) || 0;
       const sub15 = Number(initialData.subtotal_15) || 0;
+      const defaultCat = initialData.category || "Materiales e Instrumental";
       const result: ExpenseItemRow[] = [];
       if (sub15 > 0) {
         result.push({
           id: "init-15",
           description: initialData.description || "Bienes / Servicios gravados IVA",
+          category: defaultCat,
           quantity: 1,
           unit_price: sub15,
           iva_rate: 15,
@@ -107,6 +115,7 @@ export default function NuevaCompraForm({
         result.push({
           id: "init-0",
           description: initialData.description || "Bienes / Servicios tarifa 0%",
+          category: defaultCat,
           quantity: 1,
           unit_price: sub0,
           iva_rate: 0,
@@ -118,6 +127,7 @@ export default function NuevaCompraForm({
       {
         id: "item-1",
         description: "",
+        category: "Materiales e Instrumental",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -169,6 +179,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        category: "Materiales e Instrumental",
         quantity: 1,
         unit_price: subtotal,
         iva_rate: iva > 0 ? 15 : 0,
@@ -177,6 +188,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        category: "Materiales e Instrumental",
         quantity: 1,
         unit_price: total,
         iva_rate: 0,
@@ -185,6 +197,7 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social || "Factura electrónica SRI",
+        category: "Materiales e Instrumental",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -209,11 +222,13 @@ export default function NuevaCompraForm({
 
   // Manejo de filas de detalle
   function addItemRow() {
+    const lastCategory = items[items.length - 1]?.category || "Materiales e Instrumental";
     setItems((prev) => [
       ...prev,
       {
         id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         description: "",
+        category: lastCategory,
         quantity: 1,
         unit_price: "",
         iva_rate: docType === "factura" ? 15 : 0,
@@ -311,6 +326,7 @@ export default function NuevaCompraForm({
           const calc = calculateItemRow(it);
           return {
             description: it.description.trim() || "Item de gasto",
+            category: it.category || "Materiales e Instrumental",
             quantity: calc.qty || 1,
             unit_price: calc.price || 0,
             iva_rate: it.iva_rate,
@@ -325,6 +341,8 @@ export default function NuevaCompraForm({
       formData.set("subtotal_15", totals.subtotal15.toString());
       formData.set("iva_amount", totals.ivaAmount.toString());
       formData.set("total", totals.total.toString());
+      const mainCategory = validItems[0]?.category || initialData?.category || "Materiales e Instrumental";
+      formData.set("category", mainCategory);
       if (selectedFacturaClave) {
         formData.set("factura_recibida_clave_acceso", selectedFacturaClave);
       }
@@ -372,7 +390,7 @@ export default function NuevaCompraForm({
       <form onSubmit={handleSubmit} noValidate className="bg-white border border-lilac-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         {isEditing && <input type="hidden" name="id" value={initialData.id} />}
         {existingReceiptUrl && <input type="hidden" name="existing_receipt_url" value={existingReceiptUrl} />}
-        <input type="hidden" name="category" value={initialData?.category || (area === "clinica" ? "Insumos dentales" : area === "cursos" ? "Cursos" : "General")} />
+        <input type="hidden" name="category" value={items[0]?.category || initialData?.category || (area === "clinica" ? "Materiales e Instrumental" : "Suministro")} />
         <input type="hidden" name="factura_recibida_clave_acceso" value={selectedFacturaClave || ""} />
         <input type="hidden" name="authorization_number" value={authNumber || ""} />
 
@@ -688,6 +706,7 @@ export default function NuevaCompraForm({
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
                   <th className="py-2 pr-2 font-bold">Descripción del Bien / Servicio</th>
+                  <th className="py-2 px-2 w-44 font-bold">Categoría Contable</th>
                   <th className="py-2 px-2 w-20 text-center font-bold">Cant.</th>
                   <th className="py-2 px-2 w-28 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
@@ -711,6 +730,19 @@ export default function NuevaCompraForm({
                           placeholder={`Ej. Ítem ${idx + 1}`}
                           className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
+                      </td>
+                      <td className="py-2 px-2">
+                        <select
+                          value={item.category || "Materiales e Instrumental"}
+                          onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
+                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                        >
+                          {EXPENSE_ITEM_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="py-2 px-2">
                         <input

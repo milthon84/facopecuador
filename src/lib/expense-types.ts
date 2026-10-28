@@ -1,3 +1,14 @@
+export const EXPENSE_ITEM_CATEGORIES = [
+  "Materiales e Instrumental",
+  "Suministro",
+  "Activo fijo",
+  "Servicio",
+  "Software y Licencias",
+  "Seguros y Suscripciones",
+] as const;
+
+export type ExpenseItemCategory = (typeof EXPENSE_ITEM_CATEGORIES)[number];
+
 export interface FacturaRecibida {
   clave_acceso: string;
   ruc_emisor: string | null;
@@ -17,6 +28,7 @@ export interface ExpenseItem {
   id?: string;
   expense_id?: string;
   description: string;
+  category?: string | null;
   quantity: number;
   unit_price: number;
   iva_rate: number; // 15 o 0
@@ -28,9 +40,34 @@ export interface ExpenseItem {
 export interface ExpenseItemRow {
   id: string; // id temporal en cliente (e.g. "row-1")
   description: string;
+  category?: string;
   quantity: number | string;
   unit_price: number | string;
   iva_rate: 0 | 15;
+}
+
+/**
+ * Parsea el prefijo [Categoría] en la descripción si la columna category no existe en BD
+ */
+export function parseItemCategoryAndDesc(rawDesc: string | null | undefined): { category: string; description: string } {
+  if (!rawDesc) return { category: "Materiales e Instrumental", description: "" };
+  const match = rawDesc.match(/^\[(.*?)\]\s*(.*)$/);
+  if (match) {
+    const cat = match[1].trim();
+    const desc = match[2].trim();
+    if (EXPENSE_ITEM_CATEGORIES.includes(cat as any)) {
+      return { category: cat, description: desc };
+    }
+  }
+  return { category: "Materiales e Instrumental", description: rawDesc };
+}
+
+export function formatItemDescription(category: string | undefined | null, desc: string): string {
+  const cleanDesc = (desc || "").trim();
+  if (!category) return cleanDesc;
+  // Si ya tiene el tag, evitar duplicarlo
+  if (cleanDesc.startsWith(`[${category}]`)) return cleanDesc;
+  return `[${category}] ${cleanDesc}`;
 }
 
 export function calculateItemRow(row: ExpenseItemRow) {

@@ -23,7 +23,7 @@ import { assertPermission, assertWritePermission, hasWritePermission } from "@/l
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
 import { resolveExpenseArea, EXPENSE_AREA_CONFIG, resolveReceiptUrl, cleanVisibleNotes } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
-import { ExpenseItem, FacturaRecibida } from "@/lib/expense-types";
+import { ExpenseItem, FacturaRecibida, parseItemCategoryAndDesc } from "@/lib/expense-types";
 
 export const dynamic = "force-dynamic";
 
@@ -282,6 +282,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               <thead>
                 <tr className="border-b border-lilac-100 text-ink-400 text-[11px] font-bold uppercase tracking-wider text-left">
                   <th className="py-2 pr-2">Descripción</th>
+                  <th className="py-2 px-2 text-center w-40">Categoría</th>
                   <th className="py-2 px-2 text-center w-16">Cant.</th>
                   <th className="py-2 px-2 text-right w-24">P. Unit.</th>
                   <th className="py-2 px-2 text-center w-16">IVA</th>
@@ -289,23 +290,32 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-50">
-                {items.map((it, idx) => (
-                  <tr key={it.id || idx} className="hover:bg-lilac-50/30">
-                    <td className="py-2.5 pr-2 font-medium text-ink-900">{it.description}</td>
-                    <td className="py-2.5 px-2 text-center font-mono text-ink-700">{Number(it.quantity)}</td>
-                    <td className="py-2.5 px-2 text-right font-mono text-ink-700">${Number(it.unit_price).toFixed(2)}</td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
-                        Number(it.iva_rate) > 0 ? "bg-lilac-100 text-lilac-800" : "bg-gray-100 text-gray-700"
-                      }`}>
-                        {Number(it.iva_rate)}%
-                      </span>
-                    </td>
-                    <td className="py-2.5 pl-2 text-right font-mono font-bold text-ink-900">
-                      ${Number(it.subtotal).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
+                {items.map((it, idx) => {
+                  const parsed = parseItemCategoryAndDesc(it.description);
+                  const itemCat = it.category || parsed.category;
+                  return (
+                    <tr key={it.id || idx} className="hover:bg-lilac-50/30">
+                      <td className="py-2.5 pr-2 font-medium text-ink-900">{parsed.description}</td>
+                      <td className="py-2.5 px-2 text-center">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200">
+                          {itemCat}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono text-ink-700">{Number(it.quantity)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono text-ink-700">${Number(it.unit_price).toFixed(2)}</td>
+                      <td className="py-2.5 px-2 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                          Number(it.iva_rate) > 0 ? "bg-lilac-100 text-lilac-800" : "bg-gray-100 text-gray-700"
+                        }`}>
+                          {Number(it.iva_rate)}%
+                        </span>
+                      </td>
+                      <td className="py-2.5 pl-2 text-right font-mono font-bold text-ink-900">
+                        ${Number(it.subtotal).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

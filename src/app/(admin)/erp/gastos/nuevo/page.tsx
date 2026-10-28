@@ -177,13 +177,15 @@ async function saveExpense(formData: FormData) {
 
   // Guardar detalle de ítems (expense_items)
   const itemsJson = formData.get("items_json") as string | null;
+  let parsedItemsList: any[] = [];
   if (itemsJson) {
     try {
       const parsedItems = JSON.parse(itemsJson);
       if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+        parsedItemsList = parsedItems;
         const itemsToInsert = parsedItems.map((it: any) => ({
           expense_id: expense.id,
-          description: it.description || "Item de gasto",
+          description: it.category ? `[${it.category}] ${it.description || "Item de gasto"}` : (it.description || "Item de gasto"),
           quantity: Number(it.quantity) || 1,
           unit_price: Number(it.unit_price) || 0,
           iva_rate: Number(it.iva_rate) || 0,
@@ -250,12 +252,25 @@ async function saveExpense(formData: FormData) {
     }
   }
 
-  // Asiento contable automático
+  // Asiento contable automático direccionando según categorías de ítems
   try {
     await createExpenseJournalEntry({
-      expense_id: expense.id, expense_date, supplier_name, category,
-      payment_method, subtotal_0: subtotal0, subtotal_15: subtotal15,
-      iva_amount: ivaAmount, total, user_id: user?.id, user_email: user?.email,
+      expense_id: expense.id,
+      expense_date,
+      supplier_name,
+      category,
+      payment_method,
+      subtotal_0: subtotal0,
+      subtotal_15: subtotal15,
+      iva_amount: ivaAmount,
+      total,
+      user_id: user?.id,
+      user_email: user?.email,
+      items: parsedItemsList.map((it: any) => ({
+        description: it.description || "",
+        category: it.category || category,
+        subtotal: Number(it.subtotal) || 0,
+      })),
     });
   } catch (err) {
     console.error("Asiento contable no generado:", err);

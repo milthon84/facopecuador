@@ -5,7 +5,7 @@ import { ArrowLeft, Lock } from "lucide-react";
 import { assertPermission, assertWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
-import { ExpenseItemRow } from "@/lib/expense-types";
+import { ExpenseItemRow, parseItemCategoryAndDesc } from "@/lib/expense-types";
 
 export const dynamic = "force-dynamic";
 
@@ -184,7 +184,7 @@ async function updateExpense(formData: FormData) {
         if (parsedItems.length > 0) {
           const itemsToInsert = parsedItems.map((it: any) => ({
             expense_id: id,
-            description: it.description || "Item de gasto",
+            description: it.category ? `[${it.category}] ${it.description || "Item de gasto"}` : (it.description || "Item de gasto"),
             quantity: Number(it.quantity) || 1,
             unit_price: Number(it.unit_price) || 0,
             iva_rate: Number(it.iva_rate) || 0,
@@ -235,13 +235,17 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
   if (!rawExpense) notFound();
   const expense = rawExpense as any;
 
-  const initialItems: ExpenseItemRow[] = rawItems.map((it: any) => ({
-    id: it.id,
-    description: it.description,
-    quantity: Number(it.quantity) || 1,
-    unit_price: Number(it.unit_price) || 0,
-    iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,
-  }));
+  const initialItems: ExpenseItemRow[] = rawItems.map((it: any) => {
+    const parsed = parseItemCategoryAndDesc(it.description);
+    return {
+      id: it.id,
+      description: parsed.description,
+      category: it.category || parsed.category,
+      quantity: Number(it.quantity) || 1,
+      unit_price: Number(it.unit_price) || 0,
+      iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,
+    };
+  });
 
   const isClosed = await isMonthClosed(expense.expense_date);
 

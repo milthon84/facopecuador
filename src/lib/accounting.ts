@@ -8,9 +8,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Mapeo: categoría de gasto → cuenta contable ────────────────────────────
-const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: string }> = {
+export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: string }> = {
+  // 6 Categorías oficiales solicitadas
+  "Materiales e Instrumental": { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
+  "Suministro":                { code: "5.2.05",    name: "Suministros Oficina y Aseo" },
+  "Activo fijo":               { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
+  "Servicio":                  { code: "5.2.03",    name: "Servicios Básicos (Luz, Agua, Internet)" },
+  "Software y Licencias":      { code: "1.2.01.03", name: "Equipos de Computación y Software" },
+  "Seguros y Suscripciones":   { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
+
+  // Compatibilidad con registros existentes
   "Insumos dentales":    { code: "5.1.01", name: "Insumos y Materiales Clínicos" },
-  "Equipos":             { code: "5.2.04", name: "Mantenimiento Equipos e Instalaciones" },
+  "Equipos":             { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
   "Arriendo":            { code: "5.2.02", name: "Arriendo del Local / Consultorio" },
   "Servicios básicos":   { code: "5.2.03", name: "Servicios Básicos (Luz, Agua, Internet)" },
   "Salarios":            { code: "5.2.01", name: "Sueldos, Salarios y Beneficios" },
@@ -159,21 +168,72 @@ export async function createExpenseJournalEntry(params: {
   total:           number;
   user_id?:        string | null;
   user_email?:     string | null;
+  items?: {
+    description: string;
+    category?: string | null;
+    subtotal: number;
+  }[];
 }) {
-  const expenseAccount = EXPENSE_CATEGORY_ACCOUNT[params.category]
-    ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
   const contraAccount  = paymentAccount(params.payment_method);
   const subtotalTotal  = r2(params.subtotal_0 + params.subtotal_15);
+  const lines: JournalLine[] = [];
 
-  const lines: JournalLine[] = [
-    {
+  // Si vienen ítems con sus categorías, direccionamos contablemente cada ítem
+  if (params.items && params.items.length > 0) {
+    const debitsByAccount = new Map<string, { code: string; name: string; amount: number; descriptions: string[] }>();
+
+    for (const it of params.items) {
+      const itCategory = (it.category || params.category || "Otros").trim();
+      const account = EXPENSE_CATEGORY_ACCOUNT[itCategory]
+        ?? EXPENSE_CATEGORY_ACCOUNT[params.category]
+        ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+      const amt = r2(Number(it.subtotal || 0));
+      if (amt <= 0) continue;
+
+      const existing = debitsByAccount.get(account.code);
+      if (existing) {
+        existing.amount = r2(existing.amount + amt);
+        if (it.description) existing.descriptions.push(it.description);
+      } else {
+        debitsByAccount.set(account.code, {
+          code: account.code,
+          name: account.name,
+          amount: amt,
+          descriptions: it.description ? [it.description] : [],
+        });
+      }
+    }
+
+    debitsByAccount.forEach((entry) => {
+      lines.push({
+        account_code: entry.code,
+        account_name: entry.name,
+        debit:  entry.amount,
+        credit: 0,
+        description: `${params.supplier_name}${entry.descriptions.length > 0 ? ` (${entry.descriptions.slice(0, 2).join(", ")})` : ""}`,
+      });
+    });
+
+    // Ajuste por redondeo si la suma difiere centavos de subtotalTotal
+    const totalDebited = r2(lines.reduce((s, l) => s + l.debit, 0));
+    const diff = r2(subtotalTotal - totalDebited);
+    if (diff !== 0 && lines.length > 0) {
+      lines[0].debit = r2(lines[0].debit + diff);
+    }
+  }
+
+  // Fallback si no hay ítems detallados: debitar la cuenta de la categoría del gasto
+  if (lines.length === 0) {
+    const expenseAccount = EXPENSE_CATEGORY_ACCOUNT[params.category]
+      ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+    lines.push({
       account_code: expenseAccount.code,
       account_name: expenseAccount.name,
       debit:  subtotalTotal,
       credit: 0,
       description: params.supplier_name,
-    },
-  ];
+    });
+  }
 
   if (params.iva_amount > 0) {
     lines.push({
