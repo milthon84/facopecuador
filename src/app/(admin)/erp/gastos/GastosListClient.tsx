@@ -213,34 +213,6 @@ export default function GastosListClient({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Botón Facturas Pendientes por Registrar con número alarmado */}
-          <button
-            type="button"
-            onClick={() => setIsPendingModalOpen(true)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
-              pendingCount > 0
-                ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
-                : "bg-gray-100 hover:bg-gray-200/80 text-gray-500 border border-gray-200 cursor-pointer"
-            }`}
-            title={
-              pendingCount > 0
-                ? `${pendingCount} facturas del SRI de este mes pendientes por registrar`
-                : "No hay facturas SRI pendientes en este mes"
-            }
-          >
-            <Receipt size={15} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
-            <span>Facturas pendientes por registrar</span>
-            <span
-              className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-black ${
-                pendingCount > 0
-                  ? "bg-rose-500 text-white shadow-xs animate-pulse"
-                  : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              {pendingCount}
-            </span>
-          </button>
-
           {canEdit && (
             <Link
               href="/erp/gastos/nuevo"
@@ -341,32 +313,62 @@ export default function GastosListClient({
         </div>
       </div>
 
-      {/* Barra de Filtros por Destino */}
-      <div className="flex items-center justify-between gap-2 flex-wrap bg-white px-3 py-2 rounded-2xl border border-lilac-100 shadow-xs text-xs">
-        <div className="flex items-center gap-1.5 font-bold text-ink-700">
-          <Filter size={13} className="text-lilac-600" />
-          <span>Filtrar por Área:</span>
+      {/* Barra de Filtros por Destino y Facturas Pendientes */}
+      <div className="flex items-center justify-between gap-3 flex-wrap bg-white px-3 py-2 rounded-2xl border border-lilac-100 shadow-xs text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 font-bold text-ink-700 mr-1">
+            <Filter size={13} className="text-lilac-600" />
+            <span>Filtrar por Área:</span>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {[
+              { id: "all", label: `Todos (${rawItems.length})` },
+              { id: "clinica", label: `Clínica (${rawItems.filter((e: any) => e.resolvedArea === "clinica").length})` },
+              { id: "cursos", label: `Cursos (${rawItems.filter((e: any) => e.resolvedArea === "cursos").length})` },
+              { id: "general", label: `General (${rawItems.filter((e: any) => e.resolvedArea === "general").length})` },
+            ].map((btn) => (
+              <Link
+                key={btn.id}
+                href={`/erp/gastos?month=${activeMonth}&area=${btn.id}`}
+                className={`px-2.5 py-1 rounded-xl font-bold transition ${
+                  activeAreaFilter === btn.id
+                    ? "bg-lilac-600 text-white shadow-xs"
+                    : "bg-lilac-50/70 text-ink-600 hover:bg-lilac-100"
+                }`}
+              >
+                {btn.label}
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          {[
-            { id: "all", label: `Todos (${rawItems.length})` },
-            { id: "clinica", label: `Clínica (${rawItems.filter((e: any) => e.resolvedArea === "clinica").length})` },
-            { id: "cursos", label: `Cursos (${rawItems.filter((e: any) => e.resolvedArea === "cursos").length})` },
-            { id: "general", label: `General (${rawItems.filter((e: any) => e.resolvedArea === "general").length})` },
-          ].map((btn) => (
-            <Link
-              key={btn.id}
-              href={`/erp/gastos?month=${activeMonth}&area=${btn.id}`}
-              className={`px-2.5 py-1 rounded-xl font-bold transition ${
-                activeAreaFilter === btn.id
-                  ? "bg-lilac-600 text-white shadow-xs"
-                  : "bg-lilac-50/70 text-ink-600 hover:bg-lilac-100"
-              }`}
-            >
-              {btn.label}
-            </Link>
-          ))}
-        </div>
+
+        {/* Botón Facturas Pendientes por Registrar con número alarmado */}
+        <button
+          type="button"
+          onClick={() => setIsPendingModalOpen(true)}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
+            pendingCount > 0
+              ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
+              : "bg-gray-100 hover:bg-gray-200/80 text-gray-500 border border-gray-200 cursor-pointer"
+          }`}
+          title={
+            pendingCount > 0
+              ? `${pendingCount} facturas del SRI de este mes pendientes por registrar`
+              : "No hay facturas SRI pendientes en este mes"
+          }
+        >
+          <Receipt size={14} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
+          <span>Facturas pendientes por registrar</span>
+          <span
+            className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-black ${
+              pendingCount > 0
+                ? "bg-rose-500 text-white shadow-xs animate-pulse"
+                : "bg-gray-200 text-gray-600"
+            }`}
+          >
+            {pendingCount}
+          </span>
+        </button>
       </div>
 
       {/* Lista de Gastos */}
