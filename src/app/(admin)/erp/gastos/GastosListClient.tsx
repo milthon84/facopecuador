@@ -411,18 +411,18 @@ export default function GastosListClient({
         </div>
       </div>
 
-      {/* Barra de Filtros Compacta con Combos de Selección */}
-      <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-lilac-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Buscador más pequeño */}
-          <div className="relative w-40 sm:w-52">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+      {/* Barra de Filtros Compacta en una sola línea */}
+      <div className="bg-white p-2 rounded-2xl border border-lilac-200/80 shadow-xs flex items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto text-xs">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Buscador compacto */}
+          <div className="relative w-28 sm:w-36">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
               type="text"
               value={textSearch}
               onChange={(e) => setTextSearch(e.target.value)}
               placeholder="Buscar..."
-              className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-1 focus:ring-lilac-400 text-ink-900"
+              className="w-full pl-7 pr-6 py-1 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-1 focus:ring-lilac-400 text-ink-900"
             />
             {textSearch && (
               <button
@@ -430,7 +430,7 @@ export default function GastosListClient({
                 onClick={() => setTextSearch("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             )}
           </div>
@@ -439,25 +439,25 @@ export default function GastosListClient({
           <select
             value={areaFilter}
             onChange={(e) => setAreaFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
           >
-            <option value="all">Todas las Áreas</option>
-            <option value="clinica">Área: Clínica</option>
-            <option value="cursos">Área: Cursos</option>
-            <option value="general">Área: General</option>
+            <option value="all">Áreas</option>
+            <option value="clinica">Clínica</option>
+            <option value="cursos">Cursos</option>
+            <option value="general">General</option>
           </select>
 
-          {/* Combo: Tipo de Comprobante (reemplaza al de SRI) */}
+          {/* Combo: Tipo de Comprobante */}
           <select
             value={docTypeFilter}
             onChange={(e) => setDocTypeFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
           >
-            <option value="all">Todos los Comprobantes</option>
-            <option value="factura_sri">Factura Electrónica SRI</option>
-            <option value="factura">Factura (Cualquiera)</option>
+            <option value="all">Comprobantes</option>
+            <option value="factura_sri">Factura SRI</option>
+            <option value="factura">Factura</option>
             <option value="nota_venta">Nota de Venta</option>
-            <option value="sin_documento">Sin Comprobante / Recibo</option>
+            <option value="sin_documento">Sin Comprobante</option>
           </select>
 
           {/* Combo: Categoría */}
@@ -465,9 +465,9 @@ export default function GastosListClient({
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 max-w-[170px] truncate shadow-2xs"
+              className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 max-w-[140px] truncate shadow-2xs"
             >
-              <option value="all">Todas las Categorías</option>
+              <option value="all">Categorías</option>
               {availableCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -480,10 +480,10 @@ export default function GastosListClient({
           <select
             value={paymentFilter}
             onChange={(e) => setPaymentFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
           >
-            <option value="all">Todas las Formas de Pago</option>
-            <option value="efectivo">Efectivo (Caja Chica)</option>
+            <option value="all">Formas de Pago</option>
+            <option value="efectivo">Efectivo</option>
             <option value="transferencia">Transferencia</option>
             <option value="tarjeta">Tarjeta</option>
           </select>
@@ -492,7 +492,7 @@ export default function GastosListClient({
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-xl transition shadow-2xs"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-xl transition shadow-2xs shrink-0"
               title="Restablecer filtros"
             >
               <RotateCcw size={11} /> Limpiar
@@ -500,16 +500,16 @@ export default function GastosListClient({
           )}
         </div>
 
-        <div className="flex items-center gap-2 ml-auto shrink-0">
-          <span className="text-[11px] text-ink-500 font-medium hidden lg:inline">
-            Mostrando <strong>{displayedItems.length}</strong> de {rawItems.length}
+        <div className="flex items-center gap-2 ml-auto shrink-0 pl-1">
+          <span className="text-[11px] text-ink-400 font-medium whitespace-nowrap hidden sm:inline">
+            {displayedItems.length} de {rawItems.length}
           </span>
 
           {/* Botón Facturas Pendientes SRI */}
           <button
             type="button"
             onClick={() => setIsPendingModalOpen(true)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition shadow-xs whitespace-nowrap shrink-0 ${
               pendingCount > 0
                 ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
                 : "bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer"
@@ -521,9 +521,9 @@ export default function GastosListClient({
             }
           >
             <Receipt size={13} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
-            <span>Facturas pendientes SRI</span>
+            <span>Facturas SRI</span>
             <span
-              className={`inline-flex items-center justify-center px-2 py-0.2 rounded-full text-[11px] font-black ${
+              className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                 pendingCount > 0
                   ? "bg-rose-500 text-white shadow-xs animate-pulse"
                   : "bg-gray-200 text-gray-600"
