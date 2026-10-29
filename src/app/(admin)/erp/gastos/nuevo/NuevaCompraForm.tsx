@@ -22,6 +22,7 @@ import {
   FileCheck2,
   Info,
   HelpCircle,
+  Key,
 } from "lucide-react";
 import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
@@ -435,7 +436,6 @@ export default function NuevaCompraForm({
         {existingReceiptUrl && <input type="hidden" name="existing_receipt_url" value={existingReceiptUrl} />}
         <input type="hidden" name="category" value={items[0]?.category || initialData?.category || (area === "clinica" ? "Insumo y Material" : "Suministro")} />
         <input type="hidden" name="factura_recibida_clave_acceso" value={selectedFacturaClave || ""} />
-        <input type="hidden" name="authorization_number" value={authNumber || ""} />
 
         {errorMsg && (
           <div className="bg-red-50 border border-red-200 text-red-800 text-xs px-3.5 py-2.5 rounded-xl font-medium flex items-center justify-between">
@@ -473,16 +473,18 @@ export default function NuevaCompraForm({
                 <div className="flex items-center gap-2 bg-white/90 border border-teal-300 rounded-xl px-2.5 py-1 text-xs">
                   <CheckCircle2 size={14} className="text-teal-600 shrink-0" />
                   <span className="font-semibold text-teal-950 font-mono text-[11px]">
-                    {facturaVinculada.numero_comprobante || "Factura SRI"}
+                    Factura SRI: {facturaVinculada.numero_comprobante || "Vinculada"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={desvincularFactura}
-                    className="text-ink-400 hover:text-red-600 p-0.5 rounded transition"
-                    title="Desvincular factura"
-                  >
-                    <X size={13} />
-                  </button>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={desvincularFactura}
+                      className="text-ink-400 hover:text-red-600 p-0.5 rounded transition"
+                      title="Cambiar selección antes de guardar"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -664,11 +666,11 @@ export default function NuevaCompraForm({
           </div>
         </div>
 
-        {/* ── 3. N° Documento y Fecha ── */}
+        {/* ── 3. N° Documento, Autorización SRI y Fecha ── */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {!isSinDocumento ? (
             <>
-              <div className="sm:col-span-6 space-y-1">
+              <div className="sm:col-span-4 space-y-1">
                 <label className="text-xs font-semibold text-ink-700">
                   N° {docType === "factura" ? "Factura" : "Nota de Venta"} (opcional)
                 </label>
@@ -680,7 +682,20 @@ export default function NuevaCompraForm({
                   className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
                 />
               </div>
-              <div className="sm:col-span-6 space-y-1">
+              <div className="sm:col-span-5 space-y-1">
+                <label className="text-xs font-semibold text-ink-700 flex items-center gap-1">
+                  <Key size={12} className="text-ink-400" /> N° Autorización / Clave SRI (opcional)
+                </label>
+                <input
+                  name="authorization_number"
+                  maxLength={49}
+                  value={authNumber}
+                  onChange={(e) => setAuthNumber(e.target.value)}
+                  placeholder="49 dígitos del SRI"
+                  className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
+                />
+              </div>
+              <div className="sm:col-span-3 space-y-1">
                 <label className="text-xs font-semibold text-ink-700 flex items-center gap-1">
                   <Calendar size={13} className="text-ink-400" /> Fecha *
                 </label>
@@ -708,6 +723,7 @@ export default function NuevaCompraForm({
                 className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
               />
               <input type="hidden" name="document_number" value="" />
+              <input type="hidden" name="authorization_number" value="" />
             </div>
           )}
         </div>

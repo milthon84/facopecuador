@@ -38,34 +38,14 @@ import {
   EXPENSE_CATEGORY_DETAILS,
   normalizeCategoryName,
 } from "@/lib/expense-types";
+import { deleteOrVoidExpense } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 async function voidExpense(formData: FormData) {
   "use server";
-  await assertWritePermission("/erp/gastos");
   const id = formData.get("id") as string;
-  const supabase = createAdminClient();
-
-  const { data: exp } = await supabase.from("expenses").select("expense_date, factura_recibida_clave_acceso").eq("id", id).single();
-  if (exp?.expense_date) {
-    await assertMonthOpen(exp.expense_date);
-  }
-
-  await supabase.from("expenses").update({ status: "void" }).eq("id", id);
-
-  // Si estaba vinculada a una factura del SRI, devolverla a estado pendiente
-  if (exp?.factura_recibida_clave_acceso) {
-    try {
-      await supabase
-        .from("facturas_recibidas")
-        .update({ estado_facop: "pendiente", expense_id: null })
-        .eq("clave_acceso", exp.factura_recibida_clave_acceso);
-    } catch (err) {
-      console.warn("No se pudo desvincular factura_recibida:", err);
-    }
-  }
-
+  await deleteOrVoidExpense(id);
   redirect("/erp/gastos");
 }
 
@@ -438,7 +418,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               type="submit"
               className="w-full flex items-center justify-center gap-2 text-sm text-red-600 border border-red-200 hover:bg-red-50 px-4 py-2.5 rounded-xl transition-colors font-medium"
             >
-              <Trash2 size={15} /> Anular gasto
+              <Trash2 size={15} /> Eliminar / Anular gasto
             </button>
           </form>
         </div>

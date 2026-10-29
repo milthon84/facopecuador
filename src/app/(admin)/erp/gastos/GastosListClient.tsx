@@ -24,6 +24,7 @@ import {
   AlertCircle,
   FileCheck2,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { FacturaRecibida } from "@/lib/expense-types";
 import {
@@ -33,7 +34,7 @@ import {
   resolveFacturaSriClave,
   resolveExpenseDocType,
 } from "@/lib/expense-areas";
-import { linkExpenseToFactura } from "./actions";
+import { linkExpenseToFactura, deleteOrVoidExpense } from "./actions";
 
 const CATEGORY_COLORS: Record<string, string> = {
   // 6 Categorías oficiales
@@ -626,10 +627,39 @@ export default function GastosListClient({
                     )}
                   </Link>
 
-                  <div className="text-right shrink-0">
-                    <div className="font-extrabold text-red-600 text-sm">${Number(exp.total).toFixed(2)}</div>
-                    {Number(exp.iva_amount) > 0 && (
-                      <div className="text-[11px] text-ink-400 font-medium">IVA: ${Number(exp.iva_amount).toFixed(2)}</div>
+                  <div className="text-right shrink-0 flex items-center gap-2">
+                    <div>
+                      <div className="font-extrabold text-red-600 text-sm">${Number(exp.total).toFixed(2)}</div>
+                      {Number(exp.iva_amount) > 0 && (
+                        <div className="text-[11px] text-ink-400 font-medium">IVA: ${Number(exp.iva_amount).toFixed(2)}</div>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (
+                            confirm(
+                              `¿Estás seguro de anular/eliminar el gasto de "${exp.supplier_name}" por $${Number(exp.total).toFixed(2)}?\n\nSi tiene una factura SRI vinculada, volverá automáticamente a estar pendiente de registro.`
+                            )
+                          ) {
+                            const res = await deleteOrVoidExpense(exp.id);
+                            if (res.success) {
+                              startTransition(() => {
+                                router.refresh();
+                              });
+                            } else {
+                              alert(res.error || "No se pudo anular el gasto");
+                            }
+                          }
+                        }}
+                        className="text-ink-300 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
+                        title="Eliminar / Anular gasto (si tiene factura SRI vinculada, volverá a pendiente)"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     )}
                   </div>
                 </div>
