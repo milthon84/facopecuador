@@ -144,7 +144,33 @@ export function resolveFacturaSriClave(expense: {
 }
 
 /**
- * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [FACTURA_SRI:...]) de las notas visibles
+ * Determina el tipo de comprobante de un gasto: "factura" | "nota_venta" | "sin_documento"
+ */
+export function resolveExpenseDocType(expense: {
+  document_number?: string | null;
+  notes?: string | null;
+  factura_recibida_clave_acceso?: string | null;
+  authorization_number?: string | null;
+}): "factura" | "nota_venta" | "sin_documento" {
+  if (
+    expense.factura_recibida_clave_acceso ||
+    expense.authorization_number?.length === 49 ||
+    expense.notes?.includes("[FACTURA_SRI:")
+  ) {
+    return "factura";
+  }
+
+  const match = expense.notes?.match(/\[TIPO:(factura|nota_venta|sin_documento)\]/i);
+  if (match && match[1]) return match[1].toLowerCase() as any;
+
+  const doc = (expense.document_number || "").toLowerCase().trim();
+  if (!doc) return "sin_documento";
+  if (doc.includes("nota") || doc.includes("nv")) return "nota_venta";
+  return "factura";
+}
+
+/**
+ * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [FACTURA_SRI:...], [TIPO:...]) de las notas visibles
  */
 export function cleanVisibleNotes(notes: string | null | undefined): string {
   if (!notes) return "";
@@ -152,6 +178,7 @@ export function cleanVisibleNotes(notes: string | null | undefined): string {
     .replace(/\[AREA:[a-z]+\]/gi, "")
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
     .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
+    .replace(/\[TIPO:[a-z_]+\]/gi, "")
     .trim();
 }
 

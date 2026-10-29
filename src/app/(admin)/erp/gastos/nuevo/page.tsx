@@ -105,7 +105,8 @@ async function saveExpense(formData: FormData) {
     }
   }
 
-  let notes = `[AREA:${area}]`;
+  const document_type = (formData.get("document_type") as string) || "factura";
+  let notes = `[AREA:${area}] [TIPO:${document_type}]`;
   if (receiptUrl) {
     notes += ` [COMPROBANTE:${receiptUrl}]`;
   }

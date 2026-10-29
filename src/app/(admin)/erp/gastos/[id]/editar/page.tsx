@@ -107,14 +107,16 @@ async function updateExpense(formData: FormData) {
     payment_reference = `Tarj: ${card_type} | Lote: ${card_lote} | Voucher: ${card_voucher}`;
   }
 
+  const document_type = (formData.get("document_type") as string) || "factura";
   const { data: currentExp } = await supabase.from("expenses").select("notes").eq("id", id).maybeSingle();
   let cleanNotes = (currentExp?.notes || "")
     .replace(/\[AREA:[a-z]+\]/gi, "")
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
     .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
+    .replace(/\[TIPO:[a-z_]+\]/gi, "")
     .trim();
 
-  let updatedNotes = `[AREA:${area}]`;
+  let updatedNotes = `[AREA:${area}] [TIPO:${document_type}]`;
   if (receiptUrl) {
     updatedNotes += ` [COMPROBANTE:${receiptUrl}]`;
   }

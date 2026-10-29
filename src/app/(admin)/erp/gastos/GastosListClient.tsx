@@ -31,6 +31,7 @@ import {
   EXPENSE_AREA_CONFIG,
   resolveReceiptUrl,
   resolveFacturaSriClave,
+  resolveExpenseDocType,
 } from "@/lib/expense-areas";
 import { linkExpenseToFactura } from "./actions";
 
@@ -134,9 +135,9 @@ export default function GastosListClient({
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
   const [pendingSearch, setPendingSearch] = useState("");
 
-  // Filtros interactivos para la lista de gastos
+  // Filtros compactos mediante combos de selección
   const [textSearch, setTextSearch] = useState("");
-  const [sriFilter, setSriFilter] = useState<"todos" | "con_sri" | "sin_sri">("todos");
+  const [docTypeFilter, setDocTypeFilter] = useState<string>("all");
   const [areaFilter, setAreaFilter] = useState<string>(activeAreaFilter || "all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
@@ -155,27 +156,34 @@ export default function GastosListClient({
     return rawItems.filter((exp: any) => {
       const sriClave = resolveFacturaSriClave(exp);
       const hasSri = Boolean(sriClave);
+      const docType = resolveExpenseDocType(exp);
 
-      // 1. Filtro por Área
+      // 1. Filtro por Área (Combo)
       if (areaFilter !== "all" && exp.resolvedArea !== areaFilter) {
         return false;
       }
 
-      // 2. Filtro por SRI
-      if (sriFilter === "con_sri" && !hasSri) return false;
-      if (sriFilter === "sin_sri" && hasSri) return false;
+      // 2. Filtro por Tipo de Comprobante (Combo en vez de SRI)
+      if (docTypeFilter === "factura_sri" && !hasSri) return false;
+      if (docTypeFilter === "factura" && docType !== "factura") return false;
+      if (docTypeFilter === "nota_venta" && docType !== "nota_venta") return false;
+      if (docTypeFilter === "sin_documento" && docType !== "sin_documento") return false;
 
-      // 3. Filtro por Categoría
+      // 3. Filtro por Categoría (Combo)
       if (categoryFilter !== "all" && exp.category !== categoryFilter) {
         return false;
       }
 
-      // 4. Filtro por Forma de pago
-      if (paymentFilter !== "all" && exp.payment_method !== paymentFilter) {
-        return false;
+      // 4. Filtro por Forma de pago (Combo)
+      if (paymentFilter !== "all") {
+        if (paymentFilter === "tarjeta") {
+          if (exp.payment_method !== "tarjeta" && exp.payment_method !== "tarjeta_credito") return false;
+        } else if (exp.payment_method !== paymentFilter) {
+          return false;
+        }
       }
 
-      // 5. Búsqueda de texto libre
+      // 5. Búsqueda de texto libre (más pequeña)
       if (textSearch.trim()) {
         const q = textSearch.toLowerCase().trim();
         const sup = (exp.supplier_name || "").toLowerCase();
@@ -200,18 +208,18 @@ export default function GastosListClient({
 
       return true;
     });
-  }, [rawItems, areaFilter, sriFilter, categoryFilter, paymentFilter, textSearch]);
+  }, [rawItems, areaFilter, docTypeFilter, categoryFilter, paymentFilter, textSearch]);
 
   const hasActiveFilters =
     areaFilter !== "all" ||
-    sriFilter !== "todos" ||
+    docTypeFilter !== "all" ||
     categoryFilter !== "all" ||
     paymentFilter !== "all" ||
     Boolean(textSearch.trim());
 
   const resetFilters = () => {
     setTextSearch("");
-    setSriFilter("todos");
+    setDocTypeFilter("all");
     setAreaFilter("all");
     setCategoryFilter("all");
     setPaymentFilter("all");
@@ -402,34 +410,105 @@ export default function GastosListClient({
         </div>
       </div>
 
-      {/* Barra de Filtros Avanzados y Facturas Pendientes */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-lilac-200/80 shadow-xs space-y-3">
-        {/* Fila 1: Búsqueda rápida + Botón Facturas Pendientes */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+      {/* Barra de Filtros Compacta con Combos de Selección */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-lilac-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Buscador más pequeño */}
+          <div className="relative w-40 sm:w-52">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
               type="text"
               value={textSearch}
               onChange={(e) => setTextSearch(e.target.value)}
-              placeholder="Buscar por proveedor, RUC, detalle, N° comprobante o monto..."
-              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-lilac-400 text-ink-900 transition"
+              placeholder="Buscar..."
+              className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-1 focus:ring-lilac-400 text-ink-900"
             />
             {textSearch && (
               <button
                 type="button"
                 onClick={() => setTextSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             )}
           </div>
 
+          {/* Combo: Área */}
+          <select
+            value={areaFilter}
+            onChange={(e) => setAreaFilter(e.target.value)}
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+          >
+            <option value="all">Todas las Áreas</option>
+            <option value="clinica">Área: Clínica</option>
+            <option value="cursos">Área: Cursos</option>
+            <option value="general">Área: General</option>
+          </select>
+
+          {/* Combo: Tipo de Comprobante (reemplaza al de SRI) */}
+          <select
+            value={docTypeFilter}
+            onChange={(e) => setDocTypeFilter(e.target.value)}
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+          >
+            <option value="all">Todos los Comprobantes</option>
+            <option value="factura_sri">Factura Electrónica SRI</option>
+            <option value="factura">Factura (Cualquiera)</option>
+            <option value="nota_venta">Nota de Venta</option>
+            <option value="sin_documento">Sin Comprobante / Recibo</option>
+          </select>
+
+          {/* Combo: Categoría */}
+          {availableCategories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 max-w-[170px] truncate shadow-2xs"
+            >
+              <option value="all">Todas las Categorías</option>
+              {availableCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Combo: Forma de Pago */}
+          <select
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+          >
+            <option value="all">Todas las Formas de Pago</option>
+            <option value="efectivo">Efectivo (Caja Chica)</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="tarjeta">Tarjeta</option>
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-xl transition shadow-2xs"
+              title="Restablecer filtros"
+            >
+              <RotateCcw size={11} /> Limpiar
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto shrink-0">
+          <span className="text-[11px] text-ink-500 font-medium hidden lg:inline">
+            Mostrando <strong>{displayedItems.length}</strong> de {rawItems.length}
+          </span>
+
+          {/* Botón Facturas Pendientes SRI */}
           <button
             type="button"
             onClick={() => setIsPendingModalOpen(true)}
-            className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs shrink-0 ${
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
               pendingCount > 0
                 ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
                 : "bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer"
@@ -440,10 +519,10 @@ export default function GastosListClient({
                 : "No hay facturas SRI pendientes en este mes"
             }
           >
-            <Receipt size={14} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
+            <Receipt size={13} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
             <span>Facturas pendientes SRI</span>
             <span
-              className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-black ${
+              className={`inline-flex items-center justify-center px-2 py-0.2 rounded-full text-[11px] font-black ${
                 pendingCount > 0
                   ? "bg-rose-500 text-white shadow-xs animate-pulse"
                   : "bg-gray-200 text-gray-600"
@@ -452,121 +531,6 @@ export default function GastosListClient({
               {pendingCount}
             </span>
           </button>
-        </div>
-
-        {/* Fila 2: Filtros por Criterios */}
-        <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-lilac-100 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Filtro por Área */}
-            <div className="flex items-center gap-1 bg-lilac-50/60 p-1 rounded-xl border border-lilac-100">
-              <span className="text-[11px] font-bold text-ink-500 px-1.5 flex items-center gap-1">
-                <Filter size={11} className="text-lilac-600" /> Área:
-              </span>
-              {[
-                { id: "all", label: "Todas" },
-                { id: "clinica", label: "Clínica" },
-                { id: "cursos", label: "Cursos" },
-                { id: "general", label: "General" },
-              ].map((btn) => (
-                <button
-                  key={btn.id}
-                  type="button"
-                  onClick={() => setAreaFilter(btn.id)}
-                  className={`px-2 py-0.5 rounded-lg font-semibold transition ${
-                    areaFilter === btn.id
-                      ? "bg-lilac-600 text-white shadow-xs"
-                      : "text-ink-600 hover:bg-white"
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filtro por Estado SRI */}
-            <div className="flex items-center gap-1 bg-lilac-50/60 p-1 rounded-xl border border-lilac-100">
-              <span className="text-[11px] font-bold text-ink-500 px-1.5 flex items-center gap-1">
-                <Receipt size={11} className="text-teal-600" /> SRI:
-              </span>
-              <button
-                type="button"
-                onClick={() => setSriFilter("todos")}
-                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
-                  sriFilter === "todos"
-                    ? "bg-lilac-600 text-white shadow-xs"
-                    : "text-ink-600 hover:bg-white"
-                }`}
-              >
-                Todos
-              </button>
-              <button
-                type="button"
-                onClick={() => setSriFilter("con_sri")}
-                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
-                  sriFilter === "con_sri"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-emerald-800 hover:bg-white"
-                }`}
-              >
-                ✓ Con Factura SRI
-              </button>
-              <button
-                type="button"
-                onClick={() => setSriFilter("sin_sri")}
-                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
-                  sriFilter === "sin_sri"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-indigo-800 hover:bg-white"
-                }`}
-              >
-                Pendientes Relacionar
-              </button>
-            </div>
-
-            {/* Filtro por Categoría */}
-            {availableCategories.length > 0 && (
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="text-xs bg-lilac-50/60 border border-lilac-200 rounded-xl px-2.5 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400"
-              >
-                <option value="all">Todas las Categorías</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {/* Filtro por Forma de Pago */}
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="text-xs bg-lilac-50/60 border border-lilac-200 rounded-xl px-2.5 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400"
-            >
-              <option value="all">Todas las Formas de Pago</option>
-              <option value="efectivo">Efectivo</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="tarjeta">Tarjeta</option>
-            </select>
-          </div>
-
-          {/* Contador y Limpiar Filtros */}
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-[11px] text-ink-500 font-medium">
-              Mostrando <strong className="text-ink-900 font-bold">{displayedItems.length}</strong> de {rawItems.length}
-            </span>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg transition"
-              >
-                <RotateCcw size={11} /> Limpiar filtros
-              </button>
-            )}
-          </div>
         </div>
       </div>
 

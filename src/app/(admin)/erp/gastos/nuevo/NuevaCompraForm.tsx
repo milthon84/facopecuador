@@ -271,8 +271,15 @@ export default function NuevaCompraForm({
 
   const needsAccount = method === "efectivo" || method === "transferencia";
   const needsReference = method === "transferencia";
-  const accountOptions = method === "efectivo" ? cajaAccounts : bankAccounts;
-  const accountLabel = method === "efectivo" ? "Caja Chica" : "Cuenta Bancaria";
+
+  // Cuentas de Caja Chica para Efectivo
+  const efectivoCajaAccounts = cajaAccounts.filter((a) =>
+    (a.bank_name || "").toLowerCase().includes("caja chica")
+  );
+  const finalCajaAccounts = efectivoCajaAccounts.length > 0 ? efectivoCajaAccounts : cajaAccounts;
+
+  const accountOptions = method === "efectivo" ? finalCajaAccounts : bankAccounts;
+  const accountLabel = method === "efectivo" ? "Caja Chica de Salida" : "Cuenta Bancaria Emisora";
 
   const isSinDocumento = docType === "sin_documento";
 
@@ -585,6 +592,7 @@ export default function NuevaCompraForm({
               <option value="nota_venta">Nota de Venta</option>
               <option value="sin_documento">Gasto Directo (Sin Doc)</option>
             </select>
+            <input type="hidden" name="document_type" value={docType} />
           </div>
         </div>
 
@@ -714,14 +722,14 @@ export default function NuevaCompraForm({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2 pr-3 font-bold min-w-[280px] sm:min-w-[340px]">Descripción del Bien / Servicio</th>
-                  <th className="py-2 px-2 w-44 sm:w-48 font-bold">Categoría Contable</th>
+                  <th className="py-2 pr-3 font-bold">Descripción del Bien / Servicio</th>
+                  <th className="py-2 px-2 w-36 sm:w-40 font-bold">Categoría Contable</th>
                   <th className="py-2 px-2 w-16 text-center font-bold">Cant.</th>
                   <th className="py-2 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
-                    <th className="py-2 px-2 w-20 text-center font-bold">IVA</th>
+                    <th className="py-2 px-2 w-16 text-center font-bold">IVA</th>
                   )}
-                  <th className="py-2 pl-2 pr-1 w-24 text-right font-bold">Subtotal</th>
+                  <th className="py-2 pl-2 pr-1 w-20 text-right font-bold">Subtotal</th>
                   <th className="py-2 pl-1 w-8"></th>
                 </tr>
               </thead>
@@ -732,60 +740,33 @@ export default function NuevaCompraForm({
                   const catDetail = EXPENSE_CATEGORY_DETAILS[currentCat];
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-3 align-top min-w-[280px] sm:min-w-[340px]">
+                      <td className="py-2 pr-3 align-middle">
                         <input
                           type="text"
                           required
                           value={item.description}
                           onChange={(e) => updateItemRow(item.id, "description", e.target.value)}
-                          placeholder={`Ej. Descripción del bien o servicio adquirido ${idx + 1}`}
+                          placeholder={`Ej. Descripción del bien o servicio ${idx + 1}`}
                           className="w-full border border-lilac-200 rounded-lg px-3 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 px-2 align-top w-44 sm:w-48">
-                        <div className="space-y-1">
-                          <select
-                            value={currentCat}
-                            onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
-                            title={`${catDetail?.description} — Incluye: ${catDetail?.examples}`}
-                            className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none"
-                          >
-                            {EXPENSE_ITEM_CATEGORIES.map((cat) => (
-                              <option
-                                key={cat}
-                                value={cat}
-                                title={`${EXPENSE_CATEGORY_DETAILS[cat]?.description} (${EXPENSE_CATEGORY_DETAILS[cat]?.examples})`}
-                              >
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
-
-                          {/* Descripción / Qué contempla al seleccionar o pasar el mouse */}
-                          {catDetail && (
-                            <div
-                              className="group/cat relative text-[10px] text-ink-500 bg-lilac-50/70 border border-lilac-100 rounded-md p-1 leading-tight flex items-center justify-between gap-1 cursor-help hover:bg-lilac-100/70 transition"
-                              title={`Contempla: ${catDetail.examples}`}
+                      <td className="py-2 px-2 align-middle w-36 sm:w-40">
+                        <select
+                          value={currentCat}
+                          onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
+                          title={`${catDetail?.description || currentCat} — Contempla: ${catDetail?.examples || ""}`}
+                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
+                        >
+                          {EXPENSE_ITEM_CATEGORIES.map((cat) => (
+                            <option
+                              key={cat}
+                              value={cat}
+                              title={`${EXPENSE_CATEGORY_DETAILS[cat]?.description} (${EXPENSE_CATEGORY_DETAILS[cat]?.examples})`}
                             >
-                              <span className="truncate flex-1">{catDetail.description}</span>
-                              <Info size={11} className="shrink-0 text-lilac-500 group-hover/cat:text-lilac-700" />
-
-                              {/* Tooltip flotante enriquecido al pasar el mouse */}
-                              <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover/cat:block w-72 p-2.5 bg-ink-950 text-white text-[11px] rounded-xl shadow-xl z-50 pointer-events-none">
-                                <div className="font-bold text-lilac-200 border-b border-ink-800 pb-1 mb-1 flex items-center justify-between">
-                                  <span>{catDetail.name}</span>
-                                  <span className="text-[10px] text-lilac-400 font-mono">Cta {catDetail.accountCode}</span>
-                                </div>
-                                <p className="text-ink-200 text-[10px] mb-1 leading-tight">
-                                  {catDetail.description}
-                                </p>
-                                <p className="text-[10px] text-ink-300 leading-tight">
-                                  <strong className="text-white">Contempla:</strong> {catDetail.examples}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="py-2 px-2 align-top">
                         <input
@@ -895,38 +876,50 @@ export default function NuevaCompraForm({
           <input type="hidden" name="payment_method" value={method} />
 
           {needsAccount && (
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
-              <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
-                <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
-                <select
-                  name="bank_account_id"
-                  required
-                  defaultValue={initialData?.bank_account_id || ""}
-                  className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
-                >
-                  <option value="">— Seleccionar Cuenta —</option>
-                  {accountOptions.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.bank_name}
-                      {a.account_number ? ` · ${a.account_number}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {needsReference && (
-                <div className="sm:col-span-5 space-y-1">
-                  <label className="text-xs font-semibold text-ink-700">N° Referencia *</label>
-                  <input
-                    type="text"
-                    name="payment_reference"
+            <div className="space-y-1.5 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
+                  <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
+                  <select
+                    name="bank_account_id"
                     required
-                    defaultValue={initialData?.payment_reference || ""}
-                    placeholder="TRF-001234"
-                    className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
-                  />
+                    defaultValue={
+                      initialData?.bank_account_id ||
+                      (method === "efectivo" && accountOptions.length === 1 ? accountOptions[0].id : "")
+                    }
+                    className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
+                  >
+                    <option value="">
+                      {method === "efectivo" ? "— Seleccionar Caja Chica —" : "— Seleccionar Cuenta Bancaria —"}
+                    </option>
+                    {accountOptions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.bank_name}
+                        {a.account_number ? ` · ${a.account_number}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
+
+                {needsReference && (
+                  <div className="sm:col-span-5 space-y-1">
+                    <label className="text-xs font-semibold text-ink-700">N° Referencia *</label>
+                    <input
+                      type="text"
+                      name="payment_reference"
+                      required
+                      defaultValue={initialData?.payment_reference || ""}
+                      placeholder="Ej. TRF-123456"
+                      className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-ink-500">
+                {method === "efectivo"
+                  ? "ℹ️ Todo pago en efectivo debe liquidarse exclusivamente desde una Caja Chica autorizada."
+                  : "ℹ️ Transferencias originadas exclusivamente desde cuentas bancarias habilitadas de la institución."}
+              </p>
             </div>
           )}
 
