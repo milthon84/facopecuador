@@ -1,10 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
-import { Wallet, ArrowRight } from "lucide-react";
+import { Wallet, ArrowRight, UserCheck } from "lucide-react";
 import Link from "next/link";
 import GastoCajaChicaModal from "@/components/GastoCajaChicaModal";
 import ReponerCajaChicaModal from "@/components/ReponerCajaChicaModal";
 import SetupCajaChicaModal from "@/components/SetupCajaChicaModal";
+import EditarResponsableCajaModal from "@/components/EditarResponsableCajaModal";
+import { parseResponsableCajaChica } from "@/lib/caja-chica-types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ type BankAccount = {
   account_type: string;
   initial_balance: number;
   is_active: boolean;
+  notes?: string | null;
 };
 
 type BankTx = {
@@ -53,24 +56,12 @@ export default async function CajaChicaPage() {
   const cajaAccounts = ((allAccounts as BankAccount[]) || []).filter(
     (a) => a.account_type === "caja" && !esCajaGeneral(a)
   );
+
+  // Las reposiciones de caja chica SOLO pueden ser por transferencia desde cuentas bancarias de Niagas (NO desde caja general)
   const bankAccounts = ((allAccounts as BankAccount[]) || []).filter(
     (a) => a.account_type !== "caja"
   );
-  const cajaGeneral = ((allAccounts as BankAccount[]) || []).find(esCajaGeneral);
-
-  const sourceAccounts = [
-    ...(cajaGeneral
-      ? [
-          {
-            id: cajaGeneral.id,
-            bank_name: `Caja General — ${cajaGeneral.bank_name}`,
-            account_number: null,
-            account_type: "caja",
-          },
-        ]
-      : []),
-    ...bankAccounts,
-  ];
+  const sourceAccounts = bankAccounts;
 
   const txMap = new Map<string, BankTx[]>();
   ((allTx as BankTx[]) || []).forEach((tx) => {
@@ -99,7 +90,7 @@ export default async function CajaChicaPage() {
             <div>
               <h2 className="font-semibold text-ink-900">Configurar caja chica</h2>
               <p className="text-xs text-ink-500 mt-1">
-                Crea una caja chica para gastos menores de oficina o atención.
+                Crea una caja chica para gastos menores de oficina o atención con su custodio responsable.
               </p>
             </div>
             <SetupCajaChicaModal />
@@ -124,6 +115,7 @@ export default async function CajaChicaPage() {
         const txs = txMap.get(caja.id) || [];
         const isLow = balance < caja.initial_balance * 0.2;
         const deficit = r2(Math.max(caja.initial_balance - balance, 0));
+        const responsable = parseResponsableCajaChica(caja.notes);
 
         return (
           <div key={caja.id} className="space-y-4">
@@ -151,7 +143,7 @@ export default async function CajaChicaPage() {
                     </p>
                   ) : (
                     <p className="text-xs text-green-700 mt-1">
-                      Fondo inicial: ${caja.initial_balance.toFixed(2)}
+                      Fondo inicial fijado: ${caja.initial_balance.toFixed(2)}
                     </p>
                   )}
                 </div>
@@ -162,12 +154,54 @@ export default async function CajaChicaPage() {
                     <GastoCajaChicaModal cajaId={caja.id} />
                     <ReponerCajaChicaModal
                       cajaId={caja.id}
+                      cajaName={caja.bank_name}
                       deficit={deficit}
                       sourceAccounts={sourceAccounts}
+                      responsable={responsable}
                     />
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── Custodio Responsable de Caja Chica ─────────────────────── */}
+            <div className="bg-white border border-lilac-200/80 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-lilac-100 text-lilac-700 flex items-center justify-center shrink-0 shadow-2xs">
+                  <UserCheck size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-ink-900">Custodio Responsable:</span>
+                    <span className="text-xs font-bold text-lilac-800">
+                      {responsable?.nombre || "Sin custodio asignado"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-ink-500 flex-wrap">
+                    {responsable?.identificacion && (
+                      <span>CI: <strong className="font-mono text-ink-700">{responsable.identificacion}</strong></span>
+                    )}
+                    {responsable?.identificacion && responsable?.cuenta && <span>·</span>}
+                    {responsable?.cuenta ? (
+                      <span className="text-ink-600">
+                        Depósito de reposiciones a: <strong className="font-medium text-ink-800">{responsable.banco || "Banco"}</strong> ({responsable.tipo_cuenta || "Ahorros"} <span className="font-mono">{responsable.cuenta}</span>)
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 font-medium">Sin cuenta bancaria personal configurada para depósitos</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {canEdit && (
+                <div className="shrink-0">
+                  <EditarResponsableCajaModal
+                    cajaId={caja.id}
+                    cajaName={caja.bank_name}
+                    initialResponsable={responsable}
+                  />
+                </div>
+              )}
             </div>
 
             {/* ── Movimientos ───────────────────────────────────────────── */}

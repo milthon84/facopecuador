@@ -27,14 +27,13 @@ export async function transferFromCajaGeneralAction(data: {
     .eq("id", destino_id)
     .maybeSingle();
 
-  let destino_nombre = "cuenta destino";
-  if (destAccount) {
-    if (destAccount.account_type === "caja") {
-      destino_nombre = `Caja Chica — ${destAccount.bank_name}`;
-    } else {
-      destino_nombre = `${destAccount.bank_name}${destAccount.account_number ? ` · ${destAccount.account_number}` : ""}`;
-    }
+  if (destAccount?.account_type === "caja") {
+    throw new Error(
+      "Las reposiciones de caja chica no pueden realizarse desde Caja General. Solo pueden realizarse por transferencia bancaria desde las cuentas de Niagas."
+    );
   }
+
+  let destino_nombre = `${destAccount?.bank_name || "cuenta destino"}${destAccount?.account_number ? ` · ${destAccount.account_number}` : ""}`;
 
   const trimmedNotes = notes?.trim();
   const descEgreso  = trimmedNotes ? `Transferencia a ${destino_nombre} — ${trimmedNotes}` : `Transferencia a ${destino_nombre}`;

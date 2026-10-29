@@ -66,19 +66,12 @@ export default async function CajaGeneralPage() {
   const totalEgreso  = confirmed.filter(t => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const balance      = cajaGeneral ? r2(cajaGeneral.initial_balance + totalIngreso - totalEgreso) : 0;
 
-  // Destinos disponibles para transferir
-  const destinos = [
-    ...(bancos || []).map(b => ({
-      id: b.id,
-      label: `${b.bank_name}${b.account_number ? ` · ${b.account_number}` : ""}`,
-      type: "banco",
-    })),
-    ...otrasCajas.map(c => ({
-      id: c.id,
-      label: `Caja Chica — ${c.bank_name}`,
-      type: "caja_chica",
-    })),
-  ];
+  // Destinos disponibles para depositar (solo cuentas bancarias de Niagas)
+  const destinos = (bancos || []).map((b) => ({
+    id: b.id,
+    label: `${b.bank_name}${b.account_number ? ` · ${b.account_number}` : ""}`,
+    type: "banco",
+  }));
 
   if (!cajaGeneral) {
     return (

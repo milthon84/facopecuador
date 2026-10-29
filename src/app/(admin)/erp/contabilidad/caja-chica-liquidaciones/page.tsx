@@ -29,8 +29,9 @@ async function processLiquidation(formData: FormData) {
     .eq("id", bank_id)
     .single();
 
-  const isCashSource = sourceAcc?.account_type === "caja";
-  const paymentMethod = isCashSource ? "efectivo" : "transferencia";
+  if (sourceAcc?.account_type === "caja") {
+    throw new Error("Las reposiciones de caja chica solo pueden realizarse por transferencia bancaria desde las cuentas de Niagas, no desde caja general.");
+  }
 
   // 1. Desembolso/Reposición en cuenta origen
   await supabase.from("bank_transactions").insert({
@@ -39,7 +40,7 @@ async function processLiquidation(formData: FormData) {
     amount,
     date,
     description: `Reposición por Liquidación ${liquidation_code}`,
-    payment_method: paymentMethod,
+    payment_method: "transferencia",
     status: "confirmado",
     origin: "manual",
     categoria: "Liquidación Caja Chica",
@@ -52,7 +53,7 @@ async function processLiquidation(formData: FormData) {
     amount,
     date,
     description: `Restitución de Fondo — ${liquidation_code}`,
-    payment_method: "efectivo",
+    payment_method: "transferencia",
     status: "confirmado",
     origin: "manual",
     categoria: "Liquidación Caja Chica",
@@ -132,10 +133,8 @@ export default async function CajaChicaLiquidacionesPage() {
   const bankAccounts = (allAccounts as BankAccount[] || []).filter(a => a.account_type !== "caja");
   const cajaGeneral = (allAccounts as BankAccount[] || []).find(esCajaGeneral);
 
-  const sourceAccounts = [
-    ...(cajaGeneral ? [{ id: cajaGeneral.id, bank_name: `Caja General — ${cajaGeneral.bank_name}`, account_number: null, account_type: "caja" }] : []),
-    ...bankAccounts,
-  ];
+  // Las reposiciones solo pueden salir por transferencia desde cuentas bancarias de Niagas
+  const sourceAccounts = bankAccounts;
 
   const txMap = new Map<string, BankTx[]>();
   (allTx as BankTx[] || []).forEach(tx => {
