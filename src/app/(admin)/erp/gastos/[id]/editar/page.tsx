@@ -202,6 +202,31 @@ async function updateExpense(formData: FormData) {
     }
   }
 
+  // Si viene vinculada una factura recibida del SRI, marcarla como registrada
+  const effectiveSriClave = factura_recibida_clave_acceso || (authorization_number && authorization_number.length === 49 ? authorization_number : null);
+  if (effectiveSriClave) {
+    try {
+      const updateData: Record<string, any> = {
+        estado_facop: "registrado",
+        expense_id: id,
+      };
+      const { error: facUpdateErr } = await supabase
+        .from("facturas_recibidas")
+        .update(updateData)
+        .eq("clave_acceso", effectiveSriClave);
+
+      if (facUpdateErr && (facUpdateErr.message.includes("expense_id") || facUpdateErr.code === "42703")) {
+        delete updateData.expense_id;
+        await supabase
+          .from("facturas_recibidas")
+          .update(updateData)
+          .eq("clave_acceso", effectiveSriClave);
+      }
+    } catch (facErr) {
+      console.warn("No se pudo actualizar estado_facop en editar gasto:", facErr);
+    }
+  }
+
   return { success: true, url: `/erp/gastos/${id}` };
 }
 

@@ -114,7 +114,20 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
         .select("*")
         .eq("clave_acceso", clave)
         .maybeSingle();
-      if (fac) linkedFactura = fac as FacturaRecibida;
+      if (fac) {
+        linkedFactura = fac as FacturaRecibida;
+        if (linkedFactura.estado_facop !== "registrado") {
+          linkedFactura.estado_facop = "registrado";
+          try {
+            await supabase
+              .from("facturas_recibidas")
+              .update({ estado_facop: "registrado", expense_id: expense.id })
+              .eq("clave_acceso", clave);
+          } catch (syncErr) {
+            console.warn("No se pudo sincronizar estado_facop de factura recibida:", syncErr);
+          }
+        }
+      }
     } catch {
       // Ignorar si la tabla no está disponible
     }
@@ -192,8 +205,8 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-ink-900">Factura Electrónica SRI Vinculada</span>
-                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.2 rounded-full uppercase tracking-wider">
-                  {linkedFactura.estado_facop || "Vinculada"}
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  REGISTRADA
                 </span>
               </div>
               <p className="text-[11px] text-ink-600 font-mono mt-0.5">

@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
-import { resolveExpenseArea } from "@/lib/expense-areas";
+import { resolveExpenseArea, resolveFacturaSriClave } from "@/lib/expense-areas";
 import { FacturaRecibida } from "@/lib/expense-types";
 import GastosListClient from "./GastosListClient";
 
@@ -83,6 +83,64 @@ export default async function GastosPage({
     ...exp,
     resolvedArea: resolveExpenseArea(exp),
   }));
+
+  // Reconciliación automática: si una factura del SRI ya pertenece a un gasto registrado,
+  // excluirla de pendientes y sincronizar su estado en la base de datos
+  const registeredClavesSet = new Set<string>();
+  for (const exp of rawItems) {
+    const c = resolveFacturaSriClave(exp);
+    if (c) registeredClavesSet.add(c);
+  }
+
+  const pendingClaves = pendingFacturasMes.map((f) => f.clave_acceso).filter(Boolean);
+  if (pendingClaves.length > 0) {
+    try {
+      const { data: matchedDbExpenses } = await supabase
+        .from("expenses")
+        .select("id, factura_recibida_clave_acceso, authorization_number, notes")
+        .eq("status", "registered")
+        .in("factura_recibida_clave_acceso", pendingClaves);
+
+      if (matchedDbExpenses) {
+        for (const exp of matchedDbExpenses) {
+          const c = resolveFacturaSriClave(exp);
+          if (c) registeredClavesSet.add(c);
+        }
+      }
+    } catch {
+      // Ignorar si la columna no existe en desarrollo
+    }
+  }
+
+  if (registeredClavesSet.size > 0) {
+    const toUpdate: string[] = [];
+    for (const f of pendingFacturasMes) {
+      if (registeredClavesSet.has(f.clave_acceso)) toUpdate.push(f.clave_acceso);
+    }
+    for (const f of allAvailableFacturas) {
+      if (registeredClavesSet.has(f.clave_acceso) && !toUpdate.includes(f.clave_acceso)) {
+        toUpdate.push(f.clave_acceso);
+      }
+    }
+
+    if (toUpdate.length > 0) {
+      try {
+        await supabase
+          .from("facturas_recibidas")
+          .update({ estado_facop: "registrado" })
+          .in("clave_acceso", toUpdate);
+      } catch (err) {
+        console.warn("No se pudo actualizar estado_facop en lote:", err);
+      }
+
+      pendingFacturasMes = pendingFacturasMes.filter(
+        (f) => !registeredClavesSet.has(f.clave_acceso)
+      );
+      allAvailableFacturas = allAvailableFacturas.filter(
+        (f) => !registeredClavesSet.has(f.clave_acceso)
+      );
+    }
+  }
 
   const totalMes      = rawItems.reduce((s: number, e: any) => s + Number(e.total), 0);
   const totalClinica  = rawItems.filter((e: any) => e.resolvedArea === "clinica").reduce((s: number, e: any) => s + Number(e.total), 0);

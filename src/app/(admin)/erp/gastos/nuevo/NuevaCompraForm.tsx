@@ -145,6 +145,21 @@ export default function NuevaCompraForm({
   // Totales calculados en tiempo real desde el detalle
   const totals = calculateExpenseTotals(items);
 
+  // IVA editable / personalizado (para coincidir centavos con comprobante SRI o físico)
+  const [customIva, setCustomIva] = useState<number | null>(() => {
+    if (initialData?.iva_amount !== undefined && initialData?.iva_amount !== null) {
+      const initIva = Number(initialData.iva_amount);
+      return !isNaN(initIva) ? initIva : null;
+    }
+    return null;
+  });
+
+  const effectiveIva = docType === "factura"
+    ? (customIva !== null ? customIva : totals.ivaAmount)
+    : 0;
+
+  const effectiveTotal = Math.round((totals.subtotal0 + totals.subtotal15 + effectiveIva) * 100) / 100;
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -181,6 +196,13 @@ export default function NuevaCompraForm({
     const iva = Number(factura.iva) || 0;
     const total = Number(factura.total) || 0;
 
+    // Fijar IVA exacto de la factura SRI (evita discrepancias de centavos por redondeos)
+    if (iva > 0) {
+      setCustomIva(Math.round(iva * 100) / 100);
+    } else {
+      setCustomIva(0);
+    }
+
     const newRows: ExpenseItemRow[] = [];
     if (subtotal > 0) {
       newRows.push({
@@ -216,6 +238,7 @@ export default function NuevaCompraForm({
 
   function desvincularFactura() {
     setSelectedFacturaClave(null);
+    setCustomIva(null);
   }
 
   function handleRucChange(val: string) {
@@ -325,7 +348,7 @@ export default function NuevaCompraForm({
     e.preventDefault();
     setErrorMsg(null);
 
-    if (totals.total <= 0) {
+    if (effectiveTotal <= 0) {
       setErrorMsg("El total del gasto debe ser mayor a cero.");
       return;
     }
@@ -336,8 +359,14 @@ export default function NuevaCompraForm({
       // Adjuntar los ítems como JSON estructurado
       const validItems = items
         .filter((it) => (Number(it.unit_price) > 0 || it.description.trim() !== ""))
-        .map((it) => {
+        .map((it, _idx, arr) => {
           const calc = calculateItemRow(it);
+          const item15Count = arr.filter((x) => x.iva_rate === 15).length;
+          let rowIva = calc.iva;
+          if (it.iva_rate === 15 && item15Count === 1 && customIva !== null) {
+            rowIva = customIva;
+          }
+          const rowTotal = Math.round((calc.subtotal + rowIva) * 100) / 100;
           return {
             description: it.description.trim() || "Item de gasto",
             category: normalizeCategoryName(it.category),
@@ -345,16 +374,16 @@ export default function NuevaCompraForm({
             unit_price: calc.price || 0,
             iva_rate: it.iva_rate,
             subtotal: calc.subtotal,
-            iva_amount: calc.iva,
-            total: calc.total,
+            iva_amount: rowIva,
+            total: rowTotal,
           };
         });
 
       formData.set("items_json", JSON.stringify(validItems));
       formData.set("subtotal_0", totals.subtotal0.toString());
       formData.set("subtotal_15", totals.subtotal15.toString());
-      formData.set("iva_amount", totals.ivaAmount.toString());
-      formData.set("total", totals.total.toString());
+      formData.set("iva_amount", effectiveIva.toString());
+      formData.set("total", effectiveTotal.toString());
       const mainCategory = validItems[0]?.category || initialData?.category || (area === "clinica" ? "Insumo y Material" : "Suministro");
       formData.set("category", mainCategory);
       if (selectedFacturaClave) {
@@ -835,15 +864,39 @@ export default function NuevaCompraForm({
                   <span>Subtotal 15%: </span>
                   <strong className="font-mono text-ink-900">${totals.subtotal15.toFixed(2)}</strong>
                 </div>
-                <div>
-                  <span>IVA 15%: </span>
-                  <strong className="font-mono text-lilac-700">${totals.ivaAmount.toFixed(2)}</strong>
+                <div className="flex items-center gap-1.5 bg-white border border-lilac-200 px-2 py-1 rounded-xl shadow-2xs">
+                  <span className="text-xs font-semibold text-ink-700">IVA 15%:</span>
+                  <div className="inline-flex items-center">
+                    <span className="text-xs font-mono font-bold text-lilac-700 mr-0.5">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={customIva !== null ? customIva : (totals.subtotal15 > 0 ? totals.ivaAmount : 0)}
+                      onChange={(e) => {
+                        const val = e.target.value === "" ? null : parseFloat(e.target.value);
+                        setCustomIva(val !== null && !isNaN(val) ? Math.round(val * 100) / 100 : 0);
+                      }}
+                      className="w-16 font-mono font-bold text-xs text-lilac-700 bg-transparent text-right focus:outline-none"
+                      title="Ajuste de centavos del IVA para coincidir con el comprobante SRI o físico"
+                    />
+                  </div>
+                  {customIva !== null && Math.abs(customIva - totals.ivaAmount) > 0.001 && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomIva(null)}
+                      className="text-[10px] text-lilac-600 hover:text-lilac-800 font-bold underline ml-1"
+                      title="Restablecer al 15% automático"
+                    >
+                      Auto
+                    </button>
+                  )}
                 </div>
               </>
             )}
             <div className="text-sm font-bold text-ink-950">
               <span>Total Detalle: </span>
-              <span className="font-mono text-lilac-700 font-black">${totals.total.toFixed(2)}</span>
+              <span className="font-mono text-lilac-700 font-black">${effectiveTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -1015,7 +1068,7 @@ export default function NuevaCompraForm({
                 Total a Pagar
               </span>
               <span className="text-2xl font-black text-lilac-700 font-mono">
-                ${totals.total.toFixed(2)}
+                ${effectiveTotal.toFixed(2)}
               </span>
             </div>
 
