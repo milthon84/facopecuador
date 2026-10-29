@@ -701,15 +701,6 @@ export default function NuevaCompraForm({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setGuiaCategoriasOpen(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-ink-600 hover:text-lilac-700 bg-white border border-lilac-200 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
-                title="Ver qué contempla cada una de las 6 categorías contables"
-              >
-                <HelpCircle size={13} className="text-lilac-600" />
-                <span>Guía de Categorías</span>
-              </button>
-              <button
-                type="button"
                 onClick={addItemRow}
                 className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
               >
@@ -723,12 +714,12 @@ export default function NuevaCompraForm({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2 pr-2 font-bold">Descripción del Bien / Servicio</th>
-                  <th className="py-2 px-2 w-56 sm:w-64 font-bold">Categoría Contable</th>
-                  <th className="py-2 px-2 w-20 text-center font-bold">Cant.</th>
-                  <th className="py-2 px-2 w-28 text-right font-bold">P. Unitario ($)</th>
+                  <th className="py-2 pr-3 font-bold min-w-[280px] sm:min-w-[340px]">Descripción del Bien / Servicio</th>
+                  <th className="py-2 px-2 w-44 sm:w-48 font-bold">Categoría Contable</th>
+                  <th className="py-2 px-2 w-16 text-center font-bold">Cant.</th>
+                  <th className="py-2 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
-                    <th className="py-2 px-2 w-24 text-center font-bold">IVA</th>
+                    <th className="py-2 px-2 w-20 text-center font-bold">IVA</th>
                   )}
                   <th className="py-2 pl-2 pr-1 w-24 text-right font-bold">Subtotal</th>
                   <th className="py-2 pl-1 w-8"></th>
@@ -741,17 +732,17 @@ export default function NuevaCompraForm({
                   const catDetail = EXPENSE_CATEGORY_DETAILS[currentCat];
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-2 align-top">
+                      <td className="py-2 pr-3 align-top min-w-[280px] sm:min-w-[340px]">
                         <input
                           type="text"
                           required
                           value={item.description}
                           onChange={(e) => updateItemRow(item.id, "description", e.target.value)}
-                          placeholder={`Ej. Ítem ${idx + 1}`}
-                          className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                          placeholder={`Ej. Descripción del bien o servicio adquirido ${idx + 1}`}
+                          className="w-full border border-lilac-200 rounded-lg px-3 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 px-2 align-top">
+                      <td className="py-2 px-2 align-top w-44 sm:w-48">
                         <div className="space-y-1">
                           <select
                             value={currentCat}

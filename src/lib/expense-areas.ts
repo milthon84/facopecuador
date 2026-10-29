@@ -122,13 +122,36 @@ export function resolveReceiptUrl(expense: {
 }
 
 /**
- * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...]) de las notas visibles
+ * Extrae la clave de acceso de 49 dígitos del SRI vinculada a un gasto
+ * (revisando campo factura_recibida_clave_acceso, etiqueta [FACTURA_SRI:...] en notes, o authorization_number)
+ */
+export function resolveFacturaSriClave(expense: {
+  factura_recibida_clave_acceso?: string | null;
+  authorization_number?: string | null;
+  notes?: string | null;
+}): string | null {
+  if (expense.factura_recibida_clave_acceso && expense.factura_recibida_clave_acceso.trim().length === 49) {
+    return expense.factura_recibida_clave_acceso.trim();
+  }
+  if (expense.notes) {
+    const match = expense.notes.match(/\[FACTURA_SRI:([0-9]{49})\]/i);
+    if (match && match[1]) return match[1].trim();
+  }
+  if (expense.authorization_number && expense.authorization_number.trim().length === 49) {
+    return expense.authorization_number.trim();
+  }
+  return null;
+}
+
+/**
+ * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [FACTURA_SRI:...]) de las notas visibles
  */
 export function cleanVisibleNotes(notes: string | null | undefined): string {
   if (!notes) return "";
   return notes
     .replace(/\[AREA:[a-z]+\]/gi, "")
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
+    .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
     .trim();
 }
 

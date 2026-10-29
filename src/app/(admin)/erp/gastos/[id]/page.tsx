@@ -18,11 +18,19 @@ import {
   Paperclip,
   Receipt,
   FileCheck2,
+  CheckCircle2,
 } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
-import { resolveExpenseArea, EXPENSE_AREA_CONFIG, resolveReceiptUrl, cleanVisibleNotes } from "@/lib/expense-areas";
+import {
+  resolveExpenseArea,
+  EXPENSE_AREA_CONFIG,
+  resolveReceiptUrl,
+  cleanVisibleNotes,
+  resolveFacturaSriClave,
+} from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
+import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
 import {
   ExpenseItem,
   FacturaRecibida,
@@ -98,7 +106,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
   // Consultar factura SRI vinculada si existe
   let linkedFactura: FacturaRecibida | null = null;
-  const clave = expense.factura_recibida_clave_acceso || expense.authorization_number;
+  const clave = resolveFacturaSriClave(expense);
   if (clave && clave.length === 49) {
     try {
       const { data: fac } = await supabase
@@ -139,7 +147,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
             <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${areaConfig.badgeCls}`}>
               {area === "clinica" && <Stethoscope size={12} />}
@@ -147,6 +155,15 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               {area === "general" && <Building2 size={12} />}
               {areaConfig.label}
             </span>
+            {clave ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
+                <CheckCircle2 size={12} className="text-emerald-600" /> Factura SRI Vinculada
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
+                Sin Factura SRI
+              </span>
+            )}
           </div>
           <p className="text-xs text-ink-500 capitalize mt-0.5">{dateStr}</p>
         </div>
@@ -166,30 +183,54 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
       )}
 
       {/* Tarjeta de Factura Recibida SRI Vinculada */}
-      {linkedFactura && (
-        <div className="bg-gradient-to-r from-lilac-50/80 to-indigo-50/50 border border-lilac-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
+      {linkedFactura ? (
+        <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/60 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-lilac-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <Receipt size={20} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-ink-900">Factura Electrónica SRI Vinculada</span>
-                <span className="text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200 px-2 py-0.2 rounded-full uppercase tracking-wider">
-                  {linkedFactura.estado_facop}
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.2 rounded-full uppercase tracking-wider">
+                  {linkedFactura.estado_facop || "Vinculada"}
                 </span>
               </div>
-              <p className="text-[11px] text-ink-500 font-mono mt-0.5">
+              <p className="text-[11px] text-ink-600 font-mono mt-0.5">
                 N°: {linkedFactura.numero_comprobante} · Clave: {linkedFactura.clave_acceso}
               </p>
+              {linkedFactura.razon_social && (
+                <p className="text-[11px] text-ink-500 mt-0.5">
+                  Emisor: {linkedFactura.razon_social} (RUC: {linkedFactura.ruc_emisor})
+                </p>
+              )}
             </div>
           </div>
           <div className="text-right shrink-0">
             <span className="text-[11px] text-ink-400 block">Total Factura SRI</span>
-            <span className="text-sm font-bold font-mono text-ink-950">${Number(linkedFactura.total || 0).toFixed(2)}</span>
+            <span className="text-sm font-bold font-mono text-emerald-950">${Number(linkedFactura.total || 0).toFixed(2)}</span>
           </div>
         </div>
-      )}
+      ) : clave ? (
+        <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/60 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Receipt size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-ink-900">Factura Electrónica SRI Vinculada</span>
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.2 rounded-full uppercase tracking-wider">
+                  Vinculada al SRI
+                </span>
+              </div>
+              <p className="text-[11px] text-ink-600 font-mono mt-0.5 break-all">
+                Clave de Acceso: {clave}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Cabecera / Datos Generales */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5 space-y-4">
@@ -212,13 +253,16 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               <p className="text-sm font-mono text-ink-900 mt-0.5">{expense.document_number}</p>
             </div>
           )}
-          {expense.authorization_number && (
+          {(clave || expense.authorization_number) && (
             <div className="col-span-2">
               <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-                <Key size={10} /> N° Autorización / Clave de Acceso SRI
+                <Key size={10} /> Clave de Acceso SRI / N° Autorización
               </span>
-              <p className="text-xs font-mono text-ink-900 mt-0.5 break-all bg-lilac-50/50 p-2 rounded-lg border border-lilac-100">
-                {expense.authorization_number}
+              <p className="text-xs font-mono font-bold text-emerald-950 mt-0.5 break-all bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
+                <span>{clave || expense.authorization_number}</span>
+                <span className="text-[10px] font-sans px-2 py-0.5 bg-emerald-200/80 text-emerald-900 rounded font-bold shrink-0">
+                  SRI REGISTRADO
+                </span>
               </p>
             </div>
           )}
@@ -333,66 +377,9 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
       )}
 
       {/* Respaldo Digital Adjunto */}
-      {receiptUrl ? (
-        <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-lilac-50 pb-2">
-            <div className="flex items-center gap-2">
-              <Paperclip size={16} className="text-lilac-600" />
-              <h3 className="text-xs font-bold text-ink-800 uppercase tracking-wide">
-                Respaldo Digital / Comprobante Adjunto
-              </h3>
-            </div>
-            <a
-              href={proxyStorageUrl(receiptUrl)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-lilac-700 hover:text-lilac-900 font-semibold flex items-center gap-1 hover:underline"
-            >
-              <ExternalLink size={13} /> Abrir archivo original
-            </a>
-          </div>
-
-          {isPdf ? (
-            <div className="flex items-center justify-between p-3 bg-red-50/50 border border-red-100 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs shrink-0">
-                  PDF
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-ink-900">Factura Electrónica / Comprobante PDF</p>
-                  <p className="text-[11px] text-ink-400">Documento tributario respaldado</p>
-                </div>
-              </div>
-              <a
-                href={proxyStorageUrl(receiptUrl)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3.5 py-1.5 rounded-xl font-semibold shadow-xs transition"
-              >
-                <ExternalLink size={13} /> Ver PDF
-              </a>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="relative rounded-xl overflow-hidden border border-lilac-200 bg-ink-950 flex items-center justify-center max-h-80 group">
-                <img
-                  src={proxyStorageUrl(receiptUrl)}
-                  alt="Comprobante de gasto"
-                  className="max-h-80 object-contain rounded-lg"
-                />
-                <a
-                  href={proxyStorageUrl(receiptUrl)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute inset-0 bg-ink-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold gap-1.5 transition"
-                >
-                  <ExternalLink size={14} /> Clic para ampliar en tamaño completo
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : null}
+      {receiptUrl && (
+        <ComprobanteAdjuntoCard receiptUrl={receiptUrl} />
+      )}
 
       {/* Totales */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">

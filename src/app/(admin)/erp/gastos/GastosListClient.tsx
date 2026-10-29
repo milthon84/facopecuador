@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -23,9 +23,15 @@ import {
   Sparkles,
   AlertCircle,
   FileCheck2,
+  RotateCcw,
 } from "lucide-react";
 import { FacturaRecibida } from "@/lib/expense-types";
-import { ExpenseArea, EXPENSE_AREA_CONFIG, resolveReceiptUrl } from "@/lib/expense-areas";
+import {
+  ExpenseArea,
+  EXPENSE_AREA_CONFIG,
+  resolveReceiptUrl,
+  resolveFacturaSriClave,
+} from "@/lib/expense-areas";
 import { linkExpenseToFactura } from "./actions";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -127,6 +133,89 @@ export default function GastosListClient({
   // Modal 1: Facturas SRI Pendientes del Mes
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
   const [pendingSearch, setPendingSearch] = useState("");
+
+  // Filtros interactivos para la lista de gastos
+  const [textSearch, setTextSearch] = useState("");
+  const [sriFilter, setSriFilter] = useState<"todos" | "con_sri" | "sin_sri">("todos");
+  const [areaFilter, setAreaFilter] = useState<string>(activeAreaFilter || "all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+
+  // Lista de categorías únicas presentes en los gastos del mes
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    rawItems.forEach((it: any) => {
+      if (it.category) cats.add(it.category);
+    });
+    return Array.from(cats).sort();
+  }, [rawItems]);
+
+  // Lista de gastos filtrados en tiempo real
+  const displayedItems = useMemo(() => {
+    return rawItems.filter((exp: any) => {
+      const sriClave = resolveFacturaSriClave(exp);
+      const hasSri = Boolean(sriClave);
+
+      // 1. Filtro por Área
+      if (areaFilter !== "all" && exp.resolvedArea !== areaFilter) {
+        return false;
+      }
+
+      // 2. Filtro por SRI
+      if (sriFilter === "con_sri" && !hasSri) return false;
+      if (sriFilter === "sin_sri" && hasSri) return false;
+
+      // 3. Filtro por Categoría
+      if (categoryFilter !== "all" && exp.category !== categoryFilter) {
+        return false;
+      }
+
+      // 4. Filtro por Forma de pago
+      if (paymentFilter !== "all" && exp.payment_method !== paymentFilter) {
+        return false;
+      }
+
+      // 5. Búsqueda de texto libre
+      if (textSearch.trim()) {
+        const q = textSearch.toLowerCase().trim();
+        const sup = (exp.supplier_name || "").toLowerCase();
+        const ruc = (exp.supplier_ruc || "").toLowerCase();
+        const doc = (exp.document_number || "").toLowerCase();
+        const desc = (exp.description || "").toLowerCase();
+        const cat = (exp.category || "").toLowerCase();
+        const auth = (sriClave || exp.authorization_number || "").toLowerCase();
+        const tot = String(exp.total || "");
+
+        const matches =
+          sup.includes(q) ||
+          ruc.includes(q) ||
+          doc.includes(q) ||
+          desc.includes(q) ||
+          cat.includes(q) ||
+          auth.includes(q) ||
+          tot.includes(q);
+
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+  }, [rawItems, areaFilter, sriFilter, categoryFilter, paymentFilter, textSearch]);
+
+  const hasActiveFilters =
+    areaFilter !== "all" ||
+    sriFilter !== "todos" ||
+    categoryFilter !== "all" ||
+    paymentFilter !== "all" ||
+    Boolean(textSearch.trim());
+
+  const resetFilters = () => {
+    setTextSearch("");
+    setSriFilter("todos");
+    setAreaFilter("all");
+    setCategoryFilter("all");
+    setPaymentFilter("all");
+  };
 
   // Modal 2: Relacionar Factura SRI a un gasto existente
   const [linkingExpense, setLinkingExpense] = useState<any | null>(null);
@@ -313,71 +402,189 @@ export default function GastosListClient({
         </div>
       </div>
 
-      {/* Barra de Filtros por Destino y Facturas Pendientes */}
-      <div className="flex items-center justify-between gap-3 flex-wrap bg-white px-3 py-2 rounded-2xl border border-lilac-100 shadow-xs text-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 font-bold text-ink-700 mr-1">
-            <Filter size={13} className="text-lilac-600" />
-            <span>Filtrar por Área:</span>
-          </div>
-          <div className="flex items-center gap-1 flex-wrap">
-            {[
-              { id: "all", label: `Todos (${rawItems.length})` },
-              { id: "clinica", label: `Clínica (${rawItems.filter((e: any) => e.resolvedArea === "clinica").length})` },
-              { id: "cursos", label: `Cursos (${rawItems.filter((e: any) => e.resolvedArea === "cursos").length})` },
-              { id: "general", label: `General (${rawItems.filter((e: any) => e.resolvedArea === "general").length})` },
-            ].map((btn) => (
-              <Link
-                key={btn.id}
-                href={`/erp/gastos?month=${activeMonth}&area=${btn.id}`}
-                className={`px-2.5 py-1 rounded-xl font-bold transition ${
-                  activeAreaFilter === btn.id
-                    ? "bg-lilac-600 text-white shadow-xs"
-                    : "bg-lilac-50/70 text-ink-600 hover:bg-lilac-100"
-                }`}
+      {/* Barra de Filtros Avanzados y Facturas Pendientes */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-lilac-200/80 shadow-xs space-y-3">
+        {/* Fila 1: Búsqueda rápida + Botón Facturas Pendientes */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input
+              type="text"
+              value={textSearch}
+              onChange={(e) => setTextSearch(e.target.value)}
+              placeholder="Buscar por proveedor, RUC, detalle, N° comprobante o monto..."
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-lilac-400 text-ink-900 transition"
+            />
+            {textSearch && (
+              <button
+                type="button"
+                onClick={() => setTextSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700"
               >
-                {btn.label}
-              </Link>
-            ))}
+                <X size={14} />
+              </button>
+            )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsPendingModalOpen(true)}
+            className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs shrink-0 ${
+              pendingCount > 0
+                ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
+                : "bg-gray-50 hover:bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer"
+            }`}
+            title={
+              pendingCount > 0
+                ? `${pendingCount} facturas del SRI de este mes pendientes por registrar`
+                : "No hay facturas SRI pendientes en este mes"
+            }
+          >
+            <Receipt size={14} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
+            <span>Facturas pendientes SRI</span>
+            <span
+              className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-black ${
+                pendingCount > 0
+                  ? "bg-rose-500 text-white shadow-xs animate-pulse"
+                  : "bg-gray-200 text-gray-600"
+              }`}
+            >
+              {pendingCount}
+            </span>
+          </button>
         </div>
 
-        {/* Botón Facturas Pendientes por Registrar con número alarmado */}
-        <button
-          type="button"
-          onClick={() => setIsPendingModalOpen(true)}
-          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
-            pendingCount > 0
-              ? "bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 ring-2 ring-purple-200/60"
-              : "bg-gray-100 hover:bg-gray-200/80 text-gray-500 border border-gray-200 cursor-pointer"
-          }`}
-          title={
-            pendingCount > 0
-              ? `${pendingCount} facturas del SRI de este mes pendientes por registrar`
-              : "No hay facturas SRI pendientes en este mes"
-          }
-        >
-          <Receipt size={14} className={pendingCount > 0 ? "text-purple-700" : "text-gray-400"} />
-          <span>Facturas pendientes por registrar</span>
-          <span
-            className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-black ${
-              pendingCount > 0
-                ? "bg-rose-500 text-white shadow-xs animate-pulse"
-                : "bg-gray-200 text-gray-600"
-            }`}
-          >
-            {pendingCount}
-          </span>
-        </button>
+        {/* Fila 2: Filtros por Criterios */}
+        <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-lilac-100 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Filtro por Área */}
+            <div className="flex items-center gap-1 bg-lilac-50/60 p-1 rounded-xl border border-lilac-100">
+              <span className="text-[11px] font-bold text-ink-500 px-1.5 flex items-center gap-1">
+                <Filter size={11} className="text-lilac-600" /> Área:
+              </span>
+              {[
+                { id: "all", label: "Todas" },
+                { id: "clinica", label: "Clínica" },
+                { id: "cursos", label: "Cursos" },
+                { id: "general", label: "General" },
+              ].map((btn) => (
+                <button
+                  key={btn.id}
+                  type="button"
+                  onClick={() => setAreaFilter(btn.id)}
+                  className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                    areaFilter === btn.id
+                      ? "bg-lilac-600 text-white shadow-xs"
+                      : "text-ink-600 hover:bg-white"
+                  }`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtro por Estado SRI */}
+            <div className="flex items-center gap-1 bg-lilac-50/60 p-1 rounded-xl border border-lilac-100">
+              <span className="text-[11px] font-bold text-ink-500 px-1.5 flex items-center gap-1">
+                <Receipt size={11} className="text-teal-600" /> SRI:
+              </span>
+              <button
+                type="button"
+                onClick={() => setSriFilter("todos")}
+                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                  sriFilter === "todos"
+                    ? "bg-lilac-600 text-white shadow-xs"
+                    : "text-ink-600 hover:bg-white"
+                }`}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setSriFilter("con_sri")}
+                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                  sriFilter === "con_sri"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-emerald-800 hover:bg-white"
+                }`}
+              >
+                ✓ Con Factura SRI
+              </button>
+              <button
+                type="button"
+                onClick={() => setSriFilter("sin_sri")}
+                className={`px-2 py-0.5 rounded-lg font-semibold transition ${
+                  sriFilter === "sin_sri"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-indigo-800 hover:bg-white"
+                }`}
+              >
+                Pendientes Relacionar
+              </button>
+            </div>
+
+            {/* Filtro por Categoría */}
+            {availableCategories.length > 0 && (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="text-xs bg-lilac-50/60 border border-lilac-200 rounded-xl px-2.5 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400"
+              >
+                <option value="all">Todas las Categorías</option>
+                {availableCategories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Filtro por Forma de Pago */}
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value)}
+              className="text-xs bg-lilac-50/60 border border-lilac-200 rounded-xl px-2.5 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400"
+            >
+              <option value="all">Todas las Formas de Pago</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="tarjeta">Tarjeta</option>
+            </select>
+          </div>
+
+          {/* Contador y Limpiar Filtros */}
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[11px] text-ink-500 font-medium">
+              Mostrando <strong className="text-ink-900 font-bold">{displayedItems.length}</strong> de {rawItems.length}
+            </span>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg transition"
+              >
+                <RotateCcw size={11} /> Limpiar filtros
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Lista de Gastos */}
       <div className="bg-white border border-lilac-100 rounded-2xl overflow-hidden shadow-sm">
-        {items.length === 0 ? (
+        {displayedItems.length === 0 ? (
           <div className="py-16 text-center text-ink-500">
             <TrendingDown size={36} className="text-lilac-200 mx-auto mb-3" />
-            <p className="text-sm">No hay gastos registrados en {monthLabel} para este filtro.</p>
-            {canEdit && (
+            <p className="text-sm">No se encontraron gastos para los criterios seleccionados.</p>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-lilac-600 hover:underline text-xs font-semibold mt-2 inline-block"
+              >
+                Restablecer filtros
+              </button>
+            ) : canEdit && (
               <Link href="/erp/gastos/nuevo" className="text-lilac-600 hover:underline text-sm font-medium mt-1 inline-block">
                 Registrar un gasto
               </Link>
@@ -385,12 +592,13 @@ export default function GastosListClient({
           </div>
         ) : (
           <div className="divide-y divide-lilac-50">
-            {items.map((exp: any) => {
-              const hasSriFactura = Boolean(exp.factura_recibida_clave_acceso);
+            {displayedItems.map((exp: any) => {
+              const sriClave = resolveFacturaSriClave(exp);
+              const hasSriFactura = Boolean(sriClave);
               return (
                 <div
                   key={exp.id}
-                  className="flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-lilac-50/30 transition-colors group"
+                  className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-lilac-50/30 transition-colors group"
                 >
                   <Link
                     href={`/erp/gastos/${exp.id}`}
@@ -398,12 +606,15 @@ export default function GastosListClient({
                   >
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-ink-900 truncate">{exp.supplier_name}</span>
-                      <AreaBadge area={exp.resolvedArea} />
-                      <CategoryBadge category={exp.category} />
 
+                      {/* Solo queda el indicador del SRI y el botón de relacionar cuando no tenga factura */}
                       {hasSriFactura ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-1.5 py-0.5 rounded-md font-bold" title="Factura SRI vinculada">
-                          <Receipt size={10} /> SRI
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-bold shadow-2xs"
+                          title={`Factura SRI vinculada (Clave: ${sriClave})`}
+                        >
+                          <CheckCircle2 size={11} className="text-emerald-600" />
+                          <span>SRI</span>
                         </span>
                       ) : (
                         canEdit && (
@@ -417,32 +628,33 @@ export default function GastosListClient({
                               setLinkingError(null);
                               setLinkingSuccess(null);
                             }}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md transition shadow-2xs"
-                            title="Vincular con una factura electrónica del SRI"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 hover:border-indigo-300 px-2.5 py-0.5 rounded-md transition shadow-2xs"
+                            title="Vincular este gasto con una factura electrónica del SRI"
                           >
                             <Link2 size={11} className="text-indigo-600" />
                             <span>Relacionar Factura</span>
                           </button>
                         )
                       )}
-
-                      {resolveReceiptUrl(exp) && (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-lilac-50 text-lilac-700 border border-lilac-200 px-1.5 py-0.5 rounded-md font-semibold" title="Comprobante digital adjunto">
-                          <Paperclip size={10} /> Respaldo
-                        </span>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <span className="text-xs text-ink-500 font-medium">
+                    <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-ink-500">
+                      <span className="font-medium text-ink-600">
                         {new Date(exp.expense_date + "T12:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short" })}
                       </span>
                       {exp.document_number && (
-                        <span className="text-xs text-ink-500 font-mono">#{exp.document_number}</span>
+                        <span className="font-mono text-ink-500">#{exp.document_number}</span>
                       )}
-                      <span className="text-xs text-ink-400 font-medium">
+                      <span className="text-ink-300">·</span>
+                      <span className="text-ink-500 font-medium">
                         {PAYMENT_LABELS[exp.payment_method] ?? exp.payment_method}
                       </span>
+                      {exp.category && (
+                        <>
+                          <span className="text-ink-300">·</span>
+                          <span className="text-ink-500">{exp.category}</span>
+                        </>
+                      )}
                     </div>
 
                     {exp.description && (
