@@ -255,7 +255,7 @@ export default async function ProfesoresPage({
         .order("date", { ascending: false }),
       supabase
         .from("appointments")
-        .select("id, starts_at, ends_at, status, reason, patient:patients(id, full_name, phone, document_number), dental_consultation:dental_consultations(id)")
+        .select("id, starts_at, ends_at, status, reason, patient:patients(id, full_name, phone, document_number), dental_consultation:dental_consultations(id, treatment_notes)")
         .eq("doctor_id", teacherId)
         .order("starts_at", { ascending: false }),
     ]);
@@ -263,21 +263,102 @@ export default async function ProfesoresPage({
     const teacher = teacherRes.data;
     if (!teacher) return redirect("/erp/cursos/profesores");
 
-    const assignedCourses = assignedCoursesRes.data || [];
+    const rawAssignedCourses = assignedCoursesRes.data || [];
     const assignedClasses = assignedClassesRes.data || [];
     const rawAppointments = assignedAppointmentsRes.data || [];
+
+    // Facturación y métricas de cursos asignados al especialista
+    const courseIds = rawAssignedCourses.map((c: any) => c.cursos?.id).filter(Boolean);
+    let enrichedCourses = rawAssignedCourses;
+    let coursesBilledTotal = 0;
+
+    if (courseIds.length > 0) {
+      const [moduloInscRes, enrolRes] = await Promise.all([
+        supabase
+          .from("curso_modulo_inscripciones")
+          .select("id, enrollment_id, module_id, invoice_id, billing_status, invoices:invoices(id, invoice_number, total, sri_status, created_at), curso_modulos:curso_modulos(course_id, cost)"),
+        supabase
+          .from("curso_inscripciones")
+          .select("id, course_id, status, invoice_id, invoices:invoices(id, invoice_number, total, sri_status, created_at)"),
+      ]);
+
+      const courseStatsMap: Record<string, { totalBilled: number; invoicesCount: number; studentCount: Set<string>; invoices: any[] }> = {};
+      courseIds.forEach((id: string) => {
+        courseStatsMap[id] = { totalBilled: 0, invoicesCount: 0, studentCount: new Set(), invoices: [] };
+      });
+
+      const seenInvoiceIds = new Set<string>();
+
+      (moduloInscRes.data || []).forEach((mi: any) => {
+        const cId = mi.curso_modulos?.course_id;
+        if (!cId || !courseStatsMap[cId]) return;
+        if (mi.enrollment_id) courseStatsMap[cId].studentCount.add(mi.enrollment_id);
+        if (mi.invoice_id && mi.invoices && !seenInvoiceIds.has(mi.invoice_id)) {
+          const inv = mi.invoices;
+          if (inv.sri_status !== "cancelled" && inv.sri_status !== "rejected") {
+            seenInvoiceIds.add(mi.invoice_id);
+            const amount = Number(inv.total) || 0;
+            courseStatsMap[cId].totalBilled += amount;
+            courseStatsMap[cId].invoicesCount++;
+            courseStatsMap[cId].invoices.push({
+              id: inv.id,
+              invoice_number: inv.invoice_number,
+              total: amount,
+              created_at: inv.created_at,
+              sri_status: inv.sri_status,
+            });
+          }
+        }
+      });
+
+      (enrolRes.data || []).forEach((e: any) => {
+        const cId = e.course_id;
+        if (!cId || !courseStatsMap[cId]) return;
+        courseStatsMap[cId].studentCount.add(e.id);
+        if (e.invoice_id && e.invoices && !seenInvoiceIds.has(e.invoice_id)) {
+          const inv = e.invoices;
+          if (inv.sri_status !== "cancelled" && inv.sri_status !== "rejected") {
+            seenInvoiceIds.add(e.invoice_id);
+            const amount = Number(inv.total) || 0;
+            courseStatsMap[cId].totalBilled += amount;
+            courseStatsMap[cId].invoicesCount++;
+            courseStatsMap[cId].invoices.push({
+              id: inv.id,
+              invoice_number: inv.invoice_number,
+              total: amount,
+              created_at: inv.created_at,
+              sri_status: inv.sri_status,
+            });
+          }
+        }
+      });
+
+      enrichedCourses = rawAssignedCourses.map((ac: any) => {
+        const cId = ac.cursos?.id;
+        const stats = cId ? courseStatsMap[cId] : null;
+        const billed = stats ? stats.totalBilled : 0;
+        coursesBilledTotal += billed;
+        return {
+          ...ac,
+          billed_total: billed,
+          invoices_count: stats ? stats.invoicesCount : 0,
+          student_count: stats ? stats.studentCount.size : 0,
+          invoices: stats ? stats.invoices : [],
+        };
+      });
+    }
 
     // Facturas enlazadas a las citas del doctor (a través de xml_url = appointment_id)
     const apptIds = rawAppointments.map((a) => a.id);
     const { data: matchedInvoices } = apptIds.length > 0
       ? await supabase
           .from("invoices")
-          .select("id, xml_url, invoice_number, total, sri_status")
+          .select("id, xml_url, invoice_number, total, sri_status, created_at")
           .in("xml_url", apptIds)
       : { data: [] };
 
-    const apptInvoiceMap: Record<string, { id: string; invoice_number: string; total: number; sri_status: string }> = {};
-    let billedTotal = 0;
+    const apptInvoiceMap: Record<string, { id: string; invoice_number: string; total: number; sri_status: string; created_at?: string }> = {};
+    let clinicBilledTotal = 0;
     matchedInvoices?.forEach((inv) => {
       if (inv.xml_url) {
         apptInvoiceMap[inv.xml_url] = {
@@ -285,9 +366,10 @@ export default async function ProfesoresPage({
           invoice_number: inv.invoice_number,
           total: Number(inv.total) || 0,
           sri_status: inv.sri_status,
+          created_at: inv.created_at,
         };
         if (inv.sri_status === "authorized" || inv.sri_status === "submitted" || inv.sri_status === "draft") {
-          billedTotal += Number(inv.total) || 0;
+          clinicBilledTotal += Number(inv.total) || 0;
         }
       }
     });
@@ -300,10 +382,12 @@ export default async function ProfesoresPage({
     return (
       <TeacherDetailClient
         teacher={teacher}
-        assignedCourses={assignedCourses}
+        assignedCourses={enrichedCourses}
         assignedClasses={assignedClasses}
         assignedAppointments={assignedAppointments}
-        billedTotal={billedTotal}
+        billedTotal={clinicBilledTotal + coursesBilledTotal}
+        clinicBilledTotal={clinicBilledTotal}
+        coursesBilledTotal={coursesBilledTotal}
         canEdit={canEdit}
         editMode={editMode}
         updateTeacherAction={updateTeacher}

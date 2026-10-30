@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -24,6 +24,13 @@ import {
   ArrowDownRight,
   PieChart,
   Presentation,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Receipt,
+  Search,
+  Clock,
+  FileText,
 } from "lucide-react";
 import { formatTimeLocal } from "@/lib/availability";
 import { resolveExpenseArea, EXPENSE_AREA_CONFIG, ExpenseArea } from "@/lib/expense-areas";
@@ -178,6 +185,10 @@ export default function DashboardClient({
   // Period Mode
   const [period, setPeriod] = useState<PeriodType>("month");
   const [coworkingViewMode, setCoworkingViewMode] = useState<"spaces" | "rentals">("spaces");
+  const [clinicViewMode, setClinicViewMode] = useState<"doctors" | "breakdown">("doctors");
+  const [expandedDoctorId, setExpandedDoctorId] = useState<string | null>(null);
+  const [breakdownDoctorFilter, setBreakdownDoctorFilter] = useState<string>("all");
+  const [breakdownSearch, setBreakdownSearch] = useState<string>("");
 
   // Date anchors (Ecuador UTC-5 base)
   const todayStr = useMemo(() => {
@@ -819,6 +830,113 @@ export default function DashboardClient({
     document.body.removeChild(link);
   };
 
+  // Helper para agrupar citas facturadas por día y luego por paciente
+  const groupAppointmentsByDay = (appts: AppointmentData[]) => {
+    const groupsMap = new Map<string, { dateKey: string; dateLabel: string; items: AppointmentData[]; totalBilled: number }>();
+
+    const sorted = [...appts].sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime());
+
+    sorted.forEach((a) => {
+      if (!a.starts_at) return;
+      const dt = new Date(a.starts_at);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const dateKey = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+
+      const dateLabel = dt.toLocaleDateString("es-EC", {
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+
+      const billed = Number(a.billed_amount || a.invoice?.total || 0);
+
+      const group = groupsMap.get(dateKey) || {
+        dateKey,
+        dateLabel: dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1),
+        items: [],
+        totalBilled: 0,
+      };
+
+      group.items.push(a);
+      group.totalBilled += billed;
+      groupsMap.set(dateKey, group);
+    });
+
+    return Array.from(groupsMap.values());
+  };
+
+  // Exportar desglose de citas por día y paciente a CSV
+  const handleExportClinicBreakdownCSV = () => {
+    let targetAppts = periodAppointments;
+    if (breakdownDoctorFilter !== "all") {
+      if (breakdownDoctorFilter === "unassigned") {
+        targetAppts = targetAppts.filter((a) => !a.doctor_id);
+      } else {
+        targetAppts = targetAppts.filter((a) => a.doctor_id === breakdownDoctorFilter);
+      }
+    }
+
+    if (breakdownSearch.trim()) {
+      const q = breakdownSearch.toLowerCase();
+      targetAppts = targetAppts.filter((a) => {
+        const p = a.patient;
+        const pName = p?.full_name?.toLowerCase() || "";
+        const pDoc = p?.document_number?.toLowerCase() || "";
+        const reason = (a.reason || "").toLowerCase();
+        return pName.includes(q) || pDoc.includes(q) || reason.includes(q);
+      });
+    }
+
+    if (targetAppts.length === 0) return;
+
+    const headers = [
+      "Fecha",
+      "Hora",
+      "Paciente",
+      "Cedula",
+      "Telefono",
+      "Doctor",
+      "Especialidad",
+      "Motivo",
+      "Estado",
+      "Nro_Factura_SRI",
+      "Monto_Facturado"
+    ];
+
+    const sorted = [...targetAppts].sort((a, b) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime());
+    const rows = sorted.map((a) => {
+      const dt = new Date(a.starts_at);
+      const p = a.patient;
+      const doc = a.doctor;
+      const billed = Number(a.billed_amount || a.invoice?.total || 0);
+      return [
+        `"${dt.toLocaleDateString("es-EC")}"`,
+        `"${dt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}"`,
+        `"${(p?.full_name || "").replace(/"/g, '""')}"`,
+        `"${p?.document_number || ""}"`,
+        `"${p?.phone || ""}"`,
+        `"${(doc?.full_name || "Sin asignar").replace(/"/g, '""')}"`,
+        `"${doc?.specialty || ""}"`,
+        `"${(a.reason || "").replace(/"/g, '""')}"`,
+        `"${a.status}"`,
+        `"${a.invoice?.invoice_number || "Sin facturar"}"`,
+        `"${billed > 0 ? `$${billed.toFixed(2)}` : "$0.00"}"`
+      ].join(",");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `desglose_facturacion_citas_${periodLabel.replace(/\s+/g, "_")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-3 pb-6 print:space-y-2 print:pb-0 print:max-w-full">
       {/* Barra Superior Compacta: Resumen */}
@@ -1074,99 +1192,526 @@ export default function DashboardClient({
           </div>
         </div>
 
-        {/* Tabla Desempeño por Doctor */}
-        <div className="overflow-x-auto pt-1">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-lilac-100 text-ink-400 font-bold uppercase text-[10px]">
-                <th className="pb-1 font-semibold">Doctor / Odontólogo</th>
-                <th className="pb-1 text-center font-semibold">Citas Asignadas</th>
-                <th className="pb-1 text-center font-semibold">Atenciones</th>
-                <th className="pb-1 text-center font-semibold text-amber-700">Por Facturar</th>
-                <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-lilac-50/70">
-              {doctorStats.list.map((item) => (
-                <tr key={item.doctor.id} className="hover:bg-lilac-50/30 transition">
-                  <td className="py-1.5 pr-2">
-                    <div className="flex items-center gap-2">
-                      {item.doctor.photo_url ? (
-                        <img
-                          src={item.doctor.photo_url}
-                          alt={item.doctor.full_name}
-                          className="w-5 h-5 rounded-full object-cover border border-lilac-200 shrink-0"
-                        />
-                      ) : (
-                        <div className="w-5 h-5 rounded-full bg-lilac-100 text-lilac-700 flex items-center justify-center font-bold text-[9px] shrink-0">
-                          {item.doctor.full_name.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-bold text-ink-900 leading-tight text-xs">{item.doctor.full_name}</div>
-                        <div className="text-[10px] text-ink-400 leading-tight">{item.doctor.specialty || "Odontología General"}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-1.5 text-center font-bold text-ink-900">{item.total}</td>
-                  <td className="py-1.5 text-center">
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px]">
-                      {item.attended}
-                    </span>
-                  </td>
-                  <td className="py-1.5 text-center">
-                    {item.pendingInvoices > 0 ? (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]" title={`${item.pendingInvoices} atención(es) pendientes por facturar`}>
-                        {item.pendingInvoices}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-ink-300 font-medium">0</span>
-                    )}
-                  </td>
-                  <td className="py-1.5 text-right font-extrabold text-ink-950 text-xs">
-                    {item.formattedBilled}
-                  </td>
-                </tr>
-              ))}
+        {/* Selector de Vista: Por Odontólogo vs Desglose Facturado (Día y Paciente) */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-lilac-50">
+          <div className="flex items-center gap-1 p-0.5 bg-lilac-50/70 rounded-lg border border-lilac-100 text-xs">
+            <button
+              type="button"
+              onClick={() => setClinicViewMode("doctors")}
+              className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition cursor-pointer ${
+                clinicViewMode === "doctors"
+                  ? "bg-lilac-700 text-white shadow-xs"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              Por Odontólogo / Especialista
+            </button>
+            <button
+              type="button"
+              onClick={() => setClinicViewMode("breakdown")}
+              className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition cursor-pointer flex items-center gap-1 ${
+                clinicViewMode === "breakdown"
+                  ? "bg-lilac-700 text-white shadow-xs"
+                  : "text-ink-600 hover:text-ink-900"
+              }`}
+            >
+              <Receipt size={12} />
+              <span>Desglose Facturado (Día y Paciente)</span>
+            </button>
+          </div>
 
-              {doctorStats.unassignedTotal > 0 && (
-                <tr className="bg-amber-50/30">
-                  <td className="py-1.5 pr-2 font-medium text-amber-800 flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-[9px] shrink-0">
-                      ?
-                    </div>
-                    <div>
-                      <div className="font-bold text-amber-900 leading-tight text-xs">Sin doctor asignado</div>
-                      <div className="text-[10px] text-amber-700 leading-tight">Pendientes de asignación</div>
-                    </div>
-                  </td>
-                  <td className="py-1.5 text-center font-bold text-amber-900">{doctorStats.unassignedTotal}</td>
-                  <td className="py-1.5 text-center font-bold text-emerald-700">{doctorStats.unassignedAttended}</td>
-                  <td className="py-1.5 text-center">
-                    {doctorStats.unassignedPendingInvoices > 0 ? (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]">
-                        {doctorStats.unassignedPendingInvoices}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-ink-300 font-medium">0</span>
-                    )}
-                  </td>
-                  <td className="py-1.5 text-right font-extrabold text-amber-900 text-xs">
-                    {doctorStats.formattedUnassignedBilled}
-                  </td>
-                </tr>
-              )}
+          {clinicViewMode === "breakdown" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={breakdownDoctorFilter}
+                onChange={(e) => setBreakdownDoctorFilter(e.target.value)}
+                className="text-xs bg-white border border-lilac-200 rounded-lg px-2.5 py-1 text-ink-700 font-medium focus:outline-none"
+              >
+                <option value="all">Todos los odontólogos ({doctorStats.list.length})</option>
+                {doctorStats.list.map((d) => (
+                  <option key={d.doctor.id} value={d.doctor.id}>
+                    {d.doctor.full_name} ({d.formattedBilled})
+                  </option>
+                ))}
+                {doctorStats.unassignedTotal > 0 && (
+                  <option value="unassigned">Sin doctor asignado ({doctorStats.formattedUnassignedBilled})</option>
+                )}
+              </select>
 
-              {doctorStats.list.length === 0 && doctorStats.unassignedTotal === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-3 text-center text-xs text-ink-400 italic">
-                    No hay registro de citas ni doctores en este período ({periodLabel}).
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar paciente o motivo..."
+                  value={breakdownSearch}
+                  onChange={(e) => setBreakdownSearch(e.target.value)}
+                  className="text-xs bg-white border border-lilac-200 rounded-lg pl-7 pr-2.5 py-1 text-ink-700 focus:outline-none w-40 sm:w-52"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExportClinicBreakdownCSV}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                title="Descargar este desglose en formato CSV / Excel"
+              >
+                <Download size={12} />
+                <span>Exportar CSV</span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {clinicViewMode === "doctors" ? (
+          /* Tabla Desempeño por Doctor con filas expandibles para ver desglose por día y paciente */
+          <div className="overflow-x-auto pt-1">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-lilac-100 text-ink-400 font-bold uppercase text-[10px]">
+                  <th className="pb-1 font-semibold">Doctor / Odontólogo</th>
+                  <th className="pb-1 text-center font-semibold">Citas Asignadas</th>
+                  <th className="pb-1 text-center font-semibold">Atenciones</th>
+                  <th className="pb-1 text-center font-semibold text-amber-700">Por Facturar</th>
+                  <th className="pb-1 text-right font-bold text-ink-900">Total Facturado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-lilac-50/70">
+                {doctorStats.list.map((item) => {
+                  const isExpanded = expandedDoctorId === item.doctor.id;
+                  const doctorAppts = periodAppointments.filter((a) => a.doctor_id === item.doctor.id);
+                  const doctorDays = isExpanded ? groupAppointmentsByDay(doctorAppts) : [];
+
+                  return (
+                    <React.Fragment key={item.doctor.id}>
+                      <tr
+                        onClick={() => setExpandedDoctorId(isExpanded ? null : item.doctor.id)}
+                        className={`hover:bg-lilac-50/40 transition cursor-pointer ${isExpanded ? "bg-lilac-50/50" : ""}`}
+                        title="Haz clic para ver el desglose por día y paciente"
+                      >
+                        <td className="py-2 pr-2">
+                          <div className="flex items-center gap-2">
+                            {item.doctor.photo_url ? (
+                              <img
+                                src={item.doctor.photo_url}
+                                alt={item.doctor.full_name}
+                                className="w-5 h-5 rounded-full object-cover border border-lilac-200 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-lilac-100 text-lilac-700 flex items-center justify-center font-bold text-[9px] shrink-0">
+                                {item.doctor.full_name.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-bold text-ink-900 leading-tight text-xs flex items-center gap-1">
+                                <span>{item.doctor.full_name}</span>
+                                <span className="inline-flex items-center text-[10px] text-lilac-700 font-medium">
+                                  <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-ink-400 leading-tight">{item.doctor.specialty || "Odontología General"}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2 text-center font-bold text-ink-900">{item.total}</td>
+                        <td className="py-2 text-center">
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px]">
+                            {item.attended}
+                          </span>
+                        </td>
+                        <td className="py-2 text-center">
+                          {item.pendingInvoices > 0 ? (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]" title={`${item.pendingInvoices} atención(es) pendientes por facturar`}>
+                              {item.pendingInvoices}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-ink-300 font-medium">0</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          <div className="font-extrabold text-ink-950 text-xs">
+                            {item.formattedBilled}
+                          </div>
+                          <div className="text-[10px] text-lilac-600 font-semibold">
+                            {isExpanded ? "Ocultar desglose" : "Ver desglose"}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Desglose Expandible del Doctor: Agrupado por Día y Paciente */}
+                      {isExpanded && (
+                        <tr className="bg-lilac-50/20">
+                          <td colSpan={5} className="p-3 sm:p-4 border-y border-lilac-100">
+                            <div className="bg-white border border-lilac-200/80 rounded-xl p-3 sm:p-3.5 space-y-3 shadow-xs">
+                              <div className="flex items-center justify-between border-b border-lilac-100/70 pb-2 flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Receipt size={14} className="text-lilac-600" />
+                                  <span className="font-bold text-ink-900 text-xs">
+                                    Desglose Facturado por Día y Paciente — {item.doctor.full_name}
+                                  </span>
+                                  <span className="text-[10px] text-ink-500 font-medium">({periodLabel})</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="font-extrabold text-emerald-800">
+                                    Total Facturado: {item.formattedBilled}
+                                  </span>
+                                  <Link
+                                    href={`/erp/cursos/profesores?id=${item.doctor.id}`}
+                                    className="text-[11px] font-bold text-lilac-700 hover:underline flex items-center gap-1"
+                                  >
+                                    <span>Ficha de Especialista</span>
+                                    <ArrowUpRight size={11} />
+                                  </Link>
+                                </div>
+                              </div>
+
+                              {doctorDays.length === 0 ? (
+                                <div className="text-center py-3 text-ink-400 italic text-xs">
+                                  No hay atenciones ni facturación registradas para este doctor en este período ({periodLabel}).
+                                </div>
+                              ) : (
+                                <div className="space-y-2.5">
+                                  {doctorDays.map((day) => (
+                                    <div key={day.dateKey} className="border border-lilac-100 rounded-xl overflow-hidden">
+                                      <div className="bg-lilac-50/70 px-3 py-1.5 flex items-center justify-between border-b border-lilac-100 text-xs flex-wrap gap-1">
+                                        <div className="flex items-center gap-1.5 font-bold text-lilac-950">
+                                          <Calendar size={12} className="text-lilac-600" />
+                                          <span className="capitalize">{day.dateLabel}</span>
+                                        </div>
+                                        <div className="text-[11px] font-extrabold text-emerald-800">
+                                          Subtotal Día: ${day.totalBilled.toFixed(2)}{" "}
+                                          <span className="text-[10px] text-ink-400 font-normal">({day.items.length} atención{day.items.length !== 1 ? "es" : ""})</span>
+                                        </div>
+                                      </div>
+
+                                      <div className="divide-y divide-lilac-50/80 bg-white">
+                                        {day.items.map((appt) => {
+                                          const p = appt.patient;
+                                          const billed = Number(appt.billed_amount || appt.invoice?.total || 0);
+                                          const inv = appt.invoice;
+                                          const dt = new Date(appt.starts_at);
+                                          const timeStr = dt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
+
+                                          return (
+                                            <div key={appt.id} className="p-2.5 flex items-center justify-between gap-3 text-xs hover:bg-lilac-50/20 transition">
+                                              <div className="flex items-center gap-2.5 min-w-0">
+                                                <span className="text-[10px] font-mono font-semibold text-ink-500 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                                  {timeStr}
+                                                </span>
+                                                <div className="min-w-0">
+                                                  <div className="font-bold text-ink-950 truncate">
+                                                    {p?.full_name || "Paciente sin nombre"}
+                                                  </div>
+                                                  <div className="text-[10px] text-ink-500 truncate flex items-center gap-2">
+                                                    {p?.document_number && <span>C.I. {p.document_number}</span>}
+                                                    {p?.phone && <span>· Tel: {p.phone}</span>}
+                                                    {appt.reason && <span className="text-ink-400 italic">· {appt.reason}</span>}
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              <div className="text-right shrink-0">
+                                                {inv && billed > 0 ? (
+                                                  <div>
+                                                    <div className="font-extrabold text-emerald-800 text-xs">
+                                                      ${billed.toFixed(2)}
+                                                    </div>
+                                                    <Link
+                                                      href={`/erp/facturacion/${inv.id}`}
+                                                      className="text-[10px] text-lilac-700 hover:underline font-mono"
+                                                    >
+                                                      #{inv.invoice_number}
+                                                    </Link>
+                                                  </div>
+                                                ) : appt.status === "attended" ? (
+                                                  <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded">
+                                                    Por facturar
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-[10px] text-ink-300 font-medium">Sin facturar</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* Doctor no asignado con fila expandible */}
+                {doctorStats.unassignedTotal > 0 && (
+                  <React.Fragment>
+                    <tr
+                      onClick={() => setExpandedDoctorId(expandedDoctorId === "unassigned" ? null : "unassigned")}
+                      className={`bg-amber-50/30 hover:bg-amber-50/50 transition cursor-pointer ${expandedDoctorId === "unassigned" ? "bg-amber-50/70" : ""}`}
+                    >
+                      <td className="py-2 pr-2 font-medium text-amber-800 flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-[9px] shrink-0">
+                          ?
+                        </div>
+                        <div>
+                          <div className="font-bold text-amber-900 leading-tight text-xs flex items-center gap-1">
+                            <span>Sin doctor asignado</span>
+                            <ChevronDown size={12} className={`transition-transform duration-200 ${expandedDoctorId === "unassigned" ? "rotate-180" : ""}`} />
+                          </div>
+                          <div className="text-[10px] text-amber-700 leading-tight">Pendientes de asignación</div>
+                        </div>
+                      </td>
+                      <td className="py-2 text-center font-bold text-amber-900">{doctorStats.unassignedTotal}</td>
+                      <td className="py-2 text-center font-bold text-emerald-700">{doctorStats.unassignedAttended}</td>
+                      <td className="py-2 text-center">
+                        {doctorStats.unassignedPendingInvoices > 0 ? (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]">
+                            {doctorStats.unassignedPendingInvoices}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-ink-300 font-medium">0</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="font-extrabold text-amber-900 text-xs">
+                          {doctorStats.formattedUnassignedBilled}
+                        </div>
+                        <div className="text-[10px] text-amber-700 font-semibold">
+                          {expandedDoctorId === "unassigned" ? "Ocultar desglose" : "Ver desglose"}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {expandedDoctorId === "unassigned" && (
+                      <tr className="bg-amber-50/20">
+                        <td colSpan={5} className="p-3 sm:p-4 border-y border-amber-100">
+                          <div className="bg-white border border-amber-200 rounded-xl p-3 space-y-3 shadow-xs">
+                            <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+                              <span className="font-bold text-amber-900 text-xs">
+                                Desglose de Citas sin Doctor Asignado
+                              </span>
+                              <span className="font-extrabold text-amber-900 text-xs">
+                                Total: {doctorStats.formattedUnassignedBilled}
+                              </span>
+                            </div>
+
+                            {(() => {
+                              const unassignedAppts = periodAppointments.filter((a) => !a.doctor_id);
+                              const unassignedDays = groupAppointmentsByDay(unassignedAppts);
+                              if (unassignedDays.length === 0) {
+                                return (
+                                  <div className="text-center py-2 text-xs text-ink-400 italic">
+                                    No hay citas sin doctor en este período.
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="space-y-2">
+                                  {unassignedDays.map((day) => (
+                                    <div key={day.dateKey} className="border border-amber-100 rounded-lg overflow-hidden">
+                                      <div className="bg-amber-50/60 px-3 py-1 flex items-center justify-between text-xs font-bold text-amber-900">
+                                        <span>{day.dateLabel}</span>
+                                        <span>Subtotal: ${day.totalBilled.toFixed(2)}</span>
+                                      </div>
+                                      <div className="divide-y divide-amber-50 bg-white">
+                                        {day.items.map((appt) => (
+                                          <div key={appt.id} className="p-2 flex items-center justify-between text-xs">
+                                            <div>
+                                              <span className="font-bold text-ink-900">{appt.patient?.full_name || "Sin nombre"}</span>
+                                              <span className="text-[10px] text-ink-400 ml-2">{appt.reason || "Sin motivo"}</span>
+                                            </div>
+                                            <div className="font-bold text-emerald-800">
+                                              ${Number(appt.billed_amount || appt.invoice?.total || 0).toFixed(2)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                )}
+
+                {doctorStats.list.length === 0 && doctorStats.unassignedTotal === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-3 text-center text-xs text-ink-400 italic">
+                      No hay registro de citas ni doctores en este período ({periodLabel}).
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Vista de Desglose Facturado General: Agrupado por Día y Paciente */
+          <div className="space-y-3 pt-1">
+            {(() => {
+              let targetAppts = periodAppointments;
+              if (breakdownDoctorFilter !== "all") {
+                if (breakdownDoctorFilter === "unassigned") {
+                  targetAppts = targetAppts.filter((a) => !a.doctor_id);
+                } else {
+                  targetAppts = targetAppts.filter((a) => a.doctor_id === breakdownDoctorFilter);
+                }
+              }
+
+              if (breakdownSearch.trim()) {
+                const q = breakdownSearch.toLowerCase();
+                targetAppts = targetAppts.filter((a) => {
+                  const p = a.patient;
+                  const pName = p?.full_name?.toLowerCase() || "";
+                  const pDoc = p?.document_number?.toLowerCase() || "";
+                  const reason = (a.reason || "").toLowerCase();
+                  const docName = (a.doctor?.full_name || "").toLowerCase();
+                  return pName.includes(q) || pDoc.includes(q) || reason.includes(q) || docName.includes(q);
+                });
+              }
+
+              const dayGroups = groupAppointmentsByDay(targetAppts);
+              const totalBilledFiltered = targetAppts.reduce((sum, a) => sum + (Number(a.billed_amount || a.invoice?.total || 0)), 0);
+
+              if (dayGroups.length === 0) {
+                return (
+                  <div className="py-6 text-center text-xs text-ink-400 italic bg-lilac-50/20 border border-lilac-100 rounded-xl">
+                    No se encontraron atenciones ni facturación con los filtros seleccionados para este período ({periodLabel}).
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-2.5">
+                  {/* Resumen del desglose */}
+                  <div className="bg-lilac-50/40 border border-lilac-100 rounded-xl px-3 py-2 flex items-center justify-between text-xs flex-wrap gap-2">
+                    <span className="text-ink-600 font-medium">
+                      Mostrando <b>{targetAppts.length}</b> atención{targetAppts.length !== 1 ? "es" : ""} en <b>{dayGroups.length}</b> día{dayGroups.length !== 1 ? "s" : ""} con registro clínico.
+                    </span>
+                    <span className="font-extrabold text-emerald-800 text-xs sm:text-sm">
+                      Total Facturado: ${totalBilledFiltered.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Listado de Días con Pacientes */}
+                  <div className="space-y-2.5">
+                    {dayGroups.map((day) => (
+                      <div key={day.dateKey} className="border border-lilac-100 rounded-2xl overflow-hidden shadow-2xs">
+                        <div className="bg-lilac-50/70 px-3.5 py-2 flex items-center justify-between border-b border-lilac-100 text-xs flex-wrap gap-1">
+                          <div className="flex items-center gap-2 font-bold text-ink-950">
+                            <Calendar size={13} className="text-lilac-600" />
+                            <span className="capitalize">{day.dateLabel}</span>
+                          </div>
+                          <div className="text-xs font-black text-emerald-800">
+                            Subtotal Día: ${day.totalBilled.toFixed(2)}{" "}
+                            <span className="text-[10px] text-ink-400 font-normal">({day.items.length} atención{day.items.length !== 1 ? "es" : ""})</span>
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs bg-white">
+                            <thead>
+                              <tr className="border-b border-lilac-50 text-[10px] font-bold text-ink-400 uppercase bg-slate-50/50">
+                                <th className="py-1.5 px-3">Hora</th>
+                                <th className="py-1.5 px-3">Paciente</th>
+                                <th className="py-1.5 px-3">Doctor / Odontólogo</th>
+                                <th className="py-1.5 px-3">Motivo de Consulta</th>
+                                <th className="py-1.5 px-3 text-center">Estado</th>
+                                <th className="py-1.5 px-3 text-right">Facturación SRI</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-lilac-50/60">
+                              {day.items.map((appt) => {
+                                const p = appt.patient;
+                                const doc = appt.doctor;
+                                const billed = Number(appt.billed_amount || appt.invoice?.total || 0);
+                                const inv = appt.invoice;
+                                const dt = new Date(appt.starts_at);
+                                const timeStr = dt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
+
+                                return (
+                                  <tr key={appt.id} className="hover:bg-lilac-50/20 transition">
+                                    <td className="py-2 px-3 font-mono font-semibold text-ink-500 whitespace-nowrap text-[11px]">
+                                      {timeStr}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="font-bold text-ink-950">{p?.full_name || "Paciente no especificado"}</div>
+                                      <div className="text-[10px] text-ink-400">
+                                        {p?.document_number && <span>C.I. {p.document_number}</span>}
+                                        {p?.phone && <span> · {p.phone}</span>}
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="font-semibold text-ink-800">{doc?.full_name || "Sin asignar"}</div>
+                                      <div className="text-[10px] text-ink-400">{doc?.specialty || "Odontología"}</div>
+                                    </td>
+                                    <td className="py-2 px-3 text-ink-600 max-w-xs truncate">
+                                      {appt.reason || <span className="text-ink-300 italic">—</span>}
+                                    </td>
+                                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                                      {appt.status === "attended" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 text-[10px]">
+                                          Atendida
+                                        </span>
+                                      )}
+                                      {appt.status === "scheduled" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-lilac-700 bg-lilac-50 border border-lilac-200 text-[10px]">
+                                          Agendada
+                                        </span>
+                                      )}
+                                      {appt.status === "no_show" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-amber-700 bg-amber-50 border border-amber-200 text-[10px]">
+                                          No asistió
+                                        </span>
+                                      )}
+                                      {appt.status === "cancelled" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded font-bold text-rose-700 bg-rose-50 border border-rose-200 text-[10px]">
+                                          Cancelada
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3 text-right whitespace-nowrap">
+                                      {inv && billed > 0 ? (
+                                        <div>
+                                          <div className="font-extrabold text-emerald-800 text-xs">
+                                            ${billed.toFixed(2)}
+                                          </div>
+                                          <Link
+                                            href={`/erp/facturacion/${inv.id}`}
+                                            className="text-[10px] text-lilac-700 hover:underline font-mono"
+                                          >
+                                            #{inv.invoice_number}
+                                          </Link>
+                                        </div>
+                                      ) : appt.status === "attended" ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200">
+                                          Por facturar
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-ink-300 font-medium">Sin facturar</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* BLOQUE 2: CURSOS */}

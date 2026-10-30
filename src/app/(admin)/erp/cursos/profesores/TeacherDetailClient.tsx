@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { 
   Award, GraduationCap, Calendar, FileText, Pencil, ArrowLeft, Mail, Phone, 
   UserCheck, ExternalLink, Download, CheckCircle2, X, Stethoscope, Search,
   Clock, AlertCircle, DollarSign, Filter, CheckCircle, Landmark, Copy, Check,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Receipt
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -33,6 +33,8 @@ interface Props {
   assignedClasses: any[];
   assignedAppointments?: AssignedAppointment[];
   billedTotal?: number;
+  clinicBilledTotal?: number;
+  coursesBilledTotal?: number;
   canEdit: boolean;
   editMode: boolean;
   updateTeacherAction: (formData: FormData) => Promise<void>;
@@ -67,12 +69,30 @@ const formatCurrency = (amount: number) => {
   }).format(amount || 0);
 };
 
+// Helper para calcular fechas iniciales (por defecto último mes / 30 días)
+const getInitialDates = () => {
+  const now = new Date();
+  const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const formatDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  return {
+    start: formatDate(past30),
+    end: formatDate(now),
+  };
+};
+
 export default function TeacherDetailClient({
   teacher,
   assignedCourses = [],
   assignedClasses = [],
   assignedAppointments = [],
   billedTotal = 0,
+  clinicBilledTotal = 0,
+  coursesBilledTotal = 0,
   canEdit,
   editMode,
   updateTeacherAction,
@@ -84,6 +104,12 @@ export default function TeacherDetailClient({
   const defaultTab = isDoctor ? "atenciones" : "cursos";
   const [activeTab, setActiveTab] = useState<"atenciones" | "cursos" | "clases">(defaultTab);
   
+  // Filtro de rango de fechas (por defecto: Último Mes)
+  const initialDates = useMemo(() => getInitialDates(), []);
+  const [datePreset, setDatePreset] = useState<"last_month" | "this_month" | "previous_month" | "all" | "custom">("last_month");
+  const [startDate, setStartDate] = useState<string>(initialDates.start);
+  const [endDate, setEndDate] = useState<string>(initialDates.end);
+
   // Filtros en pestaña de atenciones
   const [apptStatusFilter, setApptStatusFilter] = useState<string>("all");
   const [apptSearch, setApptSearch] = useState<string>("");
@@ -103,24 +129,191 @@ export default function TeacherDetailClient({
   const router = useRouter();
 
   const totalClassesCount = assignedClasses.length;
-  const attendedAppointments = assignedAppointments.filter((a) => a.status === "attended");
 
-  // Filtrado de citas
-  const filteredAppointments = assignedAppointments.filter((appt) => {
-    if (apptStatusFilter !== "all" && appt.status !== apptStatusFilter) {
-      return false;
+  // Aplicar presets de fecha
+  const applyPreset = (preset: "last_month" | "this_month" | "previous_month" | "all" | "custom") => {
+    setDatePreset(preset);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+
+    if (preset === "last_month") {
+      const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      setStartDate(`${past30.getFullYear()}-${pad(past30.getMonth() + 1)}-${pad(past30.getDate())}`);
+      setEndDate(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
+    } else if (preset === "this_month") {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setStartDate(`${first.getFullYear()}-${pad(first.getMonth() + 1)}-01`);
+      setEndDate(`${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`);
+    } else if (preset === "previous_month") {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last = new Date(now.getFullYear(), now.getMonth(), 0);
+      setStartDate(`${first.getFullYear()}-${pad(first.getMonth() + 1)}-01`);
+      setEndDate(`${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`);
     }
-    if (apptSearch.trim()) {
-      const q = apptSearch.toLowerCase();
-      const p = Array.isArray(appt.patient) ? appt.patient[0] : appt.patient;
-      const pName = p?.full_name?.toLowerCase() || "";
-      const pPhone = p?.phone?.toLowerCase() || "";
-      const pDoc = p?.document_number?.toLowerCase() || "";
-      const reason = appt.reason?.toLowerCase() || "";
-      return pName.includes(q) || pPhone.includes(q) || pDoc.includes(q) || reason.includes(q);
+  };
+
+  // Rango de fechas activo
+  const dateRange = useMemo(() => {
+    if (datePreset === "all") return null;
+    const start = new Date(startDate + "T00:00:00");
+    const end = new Date(endDate + "T23:59:59");
+    return { start, end };
+  }, [datePreset, startDate, endDate]);
+
+  // Citas filtradas por fecha
+  const dateFilteredAppointments = useMemo(() => {
+    if (!dateRange) return assignedAppointments;
+    return assignedAppointments.filter((a) => {
+      if (!a.starts_at) return false;
+      const d = new Date(a.starts_at);
+      return d >= dateRange.start && d <= dateRange.end;
+    });
+  }, [assignedAppointments, dateRange]);
+
+  // Cursos filtrados por fecha
+  const dateFilteredCourses = useMemo(() => {
+    return assignedCourses.map((c: any) => {
+      let periodBilled = Number(c.billed_total || 0);
+      let periodInvoicesCount = Number(c.invoices_count || 0);
+      if (dateRange && Array.isArray(c.invoices) && c.invoices.length > 0) {
+        const filteredInvs = c.invoices.filter((inv: any) => {
+          if (!inv.created_at) return true;
+          const invDate = new Date(inv.created_at);
+          return invDate >= dateRange.start && invDate <= dateRange.end;
+        });
+        periodBilled = filteredInvs.reduce((sum: number, inv: any) => sum + (Number(inv.total) || 0), 0);
+        periodInvoicesCount = filteredInvs.length;
+      }
+      return {
+        ...c,
+        periodBilled,
+        periodInvoicesCount,
+      };
+    });
+  }, [assignedCourses, dateRange]);
+
+  // Cálculos financieros dinámicos en el período
+  const clinicBilledInPeriod = useMemo(() => {
+    return dateFilteredAppointments.reduce((sum, a) => {
+      const invTotal = Number(a.invoice?.total || 0);
+      return sum + invTotal;
+    }, 0);
+  }, [dateFilteredAppointments]);
+
+  const coursesBilledInPeriod = useMemo(() => {
+    return dateFilteredCourses.reduce((sum, c) => sum + (Number(c.periodBilled ?? c.billed_total ?? 0)), 0);
+  }, [dateFilteredCourses]);
+
+  const totalBilledInPeriod = clinicBilledInPeriod + coursesBilledInPeriod;
+  const attendedInPeriod = dateFilteredAppointments.filter((a) => a.status === "attended").length;
+
+  // Filtrado final de citas por estado y texto de búsqueda
+  const filteredAppointments = useMemo(() => {
+    return dateFilteredAppointments.filter((appt) => {
+      if (apptStatusFilter !== "all" && appt.status !== apptStatusFilter) {
+        return false;
+      }
+      if (apptSearch.trim()) {
+        const q = apptSearch.toLowerCase();
+        const p = Array.isArray(appt.patient) ? appt.patient[0] : appt.patient;
+        const pName = p?.full_name?.toLowerCase() || "";
+        const pPhone = p?.phone?.toLowerCase() || "";
+        const pDoc = p?.document_number?.toLowerCase() || "";
+        const reason = appt.reason?.toLowerCase() || "";
+        return pName.includes(q) || pPhone.includes(q) || pDoc.includes(q) || reason.includes(q);
+      }
+      return true;
+    });
+  }, [dateFilteredAppointments, apptStatusFilter, apptSearch]);
+
+  // Exportar a CSV / Excel con codificación UTF-8 BOM
+  const handleExportCSV = () => {
+    if (activeTab === "atenciones") {
+      if (filteredAppointments.length === 0) return;
+      const headers = [
+        "Fecha",
+        "Hora",
+        "Paciente",
+        "Identificacion",
+        "Telefono",
+        "Motivo_Consulta",
+        "Estado_Cita",
+        "Ficha_Clinica",
+        "Nro_Factura_SRI",
+        "Monto_Facturado"
+      ];
+      const rows = filteredAppointments.map((a) => {
+        const dt = new Date(a.starts_at);
+        const p = Array.isArray(a.patient) ? a.patient[0] : a.patient;
+        const billed = Number(a.invoice?.total || 0);
+        const hasFicha = Array.isArray(a.dental_consultation)
+          ? a.dental_consultation.length > 0
+          : !!a.dental_consultation;
+        return [
+          `"${dt.toLocaleDateString("es-EC")}"`,
+          `"${dt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}"`,
+          `"${(p?.full_name || "").replace(/"/g, '""')}"`,
+          `"${p?.document_number || ""}"`,
+          `"${p?.phone || ""}"`,
+          `"${(a.reason || "").replace(/"/g, '""')}"`,
+          `"${a.status}"`,
+          `"${hasFicha ? "Registrada" : "No registrada"}"`,
+          `"${a.invoice?.invoice_number || "Sin facturar"}"`,
+          `"${billed > 0 ? `$${billed.toFixed(2)}` : "$0.00"}"`
+        ].join(",");
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeName = (teacher.full_name || "especialista").replace(/[^a-zA-Z0-9]/g, "_");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `atenciones_${safeName}_${startDate}_${endDate}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else if (activeTab === "cursos") {
+      if (assignedCourses.length === 0) return;
+      const headers = [
+        "Curso",
+        "Rol_Docente",
+        "Estado",
+        "Fecha_Inicio",
+        "Fecha_Fin",
+        "Alumnos_Matriculados",
+        "Facturas_Emitidas",
+        "Total_Facturado"
+      ];
+      const rows = (dateFilteredCourses || assignedCourses).map((c: any) => {
+        const billed = Number(c.periodBilled ?? c.billed_total ?? 0);
+        return [
+          `"${(c.cursos?.name || "").replace(/"/g, '""')}"`,
+          `"${c.role || "Docente"}"`,
+          `"${c.cursos?.status || ""}"`,
+          `"${c.cursos?.start_date || ""}"`,
+          `"${c.cursos?.end_date || ""}"`,
+          `"${c.student_count || 0}"`,
+          `"${c.invoices_count || 0}"`,
+          `"${billed > 0 ? `$${billed.toFixed(2)}` : "$0.00"}"`
+        ].join(",");
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeName = (teacher.full_name || "especialista").replace(/[^a-zA-Z0-9]/g, "_");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `cursos_${safeName}_${startDate}_${endDate}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     }
-    return true;
-  });
+  };
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -422,11 +615,11 @@ export default function TeacherDetailClient({
               <div className="min-w-0">
                 <div className="text-[11px] text-ink-500 font-medium truncate">Atenciones</div>
                 <div className="text-lg font-bold text-teal-950 leading-tight">
-                  {attendedAppointments.length}{" "}
-                  <span className="text-xs text-ink-400 font-normal">/ {assignedAppointments.length}</span>
+                  {attendedInPeriod}{" "}
+                  <span className="text-xs text-ink-400 font-normal">/ {dateFilteredAppointments.length}</span>
                 </div>
                 <div className="text-[10px] text-teal-700 font-medium">
-                  {attendedAppointments.length === 1 ? "1 atendida" : `${attendedAppointments.length} atendidas`}
+                  {datePreset === "all" ? "Histórico total" : "En período seleccionado"}
                 </div>
               </div>
             </div>
@@ -453,13 +646,126 @@ export default function TeacherDetailClient({
                 <DollarSign size={19} />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] text-ink-500 font-medium truncate">Facturación</div>
+                <div className="text-[11px] text-ink-500 font-medium truncate">Facturación Período</div>
                 <div className="text-base sm:text-lg font-bold text-emerald-950 leading-tight truncate">
-                  {formatCurrency(billedTotal)}
+                  {formatCurrency(totalBilledInPeriod)}
                 </div>
-                <div className="text-[10px] text-emerald-700 font-medium">
-                  total facturado
+                <div className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 truncate" title={`Clínica: ${formatCurrency(clinicBilledInPeriod)}${coursesBilledInPeriod > 0 ? ` · Cursos: ${formatCurrency(coursesBilledInPeriod)}` : ""}`}>
+                  <span>🏥 {formatCurrency(clinicBilledInPeriod)}</span>
+                  {coursesBilledInPeriod > 0 && <span>· 🎓 {formatCurrency(coursesBilledInPeriod)}</span>}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Barra de Filtro de Fechas y Exportación ── */}
+          <div className="bg-white border border-lilac-100 rounded-2xl p-3 sm:p-3.5 shadow-2xs space-y-2.5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+              {/* Presets de fecha */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-ink-600 flex items-center gap-1 mr-1">
+                  <Calendar size={13} className="text-lilac-600" />
+                  <span>Filtrar por fecha:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => applyPreset("last_month")}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    datePreset === "last_month"
+                      ? "bg-lilac-700 text-white shadow-2xs"
+                      : "text-ink-600 hover:text-ink-900 bg-lilac-50/60 border border-lilac-100"
+                  }`}
+                >
+                  Último Mes (30 días)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset("this_month")}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    datePreset === "this_month"
+                      ? "bg-lilac-700 text-white shadow-2xs"
+                      : "text-ink-600 hover:text-ink-900 bg-lilac-50/60 border border-lilac-100"
+                  }`}
+                >
+                  Mes Actual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset("previous_month")}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    datePreset === "previous_month"
+                      ? "bg-lilac-700 text-white shadow-2xs"
+                      : "text-ink-600 hover:text-ink-900 bg-lilac-50/60 border border-lilac-100"
+                  }`}
+                >
+                  Mes Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset("all")}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    datePreset === "all"
+                      ? "bg-lilac-700 text-white shadow-2xs"
+                      : "text-ink-600 hover:text-ink-900 bg-lilac-50/60 border border-lilac-100"
+                  }`}
+                >
+                  Todo el Histórico
+                </button>
+              </div>
+
+              {/* Controles de Rango Personalizado y Botón Exportar */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {datePreset !== "all" && (
+                  <div className="flex items-center gap-1.5 text-xs bg-slate-50 border border-lilac-100 px-2 py-1 rounded-xl">
+                    <span className="text-[10px] text-ink-400 font-medium">Desde:</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setDatePreset("custom");
+                      }}
+                      className="text-xs bg-transparent text-ink-800 font-semibold focus:outline-none"
+                    />
+                    <span className="text-[10px] text-ink-400 font-medium">Hasta:</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setDatePreset("custom");
+                      }}
+                      className="text-xs bg-transparent text-ink-800 font-semibold focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors cursor-pointer"
+                  title="Descargar reporte en formato CSV / Excel compatible con Office"
+                >
+                  <Download size={13} />
+                  <span>Exportar CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Rótulo de rango activo */}
+            <div className="text-[11px] text-ink-500 flex items-center justify-between border-t border-lilac-50 pt-1.5 flex-wrap gap-2">
+              <div>
+                {datePreset === "all" ? (
+                  <span>Mostrando <b>todo el historial</b> sin restricción de fechas.</span>
+                ) : (
+                  <span>
+                    Mostrando del <b>{formatDateES(startDate)}</b> al <b>{formatDateES(endDate)}</b>{" "}
+                    ({dateFilteredAppointments.length} de {assignedAppointments.length} citas en este período)
+                  </span>
+                )}
+              </div>
+              <div className="text-emerald-800 font-extrabold text-xs">
+                Facturado: {formatCurrency(totalBilledInPeriod)}
               </div>
             </div>
           </div>
@@ -479,7 +785,7 @@ export default function TeacherDetailClient({
                 }`}
               >
                 <Stethoscope size={16} className={activeTab === "atenciones" ? "text-teal-600" : "text-ink-400"} />
-                <span>Atenciones a Pacientes ({assignedAppointments.length})</span>
+                <span>Atenciones a Pacientes ({dateFilteredAppointments.length})</span>
               </button>
 
               {/* Pestaña: Cursos Asignados */}
@@ -521,11 +827,11 @@ export default function TeacherDetailClient({
                 {/* Status Pills */}
                 <div className="flex items-center gap-1 flex-wrap">
                   {[
-                    { id: "all", label: `Todas (${assignedAppointments.length})` },
-                    { id: "attended", label: `Atendidas (${attendedAppointments.length})` },
-                    { id: "scheduled", label: `Agendadas (${assignedAppointments.filter(a => a.status === "scheduled").length})` },
-                    { id: "no_show", label: `No asistió (${assignedAppointments.filter(a => a.status === "no_show").length})` },
-                    { id: "cancelled", label: `Canceladas (${assignedAppointments.filter(a => a.status === "cancelled").length})` },
+                    { id: "all", label: `Todas (${dateFilteredAppointments.length})` },
+                    { id: "attended", label: `Atendidas (${attendedInPeriod})` },
+                    { id: "scheduled", label: `Agendadas (${dateFilteredAppointments.filter(a => a.status === "scheduled").length})` },
+                    { id: "no_show", label: `No asistió (${dateFilteredAppointments.filter(a => a.status === "no_show").length})` },
+                    { id: "cancelled", label: `Canceladas (${dateFilteredAppointments.filter(a => a.status === "cancelled").length})` },
                   ].map((filter) => (
                     <button
                       key={filter.id}
@@ -560,7 +866,7 @@ export default function TeacherDetailClient({
                 <div className="p-8 text-center text-sm text-ink-500 italic bg-teal-50/20 border border-teal-100/60 rounded-2xl">
                   {assignedAppointments.length === 0
                     ? "Este especialista no tiene citas ni atenciones a pacientes asignadas."
-                    : "No se encontraron citas con los filtros aplicados."}
+                    : "No se encontraron citas en el período seleccionado o con los filtros aplicados."}
                 </div>
               ) : (
                 <div className="border border-lilac-100 rounded-2xl overflow-hidden shadow-2xs">
@@ -568,13 +874,13 @@ export default function TeacherDetailClient({
                     <table className="w-full text-xs">
                       <thead className="bg-lilac-50/60 text-[10px] font-bold text-ink-500 uppercase tracking-wider border-b border-lilac-100">
                         <tr>
-                          <th className="text-left px-4 py-3">Fecha y Hora</th>
-                          <th className="text-left px-4 py-3">Paciente</th>
-                          <th className="text-left px-4 py-3">Motivo de Consulta</th>
-                          <th className="text-left px-4 py-3">Ficha Clínica</th>
-                          <th className="text-center px-4 py-3">Estado</th>
-                          <th className="text-right px-4 py-3">Facturación SRI</th>
-                          <th className="text-right px-4 py-3">Acción</th>
+                          <th className="text-left px-3.5 py-3">Fecha y Hora</th>
+                          <th className="text-left px-3.5 py-3">Paciente</th>
+                          <th className="text-left px-3.5 py-3">Motivo de Consulta</th>
+                          <th className="text-right px-3.5 py-3 text-emerald-800">Facturación SRI</th>
+                          <th className="text-center px-3.5 py-3">Estado</th>
+                          <th className="text-center px-3.5 py-3">Ficha Clínica</th>
+                          <th className="text-right px-3.5 py-3">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-lilac-50">
@@ -585,17 +891,18 @@ export default function TeacherDetailClient({
                             : !!appt.dental_consultation;
 
                           const inv = appt.invoice;
+                          const billed = Number(inv?.total || 0);
 
                           return (
                             <tr key={appt.id} className="hover:bg-teal-50/20 transition-colors">
-                              <td className="px-4 py-3 font-semibold text-ink-900 whitespace-nowrap">
+                              <td className="px-3.5 py-3 font-semibold text-ink-900 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5">
                                   <Clock size={13} className="text-teal-600" />
                                   <span>{formatDateTimeES(appt.starts_at)}</span>
                                 </div>
                               </td>
 
-                              <td className="px-4 py-3">
+                              <td className="px-3.5 py-3">
                                 <div className="font-bold text-ink-950">
                                   {p?.full_name || "Paciente no especificado"}
                                 </div>
@@ -605,32 +912,35 @@ export default function TeacherDetailClient({
                                 </div>
                               </td>
 
-                              <td className="px-4 py-3 text-ink-700 max-w-xs truncate">
+                              <td className="px-3.5 py-3 text-ink-700 max-w-xs truncate">
                                 {appt.reason || <span className="text-ink-400 italic">Sin motivo especificado</span>}
                               </td>
 
-                              <td className="px-4 py-3">
-                                {hasFicha ? (
-                                  <Link
-                                    href={`/erp/citas/${appt.id}/atencion`}
-                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg hover:bg-emerald-100 transition"
-                                  >
-                                    <CheckCircle size={12} />
-                                    <span>Ficha Registrada</span>
-                                  </Link>
+                              {/* Facturación en posición destacada */}
+                              <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                                {inv && billed > 0 ? (
+                                  <div className="space-y-0.5">
+                                    <div className="font-extrabold text-xs sm:text-sm text-emerald-800">
+                                      {formatCurrency(billed)}
+                                    </div>
+                                    <Link
+                                      href={`/erp/facturacion/${inv.id}`}
+                                      className="inline-flex items-center gap-1 text-[10px] text-lilac-700 hover:text-lilac-900 font-mono underline"
+                                      title="Ver factura electrónica SRI"
+                                    >
+                                      <span>#{inv.invoice_number}</span>
+                                    </Link>
+                                  </div>
                                 ) : appt.status === "attended" ? (
-                                  <Link
-                                    href={`/erp/citas/${appt.id}/atencion`}
-                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg hover:bg-amber-100 transition"
-                                  >
-                                    <span>Pendiente de Ficha</span>
-                                  </Link>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200">
+                                    Por facturar
+                                  </span>
                                 ) : (
-                                  <span className="text-[11px] text-ink-400 italic">—</span>
+                                  <span className="text-[11px] text-ink-400 italic">Sin facturar</span>
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                              <td className="px-3.5 py-3 text-center whitespace-nowrap">
                                 {appt.status === "attended" && (
                                   <span className="inline-block px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full">
                                     Atendida
@@ -653,25 +963,28 @@ export default function TeacherDetailClient({
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 text-right whitespace-nowrap">
-                                {inv ? (
-                                  <div className="space-y-0.5">
-                                    <div className="font-bold text-emerald-800">
-                                      {formatCurrency(inv.total)}
-                                    </div>
-                                    <Link
-                                      href={`/erp/facturacion/${inv.id}`}
-                                      className="text-[10px] text-lilac-700 hover:underline font-mono"
-                                    >
-                                      #{inv.invoice_number}
-                                    </Link>
-                                  </div>
+                              <td className="px-3.5 py-3 text-center">
+                                {hasFicha ? (
+                                  <Link
+                                    href={`/erp/citas/${appt.id}/atencion`}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg hover:bg-emerald-100 transition"
+                                  >
+                                    <CheckCircle size={12} />
+                                    <span>Ficha Registrada</span>
+                                  </Link>
+                                ) : appt.status === "attended" ? (
+                                  <Link
+                                    href={`/erp/citas/${appt.id}/atencion`}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg hover:bg-amber-100 transition"
+                                  >
+                                    <span>Pendiente de Ficha</span>
+                                  </Link>
                                 ) : (
-                                  <span className="text-[11px] text-ink-400 italic">Sin facturar</span>
+                                  <span className="text-[11px] text-ink-400 italic">—</span>
                                 )}
                               </td>
 
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-3.5 py-3 text-right">
                                 <Link
                                   href={`/erp/citas/${appt.id}`}
                                   className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2.5 py-1 rounded-xl transition"
@@ -691,7 +1004,7 @@ export default function TeacherDetailClient({
             </div>
           )}
 
-          {/* TAB 2: CURSOS ASIGNADOS */}
+          {/* TAB 2: CURSOS ASIGNADOS CON FACTURACIÓN */}
           {activeTab === "cursos" && isTeacher && (
             <div className="space-y-4">
               {assignedCourses.length === 0 ? (
@@ -700,32 +1013,56 @@ export default function TeacherDetailClient({
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-4">
-                  {assignedCourses.map((c: any) => (
-                    <div key={c.id} className="p-4 bg-white border border-lilac-100 rounded-2xl shadow-2xs flex flex-col justify-between space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-100 px-2 py-0.5 rounded-md">
-                            {c.role === "principal" ? "Docente Principal" : c.role || "Docente"}
-                          </span>
-                          <span className="text-[11px] text-ink-400 font-medium">
-                            {c.cursos?.status === "active" ? "🟢 Abierto" : c.cursos?.status === "in_progress" ? "🔵 En Ejecución" : "⚪ Finalizado"}
-                          </span>
-                        </div>
-                        <h3 className="font-bold text-ink-950 text-sm mt-2">{c.cursos?.name}</h3>
-                        <p className="text-xs text-ink-500 mt-1 line-clamp-2">{c.cursos?.description || "Sin descripción"}</p>
-                      </div>
+                  {(dateFilteredCourses || assignedCourses).map((c: any) => {
+                    const billedAmount = Number(c.periodBilled ?? c.billed_total ?? 0);
+                    const invoicesCount = Number(c.periodInvoicesCount ?? c.invoices_count ?? 0);
 
-                      <div className="pt-2 border-t border-lilac-50 flex items-center justify-between">
-                        <span className="text-[11px] text-ink-400 font-mono">
-                          {c.cursos?.start_date && formatDateES(c.cursos.start_date)}
-                        </span>
-                        <Link href={`/erp/cursos/${c.course_id}`} className="text-xs font-bold text-lilac-600 hover:text-lilac-800 flex items-center gap-1">
-                          <span>Ver Curso</span>
-                          <ExternalLink size={12} />
-                        </Link>
+                    return (
+                      <div key={c.id} className="p-4 bg-white border border-lilac-100 rounded-2xl shadow-2xs flex flex-col justify-between space-y-3">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-lilac-700 bg-lilac-50 border border-lilac-100 px-2 py-0.5 rounded-md">
+                              {c.role === "principal" ? "Docente Principal" : c.role || "Docente"}
+                            </span>
+                            <span className="text-[11px] text-ink-400 font-medium">
+                              {c.cursos?.status === "active" ? "🟢 Abierto" : c.cursos?.status === "in_progress" ? "🔵 En Ejecución" : "⚪ Finalizado"}
+                            </span>
+                          </div>
+                          <h3 className="font-bold text-ink-950 text-sm mt-2">{c.cursos?.name}</h3>
+                          <p className="text-xs text-ink-500 mt-1 line-clamp-2">{c.cursos?.description || "Sin descripción"}</p>
+                        </div>
+
+                        {/* Indicador de Facturación del Curso */}
+                        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 flex items-center justify-between">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Facturación del Curso</div>
+                            <div className="text-lg font-black text-emerald-900 leading-tight mt-0.5">
+                              {formatCurrency(billedAmount)}
+                            </div>
+                            <div className="text-[10px] text-emerald-700 font-medium">
+                              {invoicesCount === 1 ? "1 factura emitida" : `${invoicesCount} facturas emitidas`}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">Alumnos</div>
+                            <div className="text-sm font-bold text-ink-900 mt-0.5">
+                              {c.student_count || 0} matriculados
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-lilac-50 flex items-center justify-between">
+                          <span className="text-[11px] text-ink-400 font-mono">
+                            {c.cursos?.start_date && formatDateES(c.cursos.start_date)}
+                          </span>
+                          <Link href={`/erp/cursos/${c.course_id || c.cursos?.id}`} className="text-xs font-bold text-lilac-600 hover:text-lilac-800 flex items-center gap-1">
+                            <span>Ver Curso</span>
+                            <ExternalLink size={12} />
+                          </Link>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
