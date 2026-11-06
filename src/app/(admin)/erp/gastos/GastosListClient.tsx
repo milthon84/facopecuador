@@ -25,6 +25,8 @@ import {
   FileCheck2,
   RotateCcw,
   Trash2,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { FacturaRecibida } from "@/lib/expense-types";
 import {
@@ -33,6 +35,7 @@ import {
   resolveReceiptUrl,
   resolveFacturaSriClave,
   resolveExpenseDocType,
+  cleanVisibleNotes,
 } from "@/lib/expense-areas";
 import { linkExpenseToFactura, deleteOrVoidExpense } from "./actions";
 
@@ -301,6 +304,117 @@ export default function GastosListClient({
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      const XLSX = await import("xlsx");
+
+      const rows = displayedItems.map((exp: any) => {
+        const sriClave = resolveFacturaSriClave(exp);
+        const docType = resolveExpenseDocType(exp);
+        const docTypeLabel =
+          docType === "factura_sri" || Boolean(sriClave)
+            ? "Factura SRI"
+            : docType === "nota_venta"
+            ? "Nota de Venta"
+            : docType === "factura"
+            ? "Factura"
+            : docType === "sin_documento"
+            ? "Sin Comprobante"
+            : exp.document_type || "Otro";
+
+        const areaLabel =
+          exp.resolvedArea === "clinica"
+            ? "Clínica Dental"
+            : exp.resolvedArea === "cursos"
+            ? "Cursos / Educación"
+            : exp.resolvedArea === "general"
+            ? "General / Admin"
+            : exp.resolvedArea || "General";
+
+        return {
+          "Fecha": exp.expense_date,
+          "Proveedor / Razón Social": exp.supplier_name || "",
+          "RUC Proveedor": exp.supplier_ruc || "",
+          "Área": areaLabel,
+          "Categoría": exp.category || "",
+          "Tipo Comprobante": docTypeLabel,
+          "N° Comprobante": exp.document_number || "",
+          "Clave SRI / Autorización": sriClave || exp.authorization_number || "",
+          "Forma de Pago": PAYMENT_LABELS[exp.payment_method] || exp.payment_method || "",
+          "Subtotal 0%": Number(exp.subtotal_0 || 0),
+          "Subtotal 15%": Number(exp.subtotal_15 || 0),
+          "Subtotal": Number(exp.subtotal || 0),
+          "IVA": Number(exp.iva_amount || 0),
+          "Total": Number(exp.total || 0),
+          "Descripción / Detalle": exp.description || "",
+          "Notas": cleanVisibleNotes(exp.notes),
+        };
+      });
+
+      if (rows.length > 0) {
+        const sumSub0 = displayedItems.reduce((s: number, e: any) => s + Number(e.subtotal_0 || 0), 0);
+        const sumSub15 = displayedItems.reduce((s: number, e: any) => s + Number(e.subtotal_15 || 0), 0);
+        const sumSub = displayedItems.reduce((s: number, e: any) => s + Number(e.subtotal || 0), 0);
+        const sumIva = displayedItems.reduce((s: number, e: any) => s + Number(e.iva_amount || 0), 0);
+        const sumTotal = displayedItems.reduce((s: number, e: any) => s + Number(e.total || 0), 0);
+
+        rows.push({
+          "Fecha": "TOTALES",
+          "Proveedor / Razón Social": `${displayedItems.length} registro(s)`,
+          "RUC Proveedor": "",
+          "Área": "",
+          "Categoría": "",
+          "Tipo Comprobante": "",
+          "N° Comprobante": "",
+          "Clave SRI / Autorización": "",
+          "Forma de Pago": "",
+          "Subtotal 0%": sumSub0,
+          "Subtotal 15%": sumSub15,
+          "Subtotal": sumSub,
+          "IVA": sumIva,
+          "Total": sumTotal,
+          "Descripción / Detalle": "",
+          "Notas": "",
+        });
+      }
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+
+      ws["!cols"] = [
+        { wch: 12 }, // Fecha
+        { wch: 34 }, // Proveedor
+        { wch: 15 }, // RUC
+        { wch: 18 }, // Área
+        { wch: 22 }, // Categoría
+        { wch: 18 }, // Tipo Comprobante
+        { wch: 20 }, // N° Comprobante
+        { wch: 52 }, // Clave SRI
+        { wch: 16 }, // Forma de Pago
+        { wch: 14 }, // Subtotal 0%
+        { wch: 14 }, // Subtotal 15%
+        { wch: 14 }, // Subtotal
+        { wch: 12 }, // IVA
+        { wch: 14 }, // Total
+        { wch: 40 }, // Descripción
+        { wch: 30 }, // Notas
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Gastos");
+
+      const filterSuffix = areaFilter !== "all" ? `_${areaFilter}` : "";
+      XLSX.writeFile(wb, `gastos_${activeMonth}${filterSuffix}.xlsx`);
+    } catch (err) {
+      console.error("Error al exportar gastos a Excel:", err);
+      alert("Hubo un error al generar el archivo Excel.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       {/* Header */}
@@ -311,6 +425,21 @@ export default function GastosListClient({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExporting || displayedItems.length === 0}
+            className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-3 py-1.5 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+            title="Descargar listado de gastos en formato Excel (.xlsx)"
+          >
+            {isExporting ? (
+              <Loader2 size={15} className="animate-spin text-lilac-600 shrink-0" />
+            ) : (
+              <Download size={15} className="text-lilac-600 shrink-0" />
+            )}
+            <span>Descargar Excel</span>
+          </button>
+
           {canEdit && (
             <Link
               href="/erp/gastos/nuevo"
@@ -505,6 +634,22 @@ export default function GastosListClient({
             {displayedItems.length} de {rawItems.length}
           </span>
 
+          {/* Botón Descargar Excel */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={isExporting || displayedItems.length === 0}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 transition shadow-2xs disabled:opacity-50 cursor-pointer"
+            title="Descargar reporte en Excel (.xlsx)"
+          >
+            {isExporting ? (
+              <Loader2 size={12} className="animate-spin text-lilac-600" />
+            ) : (
+              <Download size={12} className="text-lilac-600" />
+            )}
+            <span className="hidden md:inline">Descargar</span>
+          </button>
+
           {/* Botón Facturas Pendientes SRI */}
           <button
             type="button"
@@ -560,6 +705,7 @@ export default function GastosListClient({
             {displayedItems.map((exp: any) => {
               const sriClave = resolveFacturaSriClave(exp);
               const hasSriFactura = Boolean(sriClave);
+              const receiptUrl = resolveReceiptUrl(exp);
               return (
                 <div
                   key={exp.id}
@@ -600,6 +746,23 @@ export default function GastosListClient({
                             <span>Relacionar Factura</span>
                           </button>
                         )
+                      )}
+
+                      {receiptUrl && (
+                        <a
+                          href={receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs"
+                          title="Descargar o ver archivo adjunto / comprobante"
+                        >
+                          <Paperclip size={11} className="text-lilac-600" />
+                          <span className="hidden sm:inline">Comprobante</span>
+                          <Download size={10} className="text-lilac-500" />
+                        </a>
                       )}
                     </div>
 
