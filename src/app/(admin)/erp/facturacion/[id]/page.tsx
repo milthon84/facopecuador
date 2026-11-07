@@ -9,6 +9,7 @@ import CopyButton from "@/components/CopyButton";
 import ReintentoSriButton from "@/components/ReintentoSriButton";
 import AnularFacturaButton from "@/components/AnularFacturaButton";
 import EmitirNotaCreditoModal from "@/components/EmitirNotaCreditoModal";
+import SyncNotaCreditoButton from "@/components/SyncNotaCreditoButton";
 import InvoicePhotosSection, { InvoicePhoto } from "@/components/InvoicePhotosSection";
 import { getTipoIdentificacion } from "@/lib/sri";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
@@ -266,14 +267,23 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 </p>
               </div>
             </div>
-            <a
-              href={`/api/nota-credito/${existingCreditNote.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-bold bg-white text-rose-800 border border-rose-300 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition shadow-2xs"
-            >
-              <Printer size={13} /> Ver RIDE NC
-            </a>
+            <div className="flex items-center gap-2 flex-wrap">
+              {existingCreditNote.sri_status !== "authorized" && (
+                <SyncNotaCreditoButton
+                  creditNoteId={existingCreditNote.id}
+                  currentStatus={existingCreditNote.sri_status}
+                  creditNoteNumber={existingCreditNote.credit_note_number}
+                />
+              )}
+              <a
+                href={`/api/nota-credito/${existingCreditNote.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold bg-white text-rose-800 border border-rose-300 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition shadow-2xs"
+              >
+                <Printer size={13} /> Ver RIDE NC
+              </a>
+            </div>
           </div>
         )}
         {/* ── SRI Info & Emisor (Grid 2 columnas) ── */}

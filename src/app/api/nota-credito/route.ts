@@ -301,17 +301,18 @@ export async function POST(req: Request) {
       try {
         console.log(`Enviando Nota de Crédito ${creditNoteNumber} (Clave: ${claveAcceso}) al SRI...`);
         const resSri = await enviarYAutorizar(xmlFirmado, claveAcceso, config.ambiente as "1" | "2");
+        const aut = resSri.autorizacion;
 
-        if (resSri.estado === "AUTORIZADO") {
+        if (aut.estado === "AUTORIZADO") {
           sri_status = "authorized";
-          sri_authorization_number = resSri.numeroAutorizacion || claveAcceso;
-          sri_authorization_date = resSri.fechaAutorizacion || new Date().toISOString();
-        } else if (resSri.estado === "EN PROCESO") {
+          sri_authorization_number = aut.numeroAutorizacion || claveAcceso;
+          sri_authorization_date = aut.fechaAutorizacion || new Date().toISOString();
+        } else if (aut.estado === "EN PROCESO") {
           sri_status = "submitted";
-          sri_error_messages = resSri.mensajes || null;
+          sri_error_messages = aut.mensajes || null;
         } else {
           sri_status = "rejected";
-          sri_error_messages = resSri.mensajes || null;
+          sri_error_messages = aut.mensajes || (resSri.recepcion?.comprobantes?.[0]?.mensajes) || null;
         }
       } catch (err: any) {
         console.error("Error comunicando con SRI para Nota de Crédito:", err);

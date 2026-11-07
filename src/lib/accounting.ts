@@ -51,7 +51,7 @@ interface JournalLine {
 async function insertJournalEntry(params: {
   entry_date:      string;
   description:     string;
-  reference_type:  "invoice" | "expense" | "manual" | "asset_purchase" | "depreciation" | "disposal" | "monthly_closure";
+  reference_type:  "invoice" | "expense" | "manual" | "asset_purchase" | "depreciation" | "disposal" | "monthly_closure" | "credit_note";
   reference_id?:   string | null;
   lines:           JournalLine[];
   user_id?:        string | null;

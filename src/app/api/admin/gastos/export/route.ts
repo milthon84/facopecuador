@@ -82,7 +82,7 @@ export async function GET(req: Request) {
       const sriClave = resolveFacturaSriClave(exp);
       const docType = resolveExpenseDocType(exp);
       const docTypeLabel =
-        docType === "factura_sri" || Boolean(sriClave)
+        (docType as string) === "factura_sri" || Boolean(sriClave)
           ? "Factura SRI"
           : docType === "nota_venta"
           ? "Nota de Venta"

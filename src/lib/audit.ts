@@ -18,7 +18,9 @@ export interface AuditEntry {
     | "system_role"
     | "monthly_closure"
     | "attendance_punch"
-    | "door_access";
+    | "door_access"
+    | "credit_note"
+    | "expenses";
   resource_id?: string | null;
   description: string;
   metadata?: Record<string, any> | null;

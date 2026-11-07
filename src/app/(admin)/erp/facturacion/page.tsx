@@ -12,6 +12,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import SyncNotaCreditoButton from "@/components/SyncNotaCreditoButton";
 
 export const dynamic = "force-dynamic";
 
@@ -66,19 +67,26 @@ export default async function BillingDashboard({
     cnQuery = cnQuery.limit(100);
   }
 
-  const [
-    { data: invoices },
-    { data: cnData },
-    { data: allCreditNotes },
-  ] = await Promise.all([
-    invoiceQuery,
-    cnQuery.then((res) => res).catch(() => ({ data: [] })),
-    supabase
+  let invoices: any[] = [];
+  let cnData: any[] = [];
+  let allCreditNotes: any[] = [];
+
+  try {
+    const res = await invoiceQuery;
+    invoices = res.data || [];
+  } catch {}
+
+  try {
+    const res = await cnQuery;
+    cnData = res.data || [];
+  } catch {}
+
+  try {
+    const res = await supabase
       .from("credit_notes")
-      .select("id, invoice_id, credit_note_number, sri_status, total")
-      .then((res) => res)
-      .catch(() => ({ data: [] })),
-  ]);
+      .select("id, invoice_id, credit_note_number, sri_status, total");
+    allCreditNotes = res.data || [];
+  } catch {}
 
   const items = invoices || [];
   const creditNotes = cnData || [];
@@ -92,18 +100,18 @@ export default async function BillingDashboard({
   });
 
   // 3. Cálculos y métricas del período
-  const totalFacturado = items.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
-  const autorizadas = items.filter((inv) => inv.sri_status === "authorized");
-  const totalAutorizado = autorizadas.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+  const totalFacturado = items.reduce((sum: number, inv: any) => sum + Number(inv.total || 0), 0);
+  const autorizadas = items.filter((inv: any) => inv.sri_status === "authorized");
+  const totalAutorizado = autorizadas.reduce((sum: number, inv: any) => sum + Number(inv.total || 0), 0);
 
   // Notas de crédito vinculadas en este mes
-  const facturasConNc = items.filter((inv) => {
+  const facturasConNc = items.filter((inv: any) => {
     const cn = invoiceToCreditNoteMap.get(inv.id);
     const hasMsgCn = Boolean(inv.sri_error_messages?.credit_note);
     return Boolean(cn || hasMsgCn);
   });
 
-  const totalNc = creditNotes.reduce((sum, cn) => sum + Number(cn.total || 0), 0);
+  const totalNc = creditNotes.reduce((sum: number, cn: any) => sum + Number(cn.total || 0), 0);
 
   const getStatusStyle = (status: string, env?: string) => {
     switch (status) {
@@ -323,7 +331,7 @@ export default async function BillingDashboard({
                     </td>
                   </tr>
                 ) : (
-                  items.map((inv) => {
+                  items.map((inv: any) => {
                     const style = getStatusStyle(inv.sri_status, inv.sri_environment);
                     const dateStr = new Date(inv.created_at || inv.issue_date).toLocaleDateString("es-EC");
 
@@ -382,12 +390,12 @@ export default async function BillingDashboard({
                           <Link href={`/erp/facturacion/${inv.id}`} className="block">
                             <div
                               className={`font-black ${
-                                linkedCn ? "line-through text-ink-400" : "text-ink-900"
+                                linkedCn && linkedCn.sri_status === "authorized" ? "line-through text-ink-400" : "text-ink-900"
                               }`}
                             >
                               ${Number(inv.total).toFixed(2)}
                             </div>
-                            {linkedCn && (
+                            {linkedCn && linkedCn.sri_status === "authorized" && (
                               <div className="text-[10px] text-rose-600 font-bold">
                                 Anulado por NC
                               </div>
@@ -528,16 +536,23 @@ export default async function BillingDashboard({
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-center">
-                          <a
-                            href={`/api/nota-credito/${cn.id}/pdf`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
-                            title="Ver / Descargar RIDE PDF de la Nota de Crédito"
-                          >
-                            <Printer size={13} />
-                            <span>RIDE PDF</span>
-                          </a>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <SyncNotaCreditoButton
+                              creditNoteId={cn.id}
+                              currentStatus={cn.sri_status}
+                              creditNoteNumber={cn.credit_note_number}
+                            />
+                            <a
+                              href={`/api/nota-credito/${cn.id}/pdf`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                              title="Ver / Descargar RIDE PDF de la Nota de Crédito"
+                            >
+                              <Printer size={13} />
+                              <span>RIDE PDF</span>
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     );
