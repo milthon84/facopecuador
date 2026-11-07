@@ -151,6 +151,67 @@ export async function createInvoiceJournalEntry(params: {
   });
 }
 
+// ── Asiento por Nota de Crédito en Ventas ─────────────────────────────────
+/**
+ * Nota de Crédito emitida (reversión de venta/ingreso e IVA):
+ *   Dr. Servicios / Ventas            (subtotal_0 + subtotal_15)
+ *   Dr. IVA en Ventas por Pagar       (iva_amount)   ← solo si hubo IVA
+ *   Cr.   Cuentas por Cobrar Clientes (total)
+ */
+export async function createCreditNoteJournalEntry(params: {
+  credit_note_id:     string;
+  credit_note_number: string;
+  credit_note_date:   string;
+  invoice_number:     string;
+  client_name:        string;
+  subtotal_0:         number;
+  subtotal_15:        number;
+  iva_amount:         number;
+  total:              number;
+  motivo?:            string;
+  user_id?:           string | null;
+  user_email?:        string | null;
+}) {
+  const subtotalTotal = r2(params.subtotal_0 + params.subtotal_15);
+  const lines: JournalLine[] = [
+    {
+      account_code: "4.1.01",
+      account_name: "Servicios de Prevención e Higiene", // Ingreso reversado
+      debit:  subtotalTotal,
+      credit: 0,
+      description: `Reversión por NC ${params.credit_note_number} — ${params.motivo || "Anulación/Modificación"}`,
+    },
+  ];
+
+  if (params.iva_amount > 0) {
+    lines.push({
+      account_code: "2.1.03.01",
+      account_name: "IVA en Ventas por Pagar",
+      debit:  r2(params.iva_amount),
+      credit: 0,
+      description: `Reversión IVA NC ${params.credit_note_number}`,
+    });
+  }
+
+  lines.push({
+    account_code: "1.1.02.01",
+    account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+    debit:  0,
+    credit: r2(params.total),
+    description: `NC ${params.credit_note_number} sobre Fac. ${params.invoice_number}`,
+  });
+
+  return insertJournalEntry({
+    entry_date:     params.credit_note_date,
+    description:    `Nota de Crédito ${params.credit_note_number} — Fac. ${params.invoice_number} (${params.client_name})`,
+    reference_type: "credit_note",
+    reference_id:   params.credit_note_id,
+    lines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
+  });
+}
+
 // ── Asiento por Gasto / Factura de Compra ─────────────────────────────────
 /**
  * Gasto registrado:

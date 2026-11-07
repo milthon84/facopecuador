@@ -270,6 +270,189 @@ export function generarXMLFactura(data: SRIInvoiceData): string {
     .replace(/>\s+</g, "><"); // eliminar espacios entre tags (por si quedan)
 }
 
+// ── NOTA DE CRÉDITO ────────────────────────────────────────────────────────
+
+export interface SRICreditNoteData {
+  ambiente: "1" | "2"; // 1=Pruebas, 2=Produccion
+  tipoEmision: "1"; // 1=Normal
+  razonSocial: string;
+  nombreComercial?: string;
+  ruc: string;
+  claveAcceso?: string;
+  codDoc: "04"; // 04=Nota de Crédito
+  estab: string; // ej. "001"
+  ptoEmi: string; // ej. "001"
+  secuencial: string; // ej. "000000001"
+  dirMatriz: string;
+  fechaEmision: string; // DD/MM/YYYY
+  dirEstablecimiento?: string;
+  obligadoContabilidad: "SI" | "NO";
+
+  // Comprador
+  tipoIdentificacionComprador: string; // 04=RUC, 05=Cedula, 06=Pasaporte, 07=Consumidor Final, 08=Id del exterior
+  razonSocialComprador: string;
+  identificacionComprador: string;
+
+  // Documento Modificado / Sustento
+  codDocModificado: "01"; // 01=Factura
+  numDocModificado: string; // ej. "001-001-000000001" (formato con guiones obligatorio)
+  fechaEmisionDocSustento: string; // DD/MM/YYYY
+  totalSinImpuestos: number;
+  valorModificacion: number; // Monto total con impuestos que se reversa/descuenta
+  moneda: "DOLAR";
+  motivo: string;
+
+  // Subtotales de Impuestos
+  subtotal15: number;
+  iva15: number;
+  subtotal0: number;
+  subtotalNoObjeto?: number;
+  subtotalExento?: number;
+
+  detalles: Array<{
+    codigoInterno: string;
+    codigoAdicional?: string;
+    descripcion: string;
+    cantidad: number;
+    precioUnitario: number;
+    descuento?: number;
+    precioTotalSinImpuesto: number;
+    ivaCodigoPorcentaje: string; // "4" = 15%, "0" = 0%, "2" = 12%
+    ivaTarifa: number;
+    ivaValor: number;
+  }>;
+
+  infoAdicional?: Record<string, string>;
+}
+
+/**
+ * Genera el XML en formato SRI para Nota de Crédito (notaCredito_V1.0.0.xsd)
+ */
+export function generarXMLNotaCredito(data: SRICreditNoteData): string {
+  const formatNum = (num: number) => num.toFixed(2);
+  const formatNum6 = (num: number) => num.toFixed(6);
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<notaCredito id="comprobante" version="1.0.0">\n`;
+
+  // 1. infoTributaria
+  xml += `  <infoTributaria>\n`;
+  xml += `    <ambiente>${data.ambiente}</ambiente>\n`;
+  xml += `    <tipoEmision>${data.tipoEmision}</tipoEmision>\n`;
+  xml += `    <razonSocial>${xe(data.razonSocial)}</razonSocial>\n`;
+  if (data.nombreComercial) {
+    xml += `    <nombreComercial>${xe(data.nombreComercial)}</nombreComercial>\n`;
+  }
+  xml += `    <ruc>${data.ruc.padStart(13, "0")}</ruc>\n`;
+  xml += `    <claveAcceso>${data.claveAcceso}</claveAcceso>\n`;
+  xml += `    <codDoc>04</codDoc>\n`;
+  xml += `    <estab>${data.estab}</estab>\n`;
+  xml += `    <ptoEmi>${data.ptoEmi}</ptoEmi>\n`;
+  xml += `    <secuencial>${data.secuencial}</secuencial>\n`;
+  xml += `    <dirMatriz>${xe(data.dirMatriz)}</dirMatriz>\n`;
+  xml += `  </infoTributaria>\n`;
+
+  // 2. infoNotaCredito (Secuencia estricta según XSD)
+  xml += `  <infoNotaCredito>\n`;
+  xml += `    <fechaEmision>${data.fechaEmision}</fechaEmision>\n`;
+  if (data.dirEstablecimiento) {
+    xml += `    <dirEstablecimiento>${xe(data.dirEstablecimiento)}</dirEstablecimiento>\n`;
+  }
+  xml += `    <tipoIdentificacionComprador>${data.tipoIdentificacionComprador}</tipoIdentificacionComprador>\n`;
+  xml += `    <razonSocialComprador>${xe(data.razonSocialComprador)}</razonSocialComprador>\n`;
+  xml += `    <identificacionComprador>${data.identificacionComprador}</identificacionComprador>\n`;
+  xml += `    <obligadoContabilidad>${data.obligadoContabilidad}</obligadoContabilidad>\n`;
+  xml += `    <codDocModificado>${data.codDocModificado}</codDocModificado>\n`;
+  xml += `    <numDocModificado>${data.numDocModificado}</numDocModificado>\n`;
+  xml += `    <fechaEmisionDocSustento>${data.fechaEmisionDocSustento}</fechaEmisionDocSustento>\n`;
+  xml += `    <totalSinImpuestos>${formatNum(data.totalSinImpuestos)}</totalSinImpuestos>\n`;
+  xml += `    <valorModificacion>${formatNum(data.valorModificacion)}</valorModificacion>\n`;
+  xml += `    <moneda>${data.moneda}</moneda>\n`;
+
+  // totalConImpuestos
+  xml += `    <totalConImpuestos>\n`;
+  if (data.subtotal15 > 0) {
+    xml += `      <totalImpuesto>\n`;
+    xml += `        <codigo>2</codigo>\n`;
+    xml += `        <codigoPorcentaje>4</codigoPorcentaje>\n`; // 4 = 15%
+    xml += `        <baseImponible>${formatNum(data.subtotal15)}</baseImponible>\n`;
+    xml += `        <valor>${formatNum(data.iva15)}</valor>\n`;
+    xml += `      </totalImpuesto>\n`;
+  }
+  if (data.subtotal0 > 0) {
+    xml += `      <totalImpuesto>\n`;
+    xml += `        <codigo>2</codigo>\n`;
+    xml += `        <codigoPorcentaje>0</codigoPorcentaje>\n`; // 0 = 0%
+    xml += `        <baseImponible>${formatNum(data.subtotal0)}</baseImponible>\n`;
+    xml += `        <valor>0.00</valor>\n`;
+    xml += `      </totalImpuesto>\n`;
+  }
+  if (data.subtotalNoObjeto && data.subtotalNoObjeto > 0) {
+    xml += `      <totalImpuesto>\n`;
+    xml += `        <codigo>2</codigo>\n`;
+    xml += `        <codigoPorcentaje>6</codigoPorcentaje>\n`;
+    xml += `        <baseImponible>${formatNum(data.subtotalNoObjeto)}</baseImponible>\n`;
+    xml += `        <valor>0.00</valor>\n`;
+    xml += `      </totalImpuesto>\n`;
+  }
+  if (data.subtotalExento && data.subtotalExento > 0) {
+    xml += `      <totalImpuesto>\n`;
+    xml += `        <codigo>2</codigo>\n`;
+    xml += `        <codigoPorcentaje>7</codigoPorcentaje>\n`;
+    xml += `        <baseImponible>${formatNum(data.subtotalExento)}</baseImponible>\n`;
+    xml += `        <valor>0.00</valor>\n`;
+    xml += `      </totalImpuesto>\n`;
+  }
+  xml += `    </totalConImpuestos>\n`;
+
+  xml += `    <motivo>${xe(data.motivo)}</motivo>\n`;
+  xml += `  </infoNotaCredito>\n`;
+
+  // 3. detalles
+  xml += `  <detalles>\n`;
+  data.detalles.forEach((d) => {
+    xml += `    <detalle>\n`;
+    xml += `      <codigoInterno>${xe(d.codigoInterno)}</codigoInterno>\n`;
+    if (d.codigoAdicional) {
+      xml += `      <codigoAdicional>${xe(d.codigoAdicional)}</codigoAdicional>\n`;
+    }
+    xml += `      <descripcion>${xe(d.descripcion)}</descripcion>\n`;
+    xml += `      <cantidad>${formatNum6(d.cantidad)}</cantidad>\n`;
+    xml += `      <precioUnitario>${formatNum6(d.precioUnitario)}</precioUnitario>\n`;
+    if (d.descuento != null && d.descuento > 0) {
+      xml += `      <descuento>${formatNum(d.descuento)}</descuento>\n`;
+    }
+    xml += `      <precioTotalSinImpuesto>${formatNum(d.precioTotalSinImpuesto)}</precioTotalSinImpuesto>\n`;
+    xml += `      <impuestos>\n`;
+    xml += `        <impuesto>\n`;
+    xml += `          <codigo>2</codigo>\n`;
+    xml += `          <codigoPorcentaje>${d.ivaCodigoPorcentaje}</codigoPorcentaje>\n`;
+    xml += `          <tarifa>${d.ivaTarifa}</tarifa>\n`;
+    xml += `          <baseImponible>${formatNum(d.precioTotalSinImpuesto)}</baseImponible>\n`;
+    xml += `          <valor>${formatNum(d.ivaValor)}</valor>\n`;
+    xml += `        </impuesto>\n`;
+    xml += `      </impuestos>\n`;
+    xml += `    </detalle>\n`;
+  });
+  xml += `  </detalles>\n`;
+
+  // 4. infoAdicional (opcional)
+  if (data.infoAdicional && Object.keys(data.infoAdicional).length > 0) {
+    xml += `  <infoAdicional>\n`;
+    Object.entries(data.infoAdicional).forEach(([key, val]) => {
+      xml += `    <campoAdicional nombre="${xe(key)}">${xe(val)}</campoAdicional>\n`;
+    });
+    xml += `  </infoAdicional>\n`;
+  }
+
+  xml += `</notaCredito>`;
+
+  // Minificar para el SRI
+  return xml
+    .replace(/\n\s*/g, "")
+    .replace(/>\s+</g, "><");
+}
+
 /**
  * Determina el tipo de identificación del comprador según las reglas del SRI Ecuador:
  *  04 = RUC (13 dígitos terminados en 001 y válidos)

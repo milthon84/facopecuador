@@ -240,8 +240,11 @@ export default function AnularFacturaButton({
                         <p className="leading-relaxed pt-1 font-semibold text-red-700">
                           De acuerdo con la normativa tributaria, para anular el efecto fiscal de esta factura fuera de plazo se debe emitir una Nota de Crédito.
                         </p>
+                        <p className="leading-relaxed pt-1 font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 p-2 rounded-xl">
+                          💡 <strong>Recomendado:</strong> Cierra esta ventana y utiliza la opción <strong>&ldquo;Emitir Nota de Crédito&rdquo;</strong> en la cabecera para anularla legalmente en el SRI.
+                        </p>
                         <p className="leading-relaxed pt-1.5 text-ink-700">
-                          ¿Desea anularla localmente de todas formas para ajustar su contabilidad y flujo de caja en este sistema? (Esta acción no tendrá efecto en el SRI).
+                          ¿Desea forzar la anulación solo localmente de todas formas para ajustar su contabilidad y flujo de caja en este sistema? (Esta acción no tendrá efecto en el SRI).
                         </p>
                       </div>
                     </div>

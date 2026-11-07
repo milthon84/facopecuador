@@ -8,6 +8,7 @@ import {
 import CopyButton from "@/components/CopyButton";
 import ReintentoSriButton from "@/components/ReintentoSriButton";
 import AnularFacturaButton from "@/components/AnularFacturaButton";
+import EmitirNotaCreditoModal from "@/components/EmitirNotaCreditoModal";
 import InvoicePhotosSection, { InvoicePhoto } from "@/components/InvoicePhotosSection";
 import { getTipoIdentificacion } from "@/lib/sri";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
@@ -81,6 +82,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   ]);
 
   if (!invoice) notFound();
+
+  let existingCreditNote: any = null;
+  try {
+    const { data: cn } = await supabase
+      .from("credit_notes")
+      .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo")
+      .eq("invoice_id", id)
+      .maybeSingle();
+    existingCreditNote = cn;
+  } catch {
+    // Si la tabla no está creada aún en la base de datos
+  }
 
   // Obtener fotos registradas en invoice_photos (si existe la tabla)
   const { data: dbPhotos } = await supabase
@@ -202,7 +215,24 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           >
             <Printer size={15} /> Reimprimir Factura
           </a>
-          {invoice.sri_status !== "cancelled" && canEdit && (
+
+          {canEdit && (invoice.sri_status === "authorized" || existingCreditNote) && (
+            <EmitirNotaCreditoModal
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoice_number}
+              clientName={invoice.client_name}
+              clientDocument={invoice.client_document}
+              issueDate={invoice.issue_date || (invoice.created_at ? invoice.created_at.split("T")[0] : "")}
+              total={Number(invoice.total || 0)}
+              subtotal15={Number(invoice.subtotal_15 || 0)}
+              subtotal0={Number(invoice.subtotal_0 || 0)}
+              ivaAmount={Number(invoice.iva_amount || 0)}
+              items={items || []}
+              existingCreditNote={existingCreditNote || null}
+            />
+          )}
+
+          {invoice.sri_status !== "cancelled" && !existingCreditNote && canEdit && (
             <AnularFacturaButton
               invoiceId={invoice.id}
               invoiceNumber={invoice.invoice_number}
@@ -220,6 +250,32 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="space-y-4">
+        {/* Banner Informativo si existe Nota de Crédito */}
+        {existingCreditNote && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-rose-950 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700 shrink-0 font-bold">
+                NC
+              </div>
+              <div>
+                <p className="text-xs font-bold">
+                  Nota de Crédito emitida: {existingCreditNote.credit_note_number}
+                </p>
+                <p className="text-[11px] text-rose-700 mt-0.5">
+                  Estado SRI: <strong className="uppercase">{existingCreditNote.sri_status}</strong> · Motivo: {existingCreditNote.motivo || "Anulación de comprobante"}
+                </p>
+              </div>
+            </div>
+            <a
+              href={`/api/nota-credito/${existingCreditNote.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold bg-white text-rose-800 border border-rose-300 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition shadow-2xs"
+            >
+              <Printer size={13} /> Ver RIDE NC
+            </a>
+          </div>
+        )}
         {/* ── SRI Info & Emisor (Grid 2 columnas) ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {/* Información SRI */}
