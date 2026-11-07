@@ -12,6 +12,7 @@ import { createCreditNoteJournalEntry, assertMonthOpen } from "@/lib/accounting"
 import crypto from "crypto";
 import { getSessionUser } from "@/lib/supabase/auth";
 import { logAudit } from "@/lib/audit";
+import { ecuadorDateOf } from "@/lib/ecuador-time";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -79,8 +80,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "ID de factura obligatorio" }, { status: 400 });
     }
 
-    // Validar período contable
-    const todayStr = new Date().toISOString().split("T")[0];
+    // Validar período contable en hora oficial de Ecuador
+    const todayStr = ecuadorDateOf(new Date());
     try {
       await assertMonthOpen(todayStr);
     } catch (err: any) {
@@ -195,9 +196,9 @@ export async function POST(req: Request) {
     const secString = secuencial.toString().padStart(9, "0");
     const creditNoteNumber = `${config.establecimiento}-${config.punto_emision}-${secString}`;
 
-    // 6. Fechas y Códigos
-    const now = new Date();
-    const fechaEmision = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
+    // 6. Fechas y Códigos (en hora oficial de Ecuador America/Guayaquil)
+    const [ecY, ecM, ecD] = todayStr.split("-");
+    const fechaEmision = `${ecD}/${ecM}/${ecY}`;
     const codigoNumerico = crypto.randomInt(10000000, 99999999).toString();
 
     // Fecha de emisión de la factura original en formato DD/MM/YYYY

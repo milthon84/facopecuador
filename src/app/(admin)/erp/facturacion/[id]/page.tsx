@@ -88,7 +88,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   try {
     const { data: cn } = await supabase
       .from("credit_notes")
-      .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo")
+      .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo, sri_error_messages")
       .eq("invoice_id", id)
       .maybeSingle();
     existingCreditNote = cn;
@@ -265,6 +265,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <p className="text-[11px] text-rose-700 mt-0.5">
                   Estado SRI: <strong className="uppercase">{existingCreditNote.sri_status}</strong> · Motivo: {existingCreditNote.motivo || "Anulación de comprobante"}
                 </p>
+                {existingCreditNote.sri_status === "rejected" && existingCreditNote.sri_error_messages && (
+                  <p className="text-[11px] text-red-600 font-semibold mt-1 bg-red-100/60 p-1.5 rounded-lg border border-red-200">
+                    Motivo rechazo SRI: {
+                      Array.isArray(existingCreditNote.sri_error_messages)
+                        ? existingCreditNote.sri_error_messages.map((m: any) => m.mensaje || JSON.stringify(m)).join(" · ")
+                        : String(existingCreditNote.sri_error_messages)
+                    }
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">

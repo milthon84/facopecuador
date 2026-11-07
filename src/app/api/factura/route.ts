@@ -6,6 +6,7 @@ import { enviarYAutorizar } from "@/lib/sri-wsdl";
 import { createInvoiceJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import crypto from "crypto";
 import { getSessionUser } from "@/lib/supabase/auth";
+import { ecuadorDateOf } from "@/lib/ecuador-time";
 
 /** Redondea un número a 2 decimales para evitar errores de punto flotante */
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -20,8 +21,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    // Validar que el mes actual no se encuentre cerrado para contabilidad
-    const todayStr = new Date().toISOString().split("T")[0];
+    // Validar que el mes actual no se encuentre cerrado para contabilidad (hora Ecuador)
+    const todayStr = ecuadorDateOf(new Date());
     try {
       await assertMonthOpen(todayStr);
     } catch (err: any) {
@@ -139,9 +140,9 @@ export async function POST(req: Request) {
     const secString = secuencial.toString().padStart(9, "0");
     const invoiceNumber = `${config.establecimiento}-${config.punto_emision}-${secString}`;
 
-    // 5. Fechas y Códigos
-    const now = new Date();
-    const fechaEmision = `${now.getDate().toString().padStart(2, "0")}/${(now.getMonth() + 1).toString().padStart(2, "0")}/${now.getFullYear()}`;
+    // 5. Fechas y Códigos (en hora oficial de Ecuador)
+    const [ecY, ecM, ecD] = todayStr.split("-");
+    const fechaEmision = `${ecD}/${ecM}/${ecY}`;
     const codigoNumerico = crypto.randomInt(10000000, 99999999).toString();
 
     // 6. Generar Clave de Acceso

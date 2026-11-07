@@ -529,10 +529,31 @@ export default function FacturacionClient({
                         <td className="px-5 py-3.5 text-center">
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${style.bg}`}
+                            title={
+                              cn.sri_error_messages
+                                ? Array.isArray(cn.sri_error_messages)
+                                  ? cn.sri_error_messages.map((m: any) => m.mensaje || JSON.stringify(m)).join(" | ")
+                                  : JSON.stringify(cn.sri_error_messages)
+                                : undefined
+                            }
                           >
                             {style.icon}
                             {style.text}
                           </span>
+                          {cn.sri_status === "rejected" && cn.sri_error_messages && (
+                            <div
+                              className="text-[10px] text-red-600 max-w-[150px] truncate mt-1 font-medium mx-auto"
+                              title={
+                                Array.isArray(cn.sri_error_messages)
+                                  ? cn.sri_error_messages.map((m: any) => m.mensaje || JSON.stringify(m)).join(" | ")
+                                  : JSON.stringify(cn.sri_error_messages)
+                              }
+                            >
+                              {Array.isArray(cn.sri_error_messages)
+                                ? cn.sri_error_messages[0]?.mensaje || "Rechazada por SRI"
+                                : String(cn.sri_error_messages)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">

@@ -65,6 +65,31 @@ function extractAllTags(xml: string, tag: string): string[] {
   return results;
 }
 
+export function extractSriMensajes(xml: string): Array<{
+  identificador: string;
+  mensaje: string;
+  informacionAdicional?: string;
+  tipo: string;
+}> {
+  const re = /<(?:\w+:)?identificador[^>]*>([\s\S]*?)<\/(?:\w+:)?identificador>\s*<(?:\w+:)?mensaje[^>]*>([\s\S]*?)<\/(?:\w+:)?mensaje>(?:\s*<(?:\w+:)?informacionAdicional(?:\/>|[^>]*>([\s\S]*?)<\/(?:\w+:)?informacionAdicional>))?\s*<(?:\w+:)?tipo[^>]*>([\s\S]*?)<\/(?:\w+:)?tipo>/gi;
+  const results = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const id = m[1].trim();
+    let msg = m[2].trim();
+    if (!msg && id === "65") msg = "Fecha de emisión extemporánea";
+    if (!msg && id === "43") msg = "Secuencial o clave de acceso registrada";
+    if (!msg && id === "45") msg = "Comprobante sustento no corresponde al comprador";
+    results.push({
+      identificador: id,
+      mensaje: msg || `Error ${id}`,
+      informacionAdicional: (m[3] || "").trim() || undefined,
+      tipo: m[4].trim() || "ERROR",
+    });
+  }
+  return results;
+}
+
 // ── Recepción ──────────────────────────────────────────────────────────────
 
 /**
@@ -127,12 +152,7 @@ export async function enviarComprobante(
   const comprobantesRaw = extractAllTags(responseXml, "comprobante");
   const comprobantes = comprobantesRaw.map((c) => ({
     claveAcceso: extractTag(c, "claveAcceso"),
-    mensajes: extractAllTags(c, "mensaje").map((m) => ({
-      identificador:       extractTag(m, "identificador"),
-      mensaje:             extractTag(m, "mensaje"),
-      informacionAdicional: extractTag(m, "informacionAdicional"),
-      tipo:                extractTag(m, "tipo"),
-    })),
+    mensajes: extractSriMensajes(c),
   }));
 
   return { estado, comprobantes };
@@ -190,13 +210,7 @@ export async function consultarAutorizacion(
   const fechaAutorizacion  = extractTag(autorizacionXml, "fechaAutorizacion");
   const ambienteResp       = extractTag(autorizacionXml, "ambiente");
 
-  const mensajesRaw = extractAllTags(autorizacionXml, "mensaje");
-  const mensajes = mensajesRaw.map((m) => ({
-    identificador:       extractTag(m, "identificador"),
-    mensaje:             extractTag(m, "mensaje"),
-    informacionAdicional: extractTag(m, "informacionAdicional"),
-    tipo:                extractTag(m, "tipo"),
-  }));
+  const mensajes = extractSriMensajes(autorizacionXml);
 
   return {
     estado,

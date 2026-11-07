@@ -85,6 +85,7 @@ export default function EmitirNotaCreditoModal({
     sri_authorization_number?: string;
     clave_acceso?: string;
     message?: string;
+    sri_error_messages?: any;
     error?: string;
   } | null>(null);
 
@@ -167,6 +168,7 @@ export default function EmitirNotaCreditoModal({
         sri_authorization_number: data.sri_authorization_number,
         clave_acceso: data.clave_acceso,
         message: data.message,
+        sri_error_messages: data.sri_error_messages,
       });
 
       router.refresh();
@@ -245,15 +247,30 @@ export default function EmitirNotaCreditoModal({
               </div>
             </div>
 
-            {/* PANTALLA DE ÉXITO */}
+            {/* PANTALLA DE RESULTADO */}
             {result?.success ? (
               <div className="py-4 space-y-4 text-center">
-                <div className="h-16 w-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 animate-bounce">
-                  <CheckCircle2 size={38} />
-                </div>
+                {result.sri_status === "authorized" ? (
+                  <div className="h-16 w-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 animate-bounce">
+                    <CheckCircle2 size={38} />
+                  </div>
+                ) : result.sri_status === "rejected" ? (
+                  <div className="h-16 w-16 mx-auto rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                    <XCircle size={38} />
+                  </div>
+                ) : (
+                  <div className="h-16 w-16 mx-auto rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                    <AlertTriangle size={38} />
+                  </div>
+                )}
+
                 <div>
                   <h4 className="text-lg font-bold text-ink-900">
-                    ¡Nota de Crédito Emitida con Éxito!
+                    {result.sri_status === "authorized"
+                      ? "¡Nota de Crédito Autorizada con Éxito!"
+                      : result.sri_status === "rejected"
+                      ? "Nota de Crédito Rechazada por el SRI"
+                      : "Nota de Crédito Enviada al SRI"}
                   </h4>
                   <p className="text-xs text-ink-600 mt-1 max-w-md mx-auto">
                     {result.message}
@@ -274,10 +291,16 @@ export default function EmitirNotaCreditoModal({
                       className={`font-bold px-2 py-0.5 rounded-full text-[11px] ${
                         result.sri_status === "authorized"
                           ? "bg-emerald-100 text-emerald-800"
-                          : "bg-blue-100 text-blue-800"
+                          : result.sri_status === "rejected"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-800"
                       }`}
                     >
-                      {result.sri_status?.toUpperCase()}
+                      {result.sri_status === "authorized"
+                        ? "AUTORIZADO"
+                        : result.sri_status === "rejected"
+                        ? "RECHAZADO"
+                        : "EN PROCESO"}
                     </span>
                   </div>
 
@@ -301,18 +324,47 @@ export default function EmitirNotaCreditoModal({
                       </div>
                     </div>
                   )}
+
+                  {/* Detalle de errores del SRI si fue rechazada */}
+                  {result.sri_status === "rejected" && result.sri_error_messages && (
+                    <div className="pt-2 border-t border-red-200 bg-red-50/50 p-2.5 rounded-xl text-red-800 space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-red-700 block">
+                        Motivo del Rechazo del SRI:
+                      </span>
+                      {Array.isArray(result.sri_error_messages) ? (
+                        result.sri_error_messages.map((m: any, idx: number) => (
+                          <div key={idx} className="text-[11px] font-medium leading-relaxed">
+                            • {m.mensaje || m.mensajeError || JSON.stringify(m)}
+                            {m.informacionAdicional && (
+                              <span className="block text-[10px] text-red-600 italic">
+                                Info adicional: {m.informacionAdicional}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px]">
+                          {typeof result.sri_error_messages === "string"
+                            ? result.sri_error_messages
+                            : JSON.stringify(result.sri_error_messages)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 justify-center pt-2">
-                  <a
-                    href={`/api/nota-credito/${result.credit_note_id}/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-primary inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl font-bold"
-                  >
-                    <Printer size={14} />
-                    <span>Ver / Imprimir RIDE PDF</span>
-                  </a>
+                  {result.sri_status === "authorized" && (
+                    <a
+                      href={`/api/nota-credito/${result.credit_note_id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl font-bold"
+                    >
+                      <Printer size={14} />
+                      <span>Ver / Imprimir RIDE PDF</span>
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generarXMLFactura, generarClaveAcceso, getTipoIdentificacion } from "@/lib/sri";
+import { ecuadorDateOf } from "@/lib/ecuador-time";
 import crypto from "crypto";
 
 /**
@@ -20,8 +21,9 @@ export async function POST(req: Request) {
 
     if (!invoice || !config) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-    const issueDate  = new Date(invoice.created_at);
-    const fechaEmision = `${issueDate.getDate().toString().padStart(2,"0")}/${(issueDate.getMonth()+1).toString().padStart(2,"0")}/${issueDate.getFullYear()}`;
+    const rawDate = invoice.issue_date || (invoice.created_at ? ecuadorDateOf(invoice.created_at) : ecuadorDateOf(new Date()));
+    const [y, m, d] = rawDate.split("-");
+    const fechaEmision = `${d}/${m}/${y}`;
 
     const secuencial = invoice.secuencial?.toString().padStart(9, "0") ?? "000000001";
     const codigoNumerico = crypto.randomInt(10000000, 99999999).toString();
