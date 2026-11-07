@@ -265,63 +265,8 @@ export async function POST(req: Request) {
 
     const xmlNotaCredito = generarXMLNotaCredito(creditNoteData);
 
-    // 9. Firmar y Enviar al SRI
-    const tieneCertificado = !!(config.p12_storage_path && config.signature_password);
-    const esProduccion = config.ambiente === "2";
-    const enviarAlSRI = esProduccion || tieneCertificado;
-
-    let sri_status: string = "authorized";
-    let sri_authorization_number: string = claveAcceso;
-    let sri_authorization_date: string = new Date().toISOString();
-    let sri_error_messages: any = null;
-    let finalXml = xmlNotaCredito;
-
-    if (enviarAlSRI) {
-      if (!config.p12_storage_path || !config.signature_password) {
-        return NextResponse.json(
-          { error: "Certificado digital .p12 no configurado para emitir al SRI." },
-          { status: 400 }
-        );
-      }
-
-      // Descargar .p12
-      const { data: p12Data, error: p12Error } = await supabase.storage
-        .from("sri-certificates")
-        .download(config.p12_storage_path);
-
-      if (p12Error || !p12Data) {
-        return NextResponse.json({ error: "No se pudo cargar el certificado .p12 desde storage." }, { status: 500 });
-      }
-
-      const p12Buffer = Buffer.from(await p12Data.arrayBuffer());
-      const password = (config.signature_password || "").trim();
-      const xmlFirmado = signXMLWithP12(xmlNotaCredito, p12Buffer, password);
-      finalXml = xmlFirmado;
-
-      try {
-        console.log(`Enviando Nota de Crédito ${creditNoteNumber} (Clave: ${claveAcceso}) al SRI...`);
-        const resSri = await enviarYAutorizar(xmlFirmado, claveAcceso, config.ambiente as "1" | "2");
-        const aut = resSri.autorizacion;
-
-        if (aut.estado === "AUTORIZADO") {
-          sri_status = "authorized";
-          sri_authorization_number = aut.numeroAutorizacion || claveAcceso;
-          sri_authorization_date = aut.fechaAutorizacion || new Date().toISOString();
-        } else if (aut.estado === "EN PROCESO") {
-          sri_status = "submitted";
-          sri_error_messages = aut.mensajes || null;
-        } else {
-          sri_status = "rejected";
-          sri_error_messages = aut.mensajes || (resSri.recepcion?.comprobantes?.[0]?.mensajes) || null;
-        }
-      } catch (err: any) {
-        console.error("Error comunicando con SRI para Nota de Crédito:", err);
-        sri_status = "error";
-        sri_error_messages = [{ mensaje: err.message || "Error de conexión SOAP con el SRI" }];
-      }
-    }
-
-    // 10. Guardar la Nota de Crédito en la Base de Datos
+    // ── CONTROL 1: GUARDAR NOTA DE CRÉDITO EN BD ANTES DE ENVIAR AL SRI ─────
+    // Garantiza que el comprobante nunca quede huérfano en el SRI ante cortes o timeouts.
     const { data: insertedCn, error: insertCnError } = await supabase
       .from("credit_notes")
       .insert({
@@ -347,22 +292,22 @@ export async function POST(req: Request) {
         iva_amount: iva15,
         total: valorModificacion,
         sri_access_key: claveAcceso,
-        sri_status,
+        sri_status: "submitting", // Provisional
         sri_environment: config.ambiente,
-        sri_authorization_number,
-        sri_authorization_date,
-        sri_error_messages,
+        sri_authorization_number: claveAcceso,
+        sri_authorization_date: new Date().toISOString(),
+        sri_error_messages: null,
       })
       .select()
       .single();
 
-    if (insertCnError) {
+    if (insertCnError || !insertedCn) {
       console.error("Error guardando nota de crédito:", insertCnError);
-      throw new Error(`Error al registrar nota de crédito: ${insertCnError.message}`);
+      throw new Error(`Error al registrar nota de crédito: ${insertCnError?.message}`);
     }
 
-    // Insertar ítems de la nota de crédito
-    if (insertedCn && rawItemsToProcess.length > 0) {
+    // Insertar ítems de la nota de crédito inmediatamente
+    if (rawItemsToProcess.length > 0) {
       const itemsToInsert = rawItemsToProcess.map((it: any) => ({
         credit_note_id: insertedCn.id,
         code: it.code || null,
@@ -375,6 +320,81 @@ export async function POST(req: Request) {
       }));
 
       await supabase.from("credit_note_items").insert(itemsToInsert);
+    }
+
+    // ── 9. Firmar y Enviar al SRI ───────────────────────────────────────────
+    const tieneCertificado = !!(config.p12_storage_path && config.signature_password);
+    const esProduccion = config.ambiente === "2";
+    const enviarAlSRI = esProduccion || tieneCertificado;
+
+    let sri_status: string = "authorized";
+    let sri_authorization_number: string = claveAcceso;
+    let sri_authorization_date: string = new Date().toISOString();
+    let sri_error_messages: any = null;
+    let finalXml = xmlNotaCredito;
+
+    if (enviarAlSRI) {
+      if (!config.p12_storage_path || !config.signature_password) {
+        await supabase.from("credit_notes").update({
+          sri_status: "error",
+          sri_error_messages: [{ mensaje: "Certificado digital .p12 no configurado para emitir al SRI." }]
+        }).eq("id", insertedCn.id);
+
+        return NextResponse.json(
+          { error: "Certificado digital .p12 no configurado para emitir al SRI." },
+          { status: 400 }
+        );
+      }
+
+      // Descargar .p12
+      const { data: p12Data, error: p12Error } = await supabase.storage
+        .from("sri-certificates")
+        .download(config.p12_storage_path);
+
+      if (p12Error || !p12Data) {
+        await supabase.from("credit_notes").update({
+          sri_status: "error",
+          sri_error_messages: [{ mensaje: "No se pudo cargar el certificado .p12 desde storage." }]
+        }).eq("id", insertedCn.id);
+
+        return NextResponse.json({ error: "No se pudo cargar el certificado .p12 desde storage." }, { status: 500 });
+      }
+
+      const p12Buffer = Buffer.from(await p12Data.arrayBuffer());
+      const password = (config.signature_password || "").trim();
+
+      try {
+        const xmlFirmado = signXMLWithP12(xmlNotaCredito, p12Buffer, password);
+        finalXml = xmlFirmado;
+
+        console.log(`Enviando Nota de Crédito ${creditNoteNumber} (Clave: ${claveAcceso}) al SRI...`);
+        const resSri = await enviarYAutorizar(xmlFirmado, claveAcceso, config.ambiente as "1" | "2");
+        const aut = resSri.autorizacion;
+
+        if (aut.estado === "AUTORIZADO") {
+          sri_status = "authorized";
+          sri_authorization_number = aut.numeroAutorizacion || claveAcceso;
+          sri_authorization_date = aut.fechaAutorizacion || new Date().toISOString();
+        } else if (aut.estado === "EN PROCESO") {
+          sri_status = "submitted";
+          sri_error_messages = aut.mensajes || null;
+        } else {
+          sri_status = "rejected";
+          sri_error_messages = aut.mensajes || (resSri.recepcion?.comprobantes?.[0]?.mensajes) || null;
+        }
+      } catch (err: any) {
+        console.error("Error comunicando con SRI para Nota de Crédito:", err);
+        sri_status = "submitted";
+        sri_error_messages = [{ mensaje: err.message || "Timeout o error de conexión SOAP con el SRI" }];
+      }
+
+      // Actualizar estado final en la base de datos
+      await supabase.from("credit_notes").update({
+        sri_status,
+        sri_authorization_number,
+        sri_authorization_date,
+        sri_error_messages,
+      }).eq("id", insertedCn.id);
     }
 
     // 11. Si la Nota de Crédito fue AUTORIZADA por el SRI:

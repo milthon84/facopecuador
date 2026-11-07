@@ -107,6 +107,30 @@ export async function POST(req: Request) {
     const importeTotal = round2(totalSinImpuestos + iva15);
     const totalDescuento = round2(invoiceItems.reduce((acc: number, i: any) => acc + round2(Number(i.discount || 0)), 0));
 
+    // ── CONTROL 2: ANTI-DOBLE ENVÍO / IDEMPOTENCIA ──────────────────────────
+    // Evita que clics repetidos o reintentos rápidos dentro de 45s creen dos facturas en el SRI
+    const fortyFiveSecsAgo = new Date(Date.now() - 45_000).toISOString();
+    const { data: recentInvoice } = await supabase
+      .from("invoices")
+      .select("id, invoice_number, sri_status, sri_access_key, created_at")
+      .eq("client_document", client_document)
+      .eq("total", importeTotal)
+      .gte("created_at", fortyFiveSecsAgo)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentInvoice) {
+      console.log(`[Anti-Doble Envío] Se detectó factura reciente ${recentInvoice.invoice_number} para ${client_document}. Retornando existente.`);
+      return NextResponse.json({
+        success: true,
+        invoice_id: recentInvoice.id,
+        invoice_number: recentInvoice.invoice_number,
+        clave_acceso: recentInvoice.sri_access_key,
+        message: `Factura ${recentInvoice.invoice_number} ya fue emitida hace instantes. Se evitó duplicidad.`,
+      });
+    }
+
     // 4. Generar Secuencial ATÓMICO usando la función de PostgreSQL (sin race condition)
     const { data: secData, error: secError } = await supabase.rpc("next_invoice_secuencial");
     if (secError) throw new Error(`Error generando secuencial: ${secError.message}`);
@@ -176,72 +200,9 @@ export async function POST(req: Request) {
 
     const xmlFactura = generarXMLFactura(invoiceData);
 
-    // 9. Firmar y enviar al SRI
-    // - Producción (ambiente=2): requiere certificado obligatoriamente
-    // - Pruebas (ambiente=1): envía al SRI de pruebas si hay certificado, simula si no hay
-    const tieneCertificado = !!(config.p12_storage_path && config.signature_password);
-    const esProduccion     = config.ambiente === "2";
-    const enviarAlSRI      = esProduccion || tieneCertificado; // pruebas con cert = real
-
-    let sri_status: string = "authorized";
-    let sri_authorization_number: string = claveAcceso;
-    let sri_authorization_date: string   = new Date().toISOString();
-    let sri_error_messages: object | null = null;
-    let finalXmlToSave = xmlFactura;
-
-    if (enviarAlSRI) {
-      // Verificar certificado
-      if (!config.p12_storage_path || !config.signature_password) {
-        return NextResponse.json(
-          { error: "Modo Producción requiere certificado .p12 configurado en Configuración SRI." },
-          { status: 400 }
-        );
-      }
-
-      // Descargar .p12 desde Supabase Storage
-      const { data: p12Data, error: p12Error } = await supabase.storage
-        .from("sri-certificates")
-        .download(config.p12_storage_path);
-
-      if (p12Error || !p12Data) {
-        return NextResponse.json({ error: "No se pudo cargar el certificado .p12 desde storage." }, { status: 500 });
-      }
-
-      const p12Buffer = Buffer.from(await p12Data.arrayBuffer());
-
-      // Firmar XML con XAdES-BES
-      // .trim() elimina espacios/saltos de línea que se cuelan desde la DB
-      const password = (config.signature_password || "").trim();
-      if (!password) {
-        return NextResponse.json({ error: "Contraseña del certificado no configurada." }, { status: 400 });
-      }
-      const xmlFirmado = signXMLWithP12(xmlFactura, p12Buffer, password);
-      finalXmlToSave = xmlFirmado;
-
-      // Enviar al SRI (pruebas: celcer.sri.gob.ec | producción: cel.sri.gob.ec)
-      const { recepcion, autorizacion } = await enviarYAutorizar(
-        xmlFirmado,
-        claveAcceso,
-        config.ambiente as "1" | "2"
-      );
-
-      if (recepcion.estado === "DEVUELTA") {
-        sri_status = "rejected";
-        sri_error_messages = recepcion.comprobantes?.[0]?.mensajes ?? null;
-      } else if (autorizacion.estado === "AUTORIZADO") {
-        sri_status = "authorized";
-        sri_authorization_number = autorizacion.numeroAutorizacion ?? claveAcceso;
-        sri_authorization_date   = autorizacion.fechaAutorizacion  ?? new Date().toISOString();
-      } else if (autorizacion.estado === "NO AUTORIZADO") {
-        sri_status = "rejected";
-        sri_error_messages = autorizacion.mensajes ?? null;
-      } else {
-        sri_status = "submitted";
-      }
-    }
-    // Si no hay certificado en modo pruebas → simular autorización (desarrollo local)
-
-    // 10. Guardar Factura en Base de Datos
+    // ── CONTROL 1: PERSISTIR EN BASE DE DATOS ANTES DE ENVIAR AL SRI ─────────
+    // Si la conexión cae, el SRI tarda 20s o hay timeout, la factura YA ESTÁ registrada
+    // en el sistema y NUNCA quedará huérfana en el SRI ni se emitirán números duplicados.
     const { data: invoice, error: invoiceError } = await supabase.from("invoices").insert({
       patient_id: patient_id || null,
       xml_url: appointment_id || null,
@@ -258,9 +219,9 @@ export async function POST(req: Request) {
       total: importeTotal,
       total_discount: totalDescuento,
       sri_access_key: claveAcceso,
-      sri_status,
-      sri_authorization_number,
-      sri_authorization_date,
+      sri_status: "submitting", // Provisional seguro mientras se autoriza
+      sri_authorization_number: claveAcceso,
+      sri_authorization_date: new Date().toISOString(),
       sri_environment: config.ambiente,
       payment_method:    payment_method    || null,
       bank_account_id:   bank_account_id   || null,
@@ -268,10 +229,21 @@ export async function POST(req: Request) {
       card_type:         card_type         || null,
       card_lote:         card_lote         || null,
       card_voucher:      card_voucher      || null,
-      ...(sri_error_messages ? { sri_error_messages } : {}),
     }).select().single();
 
     if (invoiceError) throw invoiceError;
+
+    // Guardar Ítems inmediatamente
+    const itemsToInsert = detalles.map((d) => ({
+      invoice_id: invoice.id,
+      description: d.descripcion,
+      quantity: d.cantidad,
+      unit_price: d.precioUnitario,
+      discount: d.descuento,
+      iva_code: d.ivaCodigoPorcentaje,
+      total: round2(d.precioTotalSinImpuesto + d.ivaValor),
+    }));
+    await supabase.from("invoice_items").insert(itemsToInsert);
 
     // Registrar en invoice_photos si existe un comprobante
     const finalProofUrl = comprobante_url || image_url;
@@ -287,18 +259,90 @@ export async function POST(req: Request) {
       }
     }
 
-    // 10. Guardar Ítems
-    const itemsToInsert = detalles.map((d) => ({
-      invoice_id: invoice.id,
-      description: d.descripcion,
-      quantity: d.cantidad,
-      unit_price: d.precioUnitario,
-      discount: d.descuento,
-      iva_code: d.ivaCodigoPorcentaje,
-      total: round2(d.precioTotalSinImpuesto + d.ivaValor),
-    }));
+    // ── 10. Firmar y enviar al SRI ──────────────────────────────────────────
+    const tieneCertificado = !!(config.p12_storage_path && config.signature_password);
+    const esProduccion     = config.ambiente === "2";
+    const enviarAlSRI      = esProduccion || tieneCertificado; // pruebas con cert = real
 
-    await supabase.from("invoice_items").insert(itemsToInsert);
+    let sri_status: string = "authorized";
+    let sri_authorization_number: string = claveAcceso;
+    let sri_authorization_date: string   = new Date().toISOString();
+    let sri_error_messages: any = null;
+    let finalXmlToSave = xmlFactura;
+
+    if (enviarAlSRI) {
+      // Verificar certificado
+      if (!config.p12_storage_path || !config.signature_password) {
+        await supabase.from("invoices").update({
+          sri_status: "error",
+          sri_error_messages: [{ mensaje: "Modo Producción requiere certificado .p12 configurado en Configuración SRI." }],
+        }).eq("id", invoice.id);
+
+        return NextResponse.json(
+          { error: "Modo Producción requiere certificado .p12 configurado en Configuración SRI." },
+          { status: 400 }
+        );
+      }
+
+      // Descargar .p12 desde Supabase Storage
+      const { data: p12Data, error: p12Error } = await supabase.storage
+        .from("sri-certificates")
+        .download(config.p12_storage_path);
+
+      if (p12Error || !p12Data) {
+        await supabase.from("invoices").update({
+          sri_status: "error",
+          sri_error_messages: [{ mensaje: "No se pudo cargar el certificado .p12 desde storage." }],
+        }).eq("id", invoice.id);
+
+        return NextResponse.json({ error: "No se pudo cargar el certificado .p12 desde storage." }, { status: 500 });
+      }
+
+      const p12Buffer = Buffer.from(await p12Data.arrayBuffer());
+      const password = (config.signature_password || "").trim();
+      if (!password) {
+        return NextResponse.json({ error: "Contraseña del certificado no configurada." }, { status: 400 });
+      }
+
+      try {
+        const xmlFirmado = signXMLWithP12(xmlFactura, p12Buffer, password);
+        finalXmlToSave = xmlFirmado;
+
+        // Enviar al SRI
+        const { recepcion, autorizacion } = await enviarYAutorizar(
+          xmlFirmado,
+          claveAcceso,
+          config.ambiente as "1" | "2"
+        );
+
+        if (recepcion.estado === "DEVUELTA") {
+          sri_status = "rejected";
+          sri_error_messages = recepcion.comprobantes?.[0]?.mensajes ?? null;
+        } else if (autorizacion.estado === "AUTORIZADO") {
+          sri_status = "authorized";
+          sri_authorization_number = autorizacion.numeroAutorizacion ?? claveAcceso;
+          sri_authorization_date   = autorizacion.fechaAutorizacion  ?? new Date().toISOString();
+        } else if (autorizacion.estado === "NO AUTORIZADO") {
+          sri_status = "rejected";
+          sri_error_messages = autorizacion.mensajes ?? null;
+        } else {
+          sri_status = "submitted";
+        }
+      } catch (soapErr: any) {
+        console.error("Error de comunicación SOAP con el SRI:", soapErr);
+        // Si hay timeout o corte, el comprobante queda guardado en la base con estado submitted
+        sri_status = "submitted";
+        sri_error_messages = [{ mensaje: soapErr.message || "Timeout o espera de respuesta del SRI" }];
+      }
+
+      // Actualizar estado final en la base de datos
+      await supabase.from("invoices").update({
+        sri_status,
+        sri_authorization_number,
+        sri_authorization_date,
+        sri_error_messages,
+      }).eq("id", invoice.id);
+    }
 
     if (module_enrollment_ids && Array.isArray(module_enrollment_ids) && module_enrollment_ids.length > 0) {
       await supabase

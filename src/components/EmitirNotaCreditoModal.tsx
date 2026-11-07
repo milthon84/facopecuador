@@ -124,6 +124,7 @@ export default function EmitirNotaCreditoModal({
   };
 
   const handleEmitir = async () => {
+    if (loading) return;
     if (!motivo.trim()) {
       alert("Por favor ingresa un motivo para la Nota de Crédito.");
       return;

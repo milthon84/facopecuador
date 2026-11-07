@@ -439,18 +439,18 @@ export default function NewInvoiceForm({
   return (
     <div className="max-w-5xl mx-auto pb-12">
 
-      {/* Overlay de bloqueo durante el procesamiento */}
+      {/* Overlay de bloqueo durante el procesamiento (Control 2) */}
       {loading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 flex flex-col items-center text-center">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs select-none">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 flex flex-col items-center text-center border border-lilac-200 animate-in zoom-in-95">
             <div className="w-16 h-16 rounded-full border-4 border-lilac-100 border-t-lilac-600 animate-spin mb-5" />
-            <h3 className="text-lg font-bold text-ink-900 mb-2">Procesando Factura</h3>
-            <p className="text-sm text-ink-500">
-              Firmando y enviando al SRI Ecuador…
+            <h3 className="text-lg font-bold text-ink-900 mb-2">Procesando Factura con SRI</h3>
+            <p className="text-sm text-ink-600">
+              Firmando y autorizando comprobante…
             </p>
-            <p className="text-xs text-ink-400 mt-2">
-              Este proceso puede tardar hasta 30 segundos. No cierres la ventana.
-            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 mt-4 text-[11px] text-amber-800 font-medium">
+              ⚠️ Por favor no recargues ni cierres esta ventana. La emisión está protegida contra duplicados.
+            </div>
           </div>
         </div>
       )}
