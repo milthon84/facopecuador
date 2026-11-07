@@ -28,6 +28,7 @@ import {
   resolveReceiptUrl,
   cleanVisibleNotes,
   resolveFacturaSriClave,
+  resolveExpenseDocType,
 } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
@@ -55,6 +56,35 @@ const PAYMENT_LABELS: Record<string, string> = {
   tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
   credito:         "Crédito (por pagar)",
+};
+
+const DOC_TYPE_CONFIG: Record<
+  "factura" | "nota_venta" | "sin_documento",
+  {
+    name: string;
+    subLabel: string;
+    badgeCls: string;
+    fullDesc: string;
+  }
+> = {
+  factura: {
+    name: "Factura",
+    subLabel: "Factura con valor tributario",
+    badgeCls: "bg-blue-100 text-blue-900 border-blue-200",
+    fullDesc: "Comprobante autorizado con desglose de IVA y crédito fiscal.",
+  },
+  nota_venta: {
+    name: "Nota de Venta",
+    subLabel: "Régimen RIMPE Negocio Popular",
+    badgeCls: "bg-amber-100 text-amber-900 border-amber-200",
+    fullDesc: "Emitida por contribuyente negocio popular (sin desglose de IVA).",
+  },
+  sin_documento: {
+    name: "Gasto Directo",
+    subLabel: "Sin Comprobante Fiscal / Recibo Simple",
+    badgeCls: "bg-purple-100 text-purple-900 border-purple-200",
+    fullDesc: "Desembolso interno sustentado mediante recibo o comprobante simple.",
+  },
 };
 
 export default async function GastoDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -86,7 +116,9 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
   // Consultar factura SRI vinculada si existe
   let linkedFactura: FacturaRecibida | null = null;
-  const clave = resolveFacturaSriClave(expense);
+  let clave = resolveFacturaSriClave(expense);
+
+  // 1. Por clave de acceso SRI
   if (clave && clave.length === 49) {
     try {
       const { data: fac } = await supabase
@@ -96,25 +128,90 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
         .maybeSingle();
       if (fac) {
         linkedFactura = fac as FacturaRecibida;
-        if (linkedFactura.estado_facop !== "registrado") {
-          linkedFactura.estado_facop = "registrado";
-          try {
-            await supabase
-              .from("facturas_recibidas")
-              .update({ estado_facop: "registrado", expense_id: expense.id })
-              .eq("clave_acceso", clave);
-          } catch (syncErr) {
-            console.warn("No se pudo sincronizar estado_facop de factura recibida:", syncErr);
-          }
-        }
       }
     } catch {
       // Ignorar si la tabla no está disponible
     }
   }
 
+  // 2. Por expense_id en facturas_recibidas
+  if (!linkedFactura) {
+    try {
+      const { data: facByExp } = await supabase
+        .from("facturas_recibidas")
+        .select("*")
+        .eq("expense_id", id)
+        .maybeSingle();
+      if (facByExp) {
+        linkedFactura = facByExp as FacturaRecibida;
+        if (!clave && linkedFactura.clave_acceso) {
+          clave = linkedFactura.clave_acceso;
+        }
+      }
+    } catch {
+      // Ignorar
+    }
+  }
+
+  // 3. Por número de comprobante si coincide exactamente
+  if (!linkedFactura && expense.document_number) {
+    try {
+      const cleanNum = expense.document_number.replace(/[^0-9-]/g, "").trim();
+      if (cleanNum) {
+        const { data: facByNum } = await supabase
+          .from("facturas_recibidas")
+          .select("*")
+          .eq("numero_comprobante", cleanNum)
+          .maybeSingle();
+        if (facByNum) {
+          linkedFactura = facByNum as FacturaRecibida;
+          if (!clave && linkedFactura.clave_acceso) {
+            clave = linkedFactura.clave_acceso;
+          }
+        }
+      }
+    } catch {
+      // Ignorar
+    }
+  }
+
+  if (linkedFactura && clave) {
+    if (linkedFactura.estado_facop !== "registrado" || linkedFactura.expense_id !== expense.id) {
+      linkedFactura.estado_facop = "registrado";
+      linkedFactura.expense_id = expense.id;
+      try {
+        await supabase
+          .from("facturas_recibidas")
+          .update({ estado_facop: "registrado", expense_id: expense.id })
+          .eq("clave_acceso", clave);
+      } catch (syncErr) {
+        console.warn("No se pudo sincronizar estado_facop de factura recibida:", syncErr);
+      }
+    }
+  }
+
   const area = resolveExpenseArea(expense);
   const areaConfig = EXPENSE_AREA_CONFIG[area];
+  const docType = resolveExpenseDocType(expense);
+  const docTypeInfo = DOC_TYPE_CONFIG[docType] || DOC_TYPE_CONFIG.factura;
+
+  const displayItems: ExpenseItem[] = items.length > 0 ? items : [
+    {
+      id: "main-item",
+      description: expense.description || `Concepto principal de gasto - ${expense.category}`,
+      category: expense.category,
+      quantity: 1,
+      unit_price: Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0) > 0
+        ? Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0)
+        : Number(expense.total),
+      subtotal: Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0) > 0
+        ? Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0)
+        : Number(expense.total),
+      iva_rate: Number(expense.iva_amount) > 0 ? 15 : 0,
+      iva_amount: Number(expense.iva_amount || 0),
+      total: Number(expense.total),
+    },
+  ];
 
   const isClosed = await isMonthClosed(expense.expense_date);
   const receiptUrl = resolveReceiptUrl(expense);
@@ -147,6 +244,13 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               {area === "cursos" && <GraduationCap size={12} />}
               {area === "general" && <Building2 size={12} />}
               {areaConfig.label}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${docTypeInfo.badgeCls}`}
+              title={docTypeInfo.fullDesc}
+            >
+              <FileText size={12} />
+              {docTypeInfo.name}
             </span>
             {clave ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
@@ -227,151 +331,238 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
       {/* Cabecera / Datos Generales */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <span className="text-[11px] text-ink-400 uppercase tracking-wide">Proveedor / Beneficiario</span>
-            <p className="text-sm font-medium text-ink-900 mt-0.5">{expense.supplier_name}</p>
+            <p className="text-sm font-bold text-ink-900 mt-0.5">{expense.supplier_name}</p>
           </div>
-          {expense.supplier_ruc && (
-            <div>
-              <span className="text-[11px] text-ink-400 uppercase tracking-wide">RUC / Cédula</span>
-              <p className="text-sm font-mono text-ink-900 mt-0.5">{expense.supplier_ruc}</p>
-            </div>
-          )}
-          {expense.document_number && (
-            <div>
-              <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-                <FileText size={10} /> N° Comprobante
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide">RUC / Cédula</span>
+            <p className="text-sm font-mono font-medium text-ink-900 mt-0.5">
+              {expense.supplier_ruc || "Sin RUC registrado"}
+            </p>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              <FileText size={11} className="text-lilac-600" /> Tipo de Comprobante
+            </span>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-lg border ${docTypeInfo.badgeCls}`}>
+                {docTypeInfo.name}
               </span>
-              <p className="text-sm font-mono text-ink-900 mt-0.5">{expense.document_number}</p>
+              <span className="text-xs text-ink-500 font-medium">({docTypeInfo.subLabel})</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              <FileCheck2 size={11} className="text-lilac-600" /> N° Comprobante / Secuencial
+            </span>
+            <p className="text-sm font-mono font-bold text-ink-900 mt-0.5">
+              {expense.document_number || "Sin número (Gasto Directo)"}
+            </p>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              <Calendar size={11} className="text-lilac-600" /> Fecha de Emisión
+            </span>
+            <p className="text-sm font-medium text-ink-900 mt-0.5">
+              {new Date(expense.expense_date + "T12:00:00").toLocaleDateString("es-EC")}
+            </p>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              {area === "clinica" && <Stethoscope size={11} className="text-teal-600" />}
+              {area === "cursos" && <GraduationCap size={11} className="text-indigo-600" />}
+              {area === "general" && <Building2 size={11} className="text-amber-600" />}
+              Centro de Costo / Destino
+            </span>
+            <p className="text-sm font-bold text-ink-900 mt-0.5 flex items-center gap-2">
+              <span>{areaConfig.label}</span>
+              <span className="text-[11px] font-normal text-ink-500">({areaConfig.description})</span>
+            </p>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              <Tag size={11} className="text-lilac-600" /> Categoría Contable Principal
+            </span>
+            <p className="text-sm font-semibold text-ink-900 mt-0.5">{expense.category}</p>
+          </div>
+
+          <div>
+            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+              <CreditCard size={11} className="text-lilac-600" /> Forma de Pago
+            </span>
+            <p className="text-sm font-medium text-ink-900 mt-0.5">
+              {PAYMENT_LABELS[expense.payment_method] ?? expense.payment_method}
+              {expense.bank_accounts && (
+                <span className="block text-xs text-ink-500 mt-0.5 font-normal">
+                  {expense.bank_accounts.bank_name}
+                  {expense.bank_accounts.account_number ? ` · Cta: ${expense.bank_accounts.account_number}` : ""}
+                </span>
+              )}
+            </p>
+          </div>
+
+          {expense.payment_reference && (
+            <div className="col-span-1 sm:col-span-2">
+              <span className="text-[11px] text-ink-400 uppercase tracking-wide">Referencia / Comprobante de Pago / Voucher</span>
+              <p className="text-sm font-mono font-medium text-ink-800 mt-0.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 inline-block">
+                {expense.payment_reference}
+              </p>
             </div>
           )}
+
           {(clave || expense.authorization_number) && (
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-                <Key size={10} /> Clave de Acceso SRI / N° Autorización
+                <Key size={11} className="text-emerald-600" /> Clave de Acceso SRI / N° Autorización
               </span>
-              <p className="text-xs font-mono font-bold text-emerald-950 mt-0.5 break-all bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
+              <p className="text-xs font-mono font-bold text-emerald-950 mt-1 break-all bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
                 <span>{clave || expense.authorization_number}</span>
-                <span className="text-[10px] font-sans px-2 py-0.5 bg-emerald-200/80 text-emerald-900 rounded font-bold shrink-0">
+                <span className="text-[10px] font-sans px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold shrink-0">
                   SRI REGISTRADO
                 </span>
               </p>
             </div>
           )}
-          <div>
-            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-              <Calendar size={10} /> Fecha
-            </span>
-            <p className="text-sm text-ink-900 mt-0.5">
-              {new Date(expense.expense_date + "T12:00:00").toLocaleDateString("es-EC")}
-            </p>
-          </div>
-          <div>
-            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-              <Tag size={10} /> Categoría
-            </span>
-            <p className="text-sm text-ink-900 mt-0.5">{expense.category}</p>
-          </div>
-          <div>
-            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-              <CreditCard size={10} /> Forma de pago
-            </span>
-            <p className="text-sm text-ink-900 mt-0.5">
-              {PAYMENT_LABELS[expense.payment_method] ?? expense.payment_method}
-              {expense.bank_accounts && (
-                <span className="block text-xs text-ink-500 mt-0.5">
-                  {expense.bank_accounts.bank_name}
-                  {expense.bank_accounts.account_number ? ` · ${expense.bank_accounts.account_number}` : ""}
-                </span>
+
+          {expense.created_by_email && (
+            <div className="col-span-1 sm:col-span-2 text-xs text-ink-400 pt-1 border-t border-lilac-50 flex items-center justify-between flex-wrap gap-1">
+              <span>Registrado por: <strong className="text-ink-600">{expense.created_by_email}</strong></span>
+              {expense.created_at && (
+                <span>Fecha registro: {new Date(expense.created_at).toLocaleString("es-EC")}</span>
               )}
-            </p>
-          </div>
-          {expense.payment_reference && (
-            <div className="col-span-2">
-              <span className="text-[11px] text-ink-400 uppercase tracking-wide">Referencia / Detalles de Pago</span>
-              <p className="text-sm font-mono text-ink-800 mt-0.5">{expense.payment_reference}</p>
             </div>
           )}
         </div>
 
         {expense.description && (
-          <div>
+          <div className="pt-2 border-t border-lilac-50">
             <span className="text-[11px] text-ink-400 uppercase tracking-wide">Descripción / Justificación</span>
-            <p className="text-sm text-ink-800 mt-0.5">{expense.description}</p>
+            <p className="text-sm text-ink-800 mt-0.5 bg-lilac-50/40 p-2.5 rounded-xl border border-lilac-100">
+              {expense.description}
+            </p>
           </div>
         )}
 
         {visibleNotes && (
           <div className="bg-lilac-50/70 border border-lilac-100 rounded-xl p-3">
-            <span className="text-[11px] text-lilac-700 uppercase tracking-wide font-semibold">Notas</span>
+            <span className="text-[11px] text-lilac-700 uppercase tracking-wide font-semibold">Notas Adicionales</span>
             <p className="text-sm text-ink-700 mt-0.5">{visibleNotes}</p>
           </div>
         )}
       </div>
 
       {/* Detalle de Ítems / Bienes o Servicios */}
-      {items.length > 0 && (
-        <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3">
-          <div className="flex items-center gap-2 border-b border-lilac-100 pb-2">
+      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between border-b border-lilac-100 pb-2 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
             <FileCheck2 size={16} className="text-lilac-600" />
             <h3 className="text-xs font-bold text-ink-800 uppercase tracking-wide">
-              Detalle de Ítems / Bienes o Servicios ({items.length})
+              Detalle de Ítems / Bienes o Servicios ({displayItems.length})
             </h3>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-lilac-100 text-ink-400 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2 pr-2">Descripción</th>
-                  <th className="py-2 px-2 text-center w-40">Categoría</th>
-                  <th className="py-2 px-2 text-center w-16">Cant.</th>
-                  <th className="py-2 px-2 text-right w-24">P. Unit.</th>
-                  <th className="py-2 px-2 text-center w-16">IVA</th>
-                  <th className="py-2 pl-2 text-right w-24">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-lilac-50">
-                {items.map((it, idx) => {
-                  const parsed = parseItemCategoryAndDesc(it.description);
-                  const itemCat = normalizeCategoryName(it.category || parsed.category);
-                  const catDetail = EXPENSE_CATEGORY_DETAILS[itemCat];
-                  return (
-                    <tr key={it.id || idx} className="hover:bg-lilac-50/30">
-                      <td className="py-2.5 pr-2 font-medium text-ink-900">{parsed.description}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <span
-                          className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200 cursor-help"
-                          title={`${catDetail?.description || itemCat} — Contempla: ${catDetail?.examples || ""}`}
-                        >
-                          {itemCat}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-2 text-center font-mono text-ink-700">{Number(it.quantity)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono text-ink-700">${Number(it.unit_price).toFixed(2)}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
-                          Number(it.iva_rate) > 0 ? "bg-lilac-100 text-lilac-800" : "bg-gray-100 text-gray-700"
-                        }`}>
-                          {Number(it.iva_rate)}%
-                        </span>
-                      </td>
-                      <td className="py-2.5 pl-2 text-right font-mono font-bold text-ink-900">
-                        ${Number(it.subtotal).toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {items.length === 0 ? (
+            <span className="text-[10px] text-lilac-700 font-semibold bg-lilac-50 border border-lilac-200 px-2 py-0.5 rounded-md">
+              Concepto único registrado
+            </span>
+          ) : (
+            <span className="text-[10px] text-emerald-800 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+              Ítems desglosados
+            </span>
+          )}
         </div>
-      )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-lilac-100 text-ink-400 text-[11px] font-bold uppercase tracking-wider text-left">
+                <th className="py-2 pr-2">Descripción / Concepto</th>
+                <th className="py-2 px-2 text-center w-44">Categoría Contable</th>
+                <th className="py-2 px-2 text-center w-16">Cant.</th>
+                <th className="py-2 px-2 text-right w-24">P. Unit.</th>
+                <th className="py-2 px-2 text-center w-16">IVA</th>
+                <th className="py-2 pl-2 text-right w-24">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-lilac-50">
+              {displayItems.map((it, idx) => {
+                const parsed = parseItemCategoryAndDesc(it.description);
+                const itemCat = normalizeCategoryName(it.category || parsed.category || expense.category);
+                const catDetail = EXPENSE_CATEGORY_DETAILS[itemCat];
+                const rawDesc = parsed.description || expense.description || "Gasto registrado";
+                return (
+                  <tr key={it.id || idx} className="hover:bg-lilac-50/30">
+                    <td className="py-2.5 pr-2">
+                      <div className="font-semibold text-ink-900">{rawDesc}</div>
+                      {expense.description && rawDesc !== expense.description && (
+                        <div className="text-[11px] text-ink-500 mt-0.5">{expense.description}</div>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-2 text-center">
+                      <span
+                        className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200 cursor-help"
+                        title={`${catDetail?.description || itemCat} — Contempla: ${catDetail?.examples || ""}`}
+                      >
+                        {itemCat}
+                      </span>
+                      {catDetail?.accountCode && (
+                        <span className="block text-[9px] font-mono text-ink-400 mt-0.5">
+                          Cta: {catDetail.accountCode}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-2 text-center font-mono text-ink-700">{Number(it.quantity || 1)}</td>
+                    <td className="py-2.5 px-2 text-right font-mono text-ink-700">${Number(it.unit_price).toFixed(2)}</td>
+                    <td className="py-2.5 px-2 text-center">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                        Number(it.iva_rate) > 0 ? "bg-lilac-100 text-lilac-800" : "bg-gray-100 text-gray-700"
+                      }`}>
+                        {Number(it.iva_rate)}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 pl-2 text-right font-mono font-bold text-ink-900">
+                      ${Number(it.subtotal).toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Respaldo Digital Adjunto */}
-      {receiptUrl && (
+      {receiptUrl ? (
         <ComprobanteAdjuntoCard receiptUrl={receiptUrl} />
+      ) : (
+        <div className="bg-white border border-dashed border-lilac-200 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-500 shrink-0">
+              <Paperclip size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-ink-800">Sin Respaldo Digital Adjunto</p>
+              <p className="text-[11px] text-ink-500">
+                No se adjuntó archivo PDF ni foto de respaldo al registrar este comprobante.
+              </p>
+            </div>
+          </div>
+          {!isClosed && canEdit && expense.status !== "void" && (
+            <Link
+              href={`/erp/gastos/${expense.id}/editar`}
+              className="text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-3 py-1.5 rounded-xl transition shadow-2xs"
+            >
+              + Adjuntar comprobante
+            </Link>
+          )}
+        </div>
       )}
 
       {/* Totales */}

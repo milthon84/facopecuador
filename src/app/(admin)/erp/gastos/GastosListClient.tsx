@@ -27,7 +27,13 @@ import {
   Trash2,
   Download,
   Loader2,
+  Eye,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  ExternalLink,
 } from "lucide-react";
+import { proxyStorageUrl } from "@/lib/storage-proxy";
 import { FacturaRecibida } from "@/lib/expense-types";
 import {
   ExpenseArea,
@@ -138,6 +144,24 @@ export default function GastosListClient({
   // Modal 1: Facturas SRI Pendientes del Mes
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
   const [pendingSearch, setPendingSearch] = useState("");
+
+  // Modal 3: Visualizador Lightbox de Comprobante Adjunto
+  const [previewReceipt, setPreviewReceipt] = useState<{
+    url: string;
+    fileName: string;
+    supplierName: string;
+    isPdf: boolean;
+  } | null>(null);
+  const [receiptZoom, setReceiptZoom] = useState(1);
+  const [receiptRotation, setReceiptRotation] = useState(0);
+
+  const handleReceiptZoomIn = () => setReceiptZoom((prev) => Math.min(prev + 0.25, 3));
+  const handleReceiptZoomOut = () => setReceiptZoom((prev) => Math.max(prev - 0.25, 0.5));
+  const handleReceiptRotate = () => setReceiptRotation((prev) => (prev + 90) % 360);
+  const handleReceiptReset = () => {
+    setReceiptZoom(1);
+    setReceiptRotation(0);
+  };
 
   // Filtros compactos mediante combos de selección
   const [textSearch, setTextSearch] = useState("");
@@ -406,7 +430,8 @@ export default function GastosListClient({
       XLSX.utils.book_append_sheet(wb, ws, "Gastos");
 
       const filterSuffix = areaFilter !== "all" ? `_${areaFilter}` : "";
-      XLSX.writeFile(wb, `gastos_${activeMonth}${filterSuffix}.xlsx`);
+      const monthPrefix = activeMonth === "all" ? "todos" : activeMonth;
+      XLSX.writeFile(wb, `gastos_${monthPrefix}${filterSuffix}.xlsx`);
     } catch (err) {
       console.error("Error al exportar gastos a Excel:", err);
       alert("Hubo un error al generar el archivo Excel.");
@@ -425,25 +450,10 @@ export default function GastosListClient({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            disabled={isExporting || displayedItems.length === 0}
-            className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 px-3 py-1.5 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
-            title="Descargar listado de gastos en formato Excel (.xlsx)"
-          >
-            {isExporting ? (
-              <Loader2 size={15} className="animate-spin text-lilac-600 shrink-0" />
-            ) : (
-              <Download size={15} className="text-lilac-600 shrink-0" />
-            )}
-            <span>Descargar Excel</span>
-          </button>
-
           {canEdit && (
             <Link
               href="/erp/gastos/nuevo"
-              className="flex items-center gap-1.5 text-xs bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-xl transition-colors font-medium shadow-sm"
+              className="flex items-center gap-1.5 text-xs bg-lilac-600 hover:bg-lilac-700 text-white px-3.5 py-1.5 rounded-xl transition-colors font-semibold shadow-sm"
             >
               <Plus size={15} />
               <span>Registrar Gasto / Compra</span>
@@ -456,6 +466,18 @@ export default function GastosListClient({
       <div className="flex items-center gap-2">
         <Calendar size={15} className="text-ink-400 shrink-0" />
         <div className="flex gap-1 overflow-x-auto pb-1">
+          {/* Opción Todos antes del mes en curso */}
+          <Link
+            href={`/erp/gastos?month=all${activeAreaFilter !== "all" ? `&area=${activeAreaFilter}` : ""}`}
+            className={`shrink-0 px-3 py-1 rounded-lg text-xs transition-colors flex items-center justify-center font-semibold ${
+              activeMonth === "all"
+                ? "bg-lilac-600 text-white font-bold shadow-xs"
+                : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
+            }`}
+          >
+            Todos
+          </Link>
+
           {months.map((m) => {
             const yearNum = Number(m.split("-")[0]);
             const isAnnualClosed = annualClosedYears.has(yearNum);
@@ -504,7 +526,9 @@ export default function GastosListClient({
       {/* Tarjetas de Desglose por Destino */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <div className="bg-white rounded-2xl p-3 border border-lilac-100 shadow-xs">
-          <div className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Total Mes</div>
+          <div className="text-[10px] font-bold text-ink-400 uppercase tracking-wider">
+            {activeMonth === "all" ? "Total Gastos" : "Total Mes"}
+          </div>
           <div className="text-xl font-black text-red-600 mt-0.5">${totalMes.toFixed(2)}</div>
           <div className="text-[10px] text-ink-400 mt-0.5">IVA: ${totalIva.toFixed(2)}</div>
         </div>
@@ -647,7 +671,8 @@ export default function GastosListClient({
             ) : (
               <Download size={12} className="text-lilac-600" />
             )}
-            <span className="hidden md:inline">Descargar</span>
+            <span className="hidden sm:inline">Descargar Excel</span>
+            <span className="sm:hidden">Excel</span>
           </button>
 
           {/* Botón Facturas Pendientes SRI */}
@@ -749,20 +774,33 @@ export default function GastosListClient({
                       )}
 
                       {receiptUrl && (
-                        <a
-                          href={receiptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
                           onClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
+                            const proxied = proxyStorageUrl(receiptUrl);
+                            const name = receiptUrl.split("/").pop()?.split("?")[0] || "comprobante";
+                            const isPdf = Boolean(
+                              receiptUrl.toLowerCase().includes(".pdf") ||
+                              receiptUrl.toLowerCase().includes("application/pdf")
+                            );
+                            setReceiptZoom(1);
+                            setReceiptRotation(0);
+                            setPreviewReceipt({
+                              url: proxied,
+                              fileName: name,
+                              supplierName: exp.supplier_name || "Gasto",
+                              isPdf,
+                            });
                           }}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs"
-                          title="Descargar o ver archivo adjunto / comprobante"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
+                          title="Visualizar comprobante digital de respaldo"
                         >
                           <Paperclip size={11} className="text-lilac-600" />
                           <span className="hidden sm:inline">Comprobante</span>
-                          <Download size={10} className="text-lilac-500" />
-                        </a>
+                          <Eye size={11} className="text-lilac-500" />
+                        </button>
                       )}
                     </div>
 
@@ -1098,6 +1136,127 @@ export default function GastosListClient({
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Visualizador Lightbox de Comprobante Adjunto */}
+      {previewReceipt && (
+        <div
+          className="fixed inset-0 z-50 bg-ink-950/85 backdrop-blur-xs flex flex-col p-3 sm:p-6"
+          onClick={() => setPreviewReceipt(null)}
+        >
+          {/* Barra superior de herramientas del popup */}
+          <div
+            className="flex items-center justify-between bg-ink-900/95 text-white px-4 py-2.5 rounded-2xl mb-3 shadow-xl border border-ink-800 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Paperclip size={15} className="text-lilac-300 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-white block truncate max-w-[180px] sm:max-w-md">
+                  {previewReceipt.supplierName}
+                </span>
+                <span className="text-[10px] text-ink-400 font-mono block truncate max-w-[180px] sm:max-w-md">
+                  {previewReceipt.fileName}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {!previewReceipt.isPdf && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleReceiptZoomIn}
+                    className="p-1.5 hover:bg-ink-800 rounded-lg text-ink-200 hover:text-white transition cursor-pointer"
+                    title="Acercar (+)"
+                  >
+                    <ZoomIn size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReceiptZoomOut}
+                    className="p-1.5 hover:bg-ink-800 rounded-lg text-ink-200 hover:text-white transition cursor-pointer"
+                    title="Alejar (-)"
+                  >
+                    <ZoomOut size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReceiptRotate}
+                    className="p-1.5 hover:bg-ink-800 rounded-lg text-ink-200 hover:text-white transition cursor-pointer"
+                    title="Girar 90°"
+                  >
+                    <RotateCw size={16} />
+                  </button>
+                  {(receiptZoom !== 1 || receiptRotation !== 0) && (
+                    <button
+                      type="button"
+                      onClick={handleReceiptReset}
+                      className="text-[11px] px-2 py-1 bg-ink-800 hover:bg-ink-700 text-ink-200 rounded-md transition cursor-pointer"
+                    >
+                      Restablecer
+                    </button>
+                  )}
+                </>
+              )}
+              <a
+                href={previewReceipt.url}
+                download={previewReceipt.fileName}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-ink-800 hover:bg-ink-700 text-white rounded-lg transition"
+                title="Descargar comprobante"
+              >
+                <Download size={14} />
+                <span className="hidden sm:inline">Descargar</span>
+              </a>
+              <a
+                href={previewReceipt.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center p-1.5 bg-ink-800 hover:bg-ink-700 text-ink-200 hover:text-white rounded-lg transition"
+                title="Abrir en pestaña nueva"
+              >
+                <ExternalLink size={15} />
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewReceipt(null)}
+                className="p-1.5 hover:bg-red-600/80 rounded-lg text-ink-300 hover:text-white transition ml-1 cursor-pointer"
+                title="Cerrar (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Área visualizadora del popup */}
+          <div
+            className="flex-1 overflow-auto flex items-center justify-center p-2"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setPreviewReceipt(null);
+            }}
+          >
+            {previewReceipt.isPdf ? (
+              <div className="w-full h-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                <iframe
+                  src={previewReceipt.url}
+                  title="Visor PDF Comprobante"
+                  className="w-full h-full min-h-[70vh] border-0"
+                />
+              </div>
+            ) : (
+              <img
+                src={previewReceipt.url}
+                alt="Comprobante en tamaño completo"
+                style={{
+                  transform: `scale(${receiptZoom}) rotate(${receiptRotation}deg)`,
+                  transition: "transform 0.15s ease-out",
+                }}
+                className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl cursor-default"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
           </div>
         </div>
       )}

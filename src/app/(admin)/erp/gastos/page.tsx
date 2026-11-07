@@ -18,11 +18,25 @@ export default async function GastosPage({
 
   // Mes activo (default: mes actual)
   const now = new Date();
-  const activeMonth = searchParams.month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const activeMonth = searchParams.month ?? currentMonthStr;
+  const isAllMonths = activeMonth === "all";
   const activeAreaFilter = (searchParams.area || "all").toLowerCase();
-  const [year, month] = activeMonth.split("-").map(Number);
-  const from = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const to   = new Date(year, month, 0).toISOString().split("T")[0];
+
+  let from = "";
+  let to = "";
+  let year = now.getFullYear();
+  let month = now.getMonth() + 1;
+
+  if (!isAllMonths) {
+    const parts = activeMonth.split("-").map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      year = parts[0];
+      month = parts[1];
+    }
+    from = new Date(year, month - 1, 1).toISOString().split("T")[0];
+    to   = new Date(year, month, 0).toISOString().split("T")[0];
+  }
 
   // Meses para el selector (últimos 12)
   const months: string[] = [];
@@ -31,16 +45,22 @@ export default async function GastosPage({
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
-  // 1. Facturas SRI pendientes correspondientes al mes activo
+  // 1. Facturas SRI pendientes correspondientes al mes activo (o las más recientes si es "todos")
   let pendingFacturasMes: FacturaRecibida[] = [];
   try {
-    const { data: recData } = await supabase
+    let recQuery = supabase
       .from("facturas_recibidas")
       .select("*")
       .or("estado_facop.eq.pendiente,estado_facop.is.null")
-      .gte("fecha_emision", from)
-      .lte("fecha_emision", to)
       .order("fecha_emision", { ascending: false });
+
+    if (!isAllMonths) {
+      recQuery = recQuery.gte("fecha_emision", from).lte("fecha_emision", to);
+    } else {
+      recQuery = recQuery.limit(100);
+    }
+
+    const { data: recData } = await recQuery;
     if (recData) pendingFacturasMes = recData as FacturaRecibida[];
   } catch (err) {
     console.warn("Error consultando facturas_recibidas del mes:", err);
@@ -60,6 +80,17 @@ export default async function GastosPage({
     console.warn("Error consultando facturas disponibles:", err);
   }
 
+  // 3. Consultas principales: Cierres y Gastos
+  let expensesQuery = supabase
+    .from("expenses")
+    .select("*")
+    .eq("status", "registered")
+    .order("expense_date", { ascending: false });
+
+  if (!isAllMonths) {
+    expensesQuery = expensesQuery.gte("expense_date", from).lte("expense_date", to);
+  }
+
   const [
     { data: monthlyRecords },
     { data: annualRecords },
@@ -67,30 +98,46 @@ export default async function GastosPage({
   ] = await Promise.all([
     supabase.from("monthly_closures").select("period").eq("status", "closed"),
     supabase.from("annual_closures").select("year").eq("status", "closed"),
-    supabase
-      .from("expenses")
-      .select("*")
-      .gte("expense_date", from)
-      .lte("expense_date", to)
-      .eq("status", "registered")
-      .order("expense_date", { ascending: false }),
+    expensesQuery,
   ]);
 
   const monthlyClosedList = (monthlyRecords ?? []).map((c: any) => c.period as string);
   const annualClosedYearsList = (annualRecords ?? []).map((a: any) => Number(a.year));
 
-  const rawItems = (expenses ?? []).map((exp: any) => ({
-    ...exp,
-    resolvedArea: resolveExpenseArea(exp),
-  }));
-
-  // Reconciliación automática: si una factura del SRI ya pertenece a un gasto registrado,
-  // excluirla de pendientes y sincronizar su estado en la base de datos
+  // Reconciliación automática y mapeo bidireccional de facturas vinculadas
   const registeredClavesSet = new Set<string>();
-  for (const exp of rawItems) {
-    const c = resolveFacturaSriClave(exp);
-    if (c) registeredClavesSet.add(c);
+  const facturasByExpenseId = new Map<string, string>();
+  const expenseIds = (expenses ?? []).map((e: any) => e.id);
+
+  if (expenseIds.length > 0) {
+    try {
+      const { data: linkedFacs } = await supabase
+        .from("facturas_recibidas")
+        .select("expense_id, clave_acceso")
+        .in("expense_id", expenseIds);
+      if (linkedFacs) {
+        for (const lf of linkedFacs) {
+          if (lf.expense_id && lf.clave_acceso) {
+            facturasByExpenseId.set(lf.expense_id, lf.clave_acceso);
+            registeredClavesSet.add(lf.clave_acceso);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("No se pudo consultar facturas_recibidas por expense_id:", err);
+    }
   }
+
+  const rawItems = (expenses ?? []).map((exp: any) => {
+    const claveFromLinked = facturasByExpenseId.get(exp.id);
+    const resolvedClave = claveFromLinked || resolveFacturaSriClave(exp);
+    if (resolvedClave) registeredClavesSet.add(resolvedClave);
+    return {
+      ...exp,
+      resolvedArea: resolveExpenseArea(exp),
+      factura_recibida_clave_acceso: exp.factura_recibida_clave_acceso || resolvedClave || null,
+    };
+  });
 
   const pendingClaves = pendingFacturasMes.map((f) => f.clave_acceso).filter(Boolean);
   if (pendingClaves.length > 0) {
@@ -153,7 +200,9 @@ export default async function GastosPage({
     ? rawItems
     : rawItems.filter((e: any) => e.resolvedArea === activeAreaFilter);
 
-  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
+  const monthLabel = isAllMonths
+    ? "todos los meses"
+    : new Date(year, month - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
 
   return (
     <GastosListClient

@@ -80,6 +80,18 @@ async function saveExpense(formData: FormData) {
       const safeName = receiptFile.name.replace(/[^a-zA-Z0-9.-]/g, "_").slice(0, 30);
       const fileName = `gastos/${timestamp}_${safeName}.${fileExt}`;
 
+      // Asegurar que el bucket payment-proofs exista y sea público
+      try {
+        const { data: bInfo } = await supabase.storage.getBucket("payment-proofs");
+        if (!bInfo) {
+          await supabase.storage.createBucket("payment-proofs", { public: true });
+        } else if (!bInfo.public) {
+          await supabase.storage.updateBucket("payment-proofs", { public: true });
+        }
+      } catch (bErr) {
+        console.warn("No se pudo verificar o asegurar bucket payment-proofs:", bErr);
+      }
+
       const { error: uploadError } = await supabase.storage
         .from("payment-proofs")
         .upload(fileName, uploadBuffer, {
