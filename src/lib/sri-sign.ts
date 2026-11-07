@@ -192,6 +192,6 @@ export function signXMLWithP12(xmlString: string, p12Buffer: Buffer, password: s
     `</ds:Signature>`,
   ].join("");
 
-  // ── 8. Insertar Signature antes de </factura> ────────────────────────────
-  return xmlString.replace(/<\/factura>\s*$/, `${signatureXml}</factura>`);
+  // ── 8. Insertar Signature antes del cierre del comprobante ────────────────
+  return xmlString.replace(/(<\/(?:factura|notaCredito|notaDebito|guiaRemision|comprobanteRetencion)>\s*)$/i, `${signatureXml}$1`);
 }
