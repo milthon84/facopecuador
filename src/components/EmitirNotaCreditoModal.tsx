@@ -182,7 +182,7 @@ export default function EmitirNotaCreditoModal({
   return (
     <>
       {/* Botón trigger en cabecera */}
-      {existingCreditNote ? (
+      {existingCreditNote && existingCreditNote.sri_status === "authorized" ? (
         <a
           href={`/api/nota-credito/${existingCreditNote.id}/pdf`}
           target="_blank"
@@ -205,7 +205,7 @@ export default function EmitirNotaCreditoModal({
           title="Emitir Nota de Crédito en el SRI para esta factura"
         >
           <Receipt size={14} />
-          <span>Emitir Nota de Crédito</span>
+          <span>{existingCreditNote ? "Reemitir Nota de Crédito" : "Emitir Nota de Crédito"}</span>
         </button>
       )}
 

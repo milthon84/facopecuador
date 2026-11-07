@@ -168,7 +168,22 @@ export async function consultarAutorizacion(
   );
 
   const autorizacionXml = extractTag(responseXml, "autorizacion");
-  if (!autorizacionXml) return { estado: "EN PROCESO" };
+  if (!autorizacionXml) {
+    const numComp = extractTag(responseXml, "numeroComprobantes");
+    if (numComp === "0") {
+      return {
+        estado: "NO AUTORIZADO",
+        mensajes: [
+          {
+            identificador: "SRI-404",
+            mensaje: "El comprobante no consta en el SRI (no fue recibido ni procesado).",
+            tipo: "ERROR",
+          },
+        ],
+      };
+    }
+    return { estado: "EN PROCESO" };
+  }
 
   const estado = extractTag(autorizacionXml, "estado") as SriAutorizacionResult["estado"];
   const numeroAutorizacion = extractTag(autorizacionXml, "numeroAutorizacion");

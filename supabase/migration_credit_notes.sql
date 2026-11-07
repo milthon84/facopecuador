@@ -112,4 +112,8 @@ alter table public.credit_notes enable row level security;
 alter table public.credit_note_items enable row level security;
 
 create policy admin_all_credit_notes on public.credit_notes for all to authenticated using (public.is_admin()) with check (public.is_admin());
-create policy admin_all_credit_note_items on public.credit_note_items for all to authenticated using (public.is_admin()) with check (public.is_admin());
+-- 5. Actualizar constraint reference_type en journal_entries para admitir 'credit_note'
+alter table public.journal_entries drop constraint if exists journal_entries_reference_type_check;
+alter table public.journal_entries add constraint journal_entries_reference_type_check
+check (reference_type in ('invoice','expense','manual','asset_purchase','depreciation','disposal','monthly_closure','credit_note'));
+

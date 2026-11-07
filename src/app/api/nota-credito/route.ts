@@ -403,6 +403,7 @@ export async function POST(req: Request) {
           credit_note_id: insertedCn.id,
           credit_note_number: creditNoteNumber,
           credit_note_date: todayStr,
+          invoice_id,
           invoice_number: invoice.invoice_number,
           client_name: invoice.client_name,
           subtotal_0: subtotal0,

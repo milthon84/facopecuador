@@ -162,6 +162,7 @@ export async function createCreditNoteJournalEntry(params: {
   credit_note_id:     string;
   credit_note_number: string;
   credit_note_date:   string;
+  invoice_id?:        string | null;
   invoice_number:     string;
   client_name:        string;
   subtotal_0:         number;
@@ -172,11 +173,55 @@ export async function createCreditNoteJournalEntry(params: {
   user_id?:           string | null;
   user_email?:        string | null;
 }) {
+  const supabase = createAdminClient();
+
+  // 1. Evitar duplicar asientos para la misma Nota de Crédito
+  const { data: existingEntry } = await supabase
+    .from("journal_entries")
+    .select("id")
+    .eq("reference_type", "credit_note")
+    .eq("reference_id", params.credit_note_id)
+    .maybeSingle();
+
+  if (existingEntry) {
+    return existingEntry;
+  }
+
+  // 2. Cuentas contables por defecto NIIF
+  let cxcAccount = { code: "1.1.02.01", name: "Cuentas por Cobrar Pacientes (Clínica)" };
+  let revenueAccount = { code: "4.1.01", name: "Servicios de Prevención e Higiene" };
+  let ivaAccount = { code: "2.1.03.01", name: "IVA en Ventas por Pagar" };
+
+  // Si se provee la factura original, buscar su asiento para espejar y netear con exactamente las mismas cuentas
+  if (params.invoice_id) {
+    const { data: invEntry } = await supabase
+      .from("journal_entries")
+      .select("id, journal_lines(account_code, account_name, debit, credit)")
+      .eq("reference_type", "invoice")
+      .eq("reference_id", params.invoice_id)
+      .maybeSingle();
+
+    if (invEntry?.journal_lines) {
+      for (const line of invEntry.journal_lines as any[]) {
+        if (line.account_code.startsWith("1.1.02") && Number(line.debit) > 0) {
+          cxcAccount = { code: line.account_code, name: line.account_name };
+        } else if (line.account_code.startsWith("4.") && Number(line.credit) > 0) {
+          revenueAccount = { code: line.account_code, name: line.account_name };
+        } else if (
+          (line.account_code.startsWith("2.1.02") || line.account_code.startsWith("2.1.03")) &&
+          Number(line.credit) > 0
+        ) {
+          ivaAccount = { code: line.account_code, name: line.account_name };
+        }
+      }
+    }
+  }
+
   const subtotalTotal = r2(params.subtotal_0 + params.subtotal_15);
   const lines: JournalLine[] = [
     {
-      account_code: "4.1.01",
-      account_name: "Servicios de Prevención e Higiene", // Ingreso reversado
+      account_code: revenueAccount.code,
+      account_name: revenueAccount.name, // Ingreso reversado (Debe netea el Haber de la Factura)
       debit:  subtotalTotal,
       credit: 0,
       description: `Reversión por NC ${params.credit_note_number} — ${params.motivo || "Anulación/Modificación"}`,
@@ -185,8 +230,8 @@ export async function createCreditNoteJournalEntry(params: {
 
   if (params.iva_amount > 0) {
     lines.push({
-      account_code: "2.1.03.01",
-      account_name: "IVA en Ventas por Pagar",
+      account_code: ivaAccount.code,
+      account_name: ivaAccount.name, // Pasivo IVA reversado (Debe netea el Haber de la Factura)
       debit:  r2(params.iva_amount),
       credit: 0,
       description: `Reversión IVA NC ${params.credit_note_number}`,
@@ -194,22 +239,37 @@ export async function createCreditNoteJournalEntry(params: {
   }
 
   lines.push({
-    account_code: "1.1.02.01",
-    account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+    account_code: cxcAccount.code,
+    account_name: cxcAccount.name, // Cuenta por cobrar cancelada (Haber netea el Debe de la Factura)
     debit:  0,
     credit: r2(params.total),
     description: `NC ${params.credit_note_number} sobre Fac. ${params.invoice_number}`,
   });
 
-  return insertJournalEntry({
-    entry_date:     params.credit_note_date,
-    description:    `Nota de Crédito ${params.credit_note_number} — Fac. ${params.invoice_number} (${params.client_name})`,
-    reference_type: "credit_note",
-    reference_id:   params.credit_note_id,
-    lines,
-    user_id:        params.user_id,
-    user_email:     params.user_email,
-  });
+  try {
+    return await insertJournalEntry({
+      entry_date:     params.credit_note_date,
+      description:    `Nota de Crédito ${params.credit_note_number} — Fac. ${params.invoice_number} (${params.client_name})`,
+      reference_type: "credit_note",
+      reference_id:   params.credit_note_id,
+      lines,
+      user_id:        params.user_id,
+      user_email:     params.user_email,
+    });
+  } catch (err: any) {
+    if (err.message?.includes("reference_type") || err.message?.includes("constraint") || err.message?.includes("23514")) {
+      return await insertJournalEntry({
+        entry_date:     params.credit_note_date,
+        description:    `Nota de Crédito ${params.credit_note_number} — Fac. ${params.invoice_number} (${params.client_name})`,
+        reference_type: "manual",
+        reference_id:   params.credit_note_id,
+        lines,
+        user_id:        params.user_id,
+        user_email:     params.user_email,
+      });
+    }
+    throw err;
+  }
 }
 
 // ── Asiento por Gasto / Factura de Compra ─────────────────────────────────

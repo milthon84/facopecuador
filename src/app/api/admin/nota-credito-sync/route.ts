@@ -78,6 +78,7 @@ export async function POST(req: Request) {
           credit_note_id: cn.id,
           credit_note_number: cn.credit_note_number,
           credit_note_date: cn.issue_date || new Date().toISOString().split("T")[0],
+          invoice_id: cn.invoice_id,
           invoice_number: cn.num_doc_modificado,
           client_name: cn.client_name,
           subtotal_0: Number(cn.subtotal_0 || 0),
