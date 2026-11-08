@@ -810,47 +810,6 @@ export default function GastosListClient({
                           <span>Sin Comprobante</span>
                         </span>
                       )}
-
-                      {/* Área a la que pertenece el gasto (al lado de SRI) */}
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${areaConfig.badgeCls}`}
-                        title={`Área del gasto: ${areaLabel}`}
-                      >
-                        {areaKey === "clinica" && <Stethoscope size={11} className="text-teal-600" />}
-                        {areaKey === "cursos" && <GraduationCap size={11} className="text-indigo-600" />}
-                        {areaKey === "general" && <Building2 size={11} className="text-amber-600" />}
-                        <span>{areaLabel}</span>
-                      </span>
-
-                      {receiptUrl && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const proxied = proxyStorageUrl(receiptUrl);
-                            const name = receiptUrl.split("/").pop()?.split("?")[0] || "comprobante";
-                            const isPdf = Boolean(
-                              receiptUrl.toLowerCase().includes(".pdf") ||
-                              receiptUrl.toLowerCase().includes("application/pdf")
-                            );
-                            setReceiptZoom(1);
-                            setReceiptRotation(0);
-                            setPreviewReceipt({
-                              url: proxied,
-                              fileName: name,
-                              supplierName: exp.supplier_name || "Gasto",
-                              isPdf,
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
-                          title="Visualizar comprobante digital de respaldo"
-                        >
-                          <Paperclip size={11} className="text-lilac-600" />
-                          <span className="hidden sm:inline">Comprobante</span>
-                          <Eye size={11} className="text-lilac-500" />
-                        </button>
-                      )}
                     </div>
 
                     <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-ink-500">
@@ -877,7 +836,49 @@ export default function GastosListClient({
                     )}
                   </Link>
 
-                  <div className="text-right shrink-0 flex items-center gap-2">
+                  <div className="text-right shrink-0 flex items-center gap-2 sm:gap-2.5">
+                    {/* Botón de Comprobante digital adjunto */}
+                    {receiptUrl && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const proxied = proxyStorageUrl(receiptUrl);
+                          const name = receiptUrl.split("/").pop()?.split("?")[0] || "comprobante";
+                          const isPdf = Boolean(
+                            receiptUrl.toLowerCase().includes(".pdf") ||
+                            receiptUrl.toLowerCase().includes("application/pdf")
+                          );
+                          setReceiptZoom(1);
+                          setReceiptRotation(0);
+                          setPreviewReceipt({
+                            url: proxied,
+                            fileName: name,
+                            supplierName: exp.supplier_name || "Gasto",
+                            isPdf,
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
+                        title="Visualizar comprobante digital de respaldo"
+                      >
+                        <Paperclip size={11} className="text-lilac-600" />
+                        <span className="hidden md:inline">Comprobante</span>
+                        <Eye size={11} className="text-lilac-500" />
+                      </button>
+                    )}
+
+                    {/* Área a la derecha, en el medio entre Comprobante y Precio */}
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${areaConfig.badgeCls}`}
+                      title={`Área del gasto: ${areaLabel}`}
+                    >
+                      {areaKey === "clinica" && <Stethoscope size={11} className="text-teal-600" />}
+                      {areaKey === "cursos" && <GraduationCap size={11} className="text-indigo-600" />}
+                      {areaKey === "general" && <Building2 size={11} className="text-amber-600" />}
+                      <span>{areaLabel}</span>
+                    </span>
+
                     <div>
                       <div className="font-extrabold text-red-600 text-sm">${Number(exp.total).toFixed(2)}</div>
                       {Number(exp.iva_amount) > 0 && (
