@@ -395,6 +395,15 @@ export default function NuevaCompraForm({
         formData.set("authorization_number", authNumber);
       }
       formData.set("document_number", cleanDocNumberOnly(docNumber));
+      formData.set("area", area);
+      formData.set("document_type", docType);
+      formData.set("payment_method", method);
+      formData.set("supplier_name", supplierName.trim());
+      formData.set("supplier_ruc", supplierRuc.trim());
+      formData.set("expense_date", expenseDate);
+      if (isEditing && initialData?.id) {
+        formData.set("id", initialData.id);
+      }
 
       const res = (await saveExpense(formData)) as { success?: boolean; error?: string; url?: string };
       if (res?.success) {

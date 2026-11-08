@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
@@ -290,6 +291,8 @@ async function saveExpense(formData: FormData) {
   } catch (err) {
     console.error("Asiento contable no generado:", err);
   }
+
+  revalidatePath("/erp/gastos");
 
   return { success: true };
 }

@@ -97,6 +97,9 @@ export function resolveExpenseArea(expense: {
   }
 
   if (
+    desc.includes("arriendo") ||
+    desc.includes("alquiler") ||
+    desc.includes("oficina") ||
     cat.includes("arriendo") ||
     cat.includes("servicios básicos") ||
     cat.includes("suministros oficina") ||

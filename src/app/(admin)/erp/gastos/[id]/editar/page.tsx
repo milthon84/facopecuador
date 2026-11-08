@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
 import { assertPermission, assertWritePermission } from "@/lib/auth-action";
@@ -186,7 +187,13 @@ async function updateExpense(formData: FormData) {
     if (authorization_number) {
       updatePayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
     }
-    await supabase.from("expenses").update(updatePayload).eq("id", id);
+    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
+    error = retry.error;
+  }
+
+  if (error) {
+    console.error("Error al actualizar gasto en Supabase:", error);
+    return { success: false, error: error.message || "Error al actualizar el gasto en la base de datos" };
   }
 
   // Actualizar líneas de detalle en expense_items
@@ -239,6 +246,10 @@ async function updateExpense(formData: FormData) {
       console.warn("No se pudo actualizar estado_facop en editar gasto:", facErr);
     }
   }
+
+  revalidatePath("/erp/gastos");
+  revalidatePath(`/erp/gastos/${id}`);
+  revalidatePath(`/erp/gastos/${id}/editar`);
 
   return { success: true, url: `/erp/gastos/${id}` };
 }
