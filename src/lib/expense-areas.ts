@@ -186,6 +186,65 @@ export function resolveExpenseDocType(expense: {
 }
 
 /**
+ * Extrae únicamente la serie y número del comprobante (ej: "001-100-000000203"),
+ * eliminando prefijos redundantes como "Factura ", "Nota de Venta ", "Liquidación ", etc.
+ */
+export function cleanDocNumberOnly(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let val = raw.trim();
+  // Quitar símbolos iniciales como #
+  val = val.replace(/^#+\s*/, "");
+  // Quitar prefijos de comprobante (insensible a mayúsculas/minúsculas y acentos)
+  val = val.replace(
+    /^(?:factura(?:\s+electr[oó]nica|\s+sri)?|nota\s+de\s+(?:venta|cr[eé]dito|d[eé]bito)|liquidaci[oó]n(?:\s+de\s+compra)?|comprobante(?:\s+de\s+retenci[oó]n)?|recibo|ndv|nv|n\/v)\s*[:#\-]?\s*/i,
+    ""
+  );
+  return val.trim();
+}
+
+/**
+ * Retorna la etiqueta amigable del tipo de comprobante para mostrar ("Factura", "Nota de Venta", "Liquidación", "Recibo", etc.)
+ */
+export function getExpenseDocTypeLabel(expense: {
+  document_number?: string | null;
+  notes?: string | null;
+  factura_recibida_clave_acceso?: string | null;
+  authorization_number?: string | null;
+}): string {
+  const rawDoc = (expense.document_number || "").toLowerCase();
+  if (rawDoc.includes("nota") || rawDoc.includes("nv")) {
+    return "Nota de Venta";
+  }
+  if (rawDoc.includes("liquidaci")) {
+    return "Liquidación";
+  }
+  if (rawDoc.includes("recibo")) {
+    return "Recibo";
+  }
+
+  const docType = resolveExpenseDocType(expense);
+  if (docType === "nota_venta") return "Nota de Venta";
+  if (docType === "sin_documento") return "Sin Comprobante";
+  return "Factura";
+}
+
+/**
+ * Formatea el número de comprobante para listados anteponiendo el tipo:
+ * Ej: "#Factura 001-100-000000013" o "#Nota de Venta 001-001-000001"
+ */
+export function formatExpenseDocNumber(expense: {
+  document_number?: string | null;
+  notes?: string | null;
+  factura_recibida_clave_acceso?: string | null;
+  authorization_number?: string | null;
+}): string | null {
+  const cleanNum = cleanDocNumberOnly(expense.document_number);
+  if (!cleanNum) return null;
+  const label = getExpenseDocTypeLabel(expense);
+  return `#${label} ${cleanNum}`;
+}
+
+/**
  * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [FACTURA_SRI:...], [TIPO:...]) de las notas visibles
  */
 export function cleanVisibleNotes(notes: string | null | undefined): string {

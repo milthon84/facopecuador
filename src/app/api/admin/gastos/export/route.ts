@@ -9,6 +9,7 @@ import {
   resolveFacturaSriClave,
   resolveExpenseDocType,
   cleanVisibleNotes,
+  cleanDocNumberOnly,
 } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
@@ -108,7 +109,7 @@ export async function GET(req: Request) {
         "Área": areaLabel,
         "Categoría": exp.category || "",
         "Tipo Comprobante": docTypeLabel,
-        "N° Comprobante": exp.document_number || "",
+        "N° Comprobante": cleanDocNumberOnly(exp.document_number) || "",
         "Clave SRI / Autorización": sriClave || exp.authorization_number || "",
         "Forma de Pago": PAYMENT_LABELS[exp.payment_method] || exp.payment_method || "",
         "Subtotal 0%": Number(exp.subtotal_0 || 0),

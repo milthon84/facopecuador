@@ -23,6 +23,7 @@ import {
   Sparkles,
   AlertCircle,
   FileCheck2,
+  FileText,
   RotateCcw,
   Trash2,
   Download,
@@ -38,10 +39,14 @@ import { FacturaRecibida } from "@/lib/expense-types";
 import {
   ExpenseArea,
   EXPENSE_AREA_CONFIG,
+  resolveExpenseArea,
   resolveReceiptUrl,
   resolveFacturaSriClave,
   resolveExpenseDocType,
   cleanVisibleNotes,
+  cleanDocNumberOnly,
+  getExpenseDocTypeLabel,
+  formatExpenseDocNumber,
 } from "@/lib/expense-areas";
 import { linkExpenseToFactura, deleteOrVoidExpense } from "./actions";
 
@@ -217,6 +222,7 @@ export default function GastosListClient({
         const sup = (exp.supplier_name || "").toLowerCase();
         const ruc = (exp.supplier_ruc || "").toLowerCase();
         const doc = (exp.document_number || "").toLowerCase();
+        const docLabel = getExpenseDocTypeLabel(exp).toLowerCase();
         const desc = (exp.description || "").toLowerCase();
         const cat = (exp.category || "").toLowerCase();
         const auth = (sriClave || exp.authorization_number || "").toLowerCase();
@@ -226,6 +232,7 @@ export default function GastosListClient({
           sup.includes(q) ||
           ruc.includes(q) ||
           doc.includes(q) ||
+          docLabel.includes(q) ||
           desc.includes(q) ||
           cat.includes(q) ||
           auth.includes(q) ||
@@ -289,13 +296,15 @@ export default function GastosListClient({
     if (!linkingExpense) return 0;
     const expRuc = (linkingExpense.supplier_ruc || "").trim();
     const expName = (linkingExpense.supplier_name || "").toLowerCase().trim();
-    const expDoc = (linkingExpense.document_number || "").trim();
+    const expDoc = cleanDocNumberOnly(linkingExpense.document_number);
 
     const aMatchRuc = expRuc && a.ruc_emisor === expRuc ? 3 : 0;
     const bMatchRuc = expRuc && b.ruc_emisor === expRuc ? 3 : 0;
 
-    const aMatchDoc = expDoc && (a.numero_comprobante || "").includes(expDoc) ? 2 : 0;
-    const bMatchDoc = expDoc && (b.numero_comprobante || "").includes(expDoc) ? 2 : 0;
+    const aClean = cleanDocNumberOnly(a.numero_comprobante);
+    const bClean = cleanDocNumberOnly(b.numero_comprobante);
+    const aMatchDoc = expDoc && aClean && (aClean.includes(expDoc) || expDoc.includes(aClean)) ? 2 : 0;
+    const bMatchDoc = expDoc && bClean && (bClean.includes(expDoc) || expDoc.includes(bClean)) ? 2 : 0;
 
     const aMatchName = expName && (a.razon_social || "").toLowerCase().includes(expName) ? 1 : 0;
     const bMatchName = expName && (b.razon_social || "").toLowerCase().includes(expName) ? 1 : 0;
@@ -365,7 +374,7 @@ export default function GastosListClient({
           "Área": areaLabel,
           "Categoría": exp.category || "",
           "Tipo Comprobante": docTypeLabel,
-          "N° Comprobante": exp.document_number || "",
+          "N° Comprobante": cleanDocNumberOnly(exp.document_number) || "",
           "Clave SRI / Autorización": sriClave || exp.authorization_number || "",
           "Forma de Pago": PAYMENT_LABELS[exp.payment_method] || exp.payment_method || "",
           "Subtotal 0%": Number(exp.subtotal_0 || 0),
@@ -730,7 +739,12 @@ export default function GastosListClient({
             {displayedItems.map((exp: any) => {
               const sriClave = resolveFacturaSriClave(exp);
               const hasSriFactura = Boolean(sriClave);
+              const docType = resolveExpenseDocType(exp);
               const receiptUrl = resolveReceiptUrl(exp);
+              const formattedDoc = formatExpenseDocNumber(exp);
+              const areaKey: ExpenseArea = (exp.resolvedArea || resolveExpenseArea(exp) || "clinica") as ExpenseArea;
+              const areaConfig = EXPENSE_AREA_CONFIG[areaKey] || EXPENSE_AREA_CONFIG.clinica;
+              const areaLabel = areaKey === "general" ? "General / Admin" : areaConfig.label;
               return (
                 <div
                   key={exp.id}
@@ -743,7 +757,7 @@ export default function GastosListClient({
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-ink-900 truncate">{exp.supplier_name}</span>
 
-                      {/* Solo queda el indicador del SRI y el botón de relacionar cuando no tenga factura */}
+                      {/* Estado SRI / Relacionar Factura (solo Factura) / Tipo de comprobante */}
                       {hasSriFactura ? (
                         <span
                           className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-md font-bold shadow-2xs"
@@ -752,8 +766,8 @@ export default function GastosListClient({
                           <CheckCircle2 size={11} className="text-emerald-600" />
                           <span>SRI</span>
                         </span>
-                      ) : (
-                        canEdit && (
+                      ) : docType === "factura" ? (
+                        canEdit ? (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -764,14 +778,49 @@ export default function GastosListClient({
                               setLinkingError(null);
                               setLinkingSuccess(null);
                             }}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 hover:border-indigo-300 px-2.5 py-0.5 rounded-md transition shadow-2xs"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 hover:border-indigo-300 px-2.5 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
                             title="Vincular este gasto con una factura electrónica del SRI"
                           >
                             <Link2 size={11} className="text-indigo-600" />
                             <span>Relacionar Factura</span>
                           </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md shadow-2xs"
+                            title="Comprobante tipo Factura"
+                          >
+                            <FileText size={11} className="text-blue-500" />
+                            <span>Factura</span>
+                          </span>
                         )
+                      ) : docType === "nota_venta" ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs"
+                          title="Nota de Venta (Régimen RIMPE Negocio Popular)"
+                        >
+                          <FileText size={11} className="text-amber-600" />
+                          <span>Nota de Venta</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded-md shadow-2xs"
+                          title="Gasto Directo / Sin Comprobante Fiscal"
+                        >
+                          <Receipt size={11} className="text-slate-500" />
+                          <span>Sin Comprobante</span>
+                        </span>
                       )}
+
+                      {/* Área a la que pertenece el gasto (al lado de SRI) */}
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${areaConfig.badgeCls}`}
+                        title={`Área del gasto: ${areaLabel}`}
+                      >
+                        {areaKey === "clinica" && <Stethoscope size={11} className="text-teal-600" />}
+                        {areaKey === "cursos" && <GraduationCap size={11} className="text-indigo-600" />}
+                        {areaKey === "general" && <Building2 size={11} className="text-amber-600" />}
+                        <span>{areaLabel}</span>
+                      </span>
 
                       {receiptUrl && (
                         <button
@@ -808,8 +857,8 @@ export default function GastosListClient({
                       <span className="font-medium text-ink-600">
                         {new Date(exp.expense_date + "T12:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short" })}
                       </span>
-                      {exp.document_number && (
-                        <span className="font-mono text-ink-500">#{exp.document_number}</span>
+                      {formattedDoc && (
+                        <span className="font-mono text-ink-500">{formattedDoc}</span>
                       )}
                       <span className="text-ink-300">·</span>
                       <span className="text-ink-500 font-medium">
@@ -1020,7 +1069,7 @@ export default function GastosListClient({
                   <span className="text-ink-500 font-mono text-[11px] ml-1.5">({linkingExpense.supplier_ruc})</span>
                 )}
                 {linkingExpense.document_number && (
-                  <span className="text-ink-500 font-mono text-[11px] ml-1.5">#{linkingExpense.document_number}</span>
+                  <span className="text-ink-500 font-mono text-[11px] ml-1.5">{formatExpenseDocNumber(linkingExpense)}</span>
                 )}
               </div>
               <div className="text-right">
@@ -1064,7 +1113,11 @@ export default function GastosListClient({
               {sortedAvailableFacturas.length > 0 ? (
                 sortedAvailableFacturas.map((fac) => {
                   const isRucMatch = linkingExpense.supplier_ruc && fac.ruc_emisor === linkingExpense.supplier_ruc;
-                  const isDocMatch = linkingExpense.document_number && (fac.numero_comprobante || "").includes(linkingExpense.document_number);
+                  const cleanExpDoc = cleanDocNumberOnly(linkingExpense.document_number);
+                  const cleanFacDoc = cleanDocNumberOnly(fac.numero_comprobante);
+                  const isDocMatch = Boolean(
+                    cleanExpDoc && cleanFacDoc && (cleanFacDoc.includes(cleanExpDoc) || cleanExpDoc.includes(cleanFacDoc))
+                  );
 
                   return (
                     <div

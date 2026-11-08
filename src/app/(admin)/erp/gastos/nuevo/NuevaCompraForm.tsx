@@ -24,7 +24,7 @@ import {
   HelpCircle,
   Key,
 } from "lucide-react";
-import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl } from "@/lib/expense-areas";
+import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl, cleanDocNumberOnly } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import {
   FacturaRecibida,
@@ -82,7 +82,7 @@ export default function NuevaCompraForm({
 
   const [supplierRuc, setSupplierRuc] = useState(initialData?.supplier_ruc || "");
   const [supplierName, setSupplierName] = useState(initialData?.supplier_name || "");
-  const [docNumber, setDocNumber] = useState(initialData?.document_number || "");
+  const [docNumber, setDocNumber] = useState(() => cleanDocNumberOnly(initialData?.document_number || ""));
   const [expenseDate, setExpenseDate] = useState(initialData?.expense_date || today);
   const [authNumber, setAuthNumber] = useState(initialData?.authorization_number || "");
   const [selectedFacturaClave, setSelectedFacturaClave] = useState<string | null>(
@@ -187,7 +187,8 @@ export default function NuevaCompraForm({
     setSelectedFacturaClave(factura.clave_acceso);
     setSupplierRuc(factura.ruc_emisor || "");
     setSupplierName(factura.razon_social || "");
-    setDocNumber(factura.numero_comprobante || "");
+    const cleanNum = cleanDocNumberOnly(factura.numero_comprobante || "");
+    setDocNumber(cleanNum);
     if (factura.fecha_emision) setExpenseDate(factura.fecha_emision);
     setAuthNumber(factura.clave_acceso || "");
     setDocType("factura");
@@ -208,7 +209,7 @@ export default function NuevaCompraForm({
     if (subtotal > 0) {
       newRows.push({
         id: `fac-${Date.now()}-1`,
-        description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        description: factura.razon_social ? `${factura.razon_social} - Fac #${cleanNum}` : "Compra según factura electrónica",
         category: "Insumo y Material",
         quantity: 1,
         unit_price: subtotal,
@@ -217,7 +218,7 @@ export default function NuevaCompraForm({
     } else if (total > 0) {
       newRows.push({
         id: `fac-${Date.now()}-1`,
-        description: factura.razon_social ? `${factura.razon_social} - Fac #${factura.numero_comprobante || ""}` : "Compra según factura electrónica",
+        description: factura.razon_social ? `${factura.razon_social} - Fac #${cleanNum}` : "Compra según factura electrónica",
         category: "Insumo y Material",
         quantity: 1,
         unit_price: total,
@@ -393,6 +394,7 @@ export default function NuevaCompraForm({
       if (authNumber) {
         formData.set("authorization_number", authNumber);
       }
+      formData.set("document_number", cleanDocNumberOnly(docNumber));
 
       const res = (await saveExpense(formData)) as { success?: boolean; error?: string; url?: string };
       if (res?.success) {
@@ -473,7 +475,7 @@ export default function NuevaCompraForm({
                 <div className="flex items-center gap-2 bg-white/90 border border-teal-300 rounded-xl px-2.5 py-1 text-xs">
                   <CheckCircle2 size={14} className="text-teal-600 shrink-0" />
                   <span className="font-semibold text-teal-950 font-mono text-[11px]">
-                    Factura SRI: {facturaVinculada.numero_comprobante || "Vinculada"}
+                    Factura SRI: {cleanDocNumberOnly(facturaVinculada.numero_comprobante) || facturaVinculada.numero_comprobante || "Vinculada"}
                   </span>
                   {!isEditing && (
                     <button
@@ -677,7 +679,15 @@ export default function NuevaCompraForm({
                 <input
                   name="document_number"
                   value={docNumber}
-                  onChange={(e) => setDocNumber(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (/^(?:factura|nota|recibo|comprobante)/i.test(val)) {
+                      setDocNumber(cleanDocNumberOnly(val));
+                    } else {
+                      setDocNumber(val);
+                    }
+                  }}
+                  onBlur={() => setDocNumber((prev) => cleanDocNumberOnly(prev))}
                   placeholder={docType === "factura" ? "001-001-000000001" : "001-001-000001"}
                   className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
                 />

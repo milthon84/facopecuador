@@ -7,6 +7,7 @@ import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import NuevaCompraForm from "./NuevaCompraForm";
 import { assertWritePermission } from "@/lib/auth-action";
 import { FacturaRecibida } from "@/lib/expense-types";
+import { cleanDocNumberOnly } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -129,7 +130,7 @@ async function saveExpense(formData: FormData) {
   const insertPayload: Record<string, any> = {
     supplier_name,
     supplier_ruc:      (formData.get("supplier_ruc") as string)?.trim() || null,
-    document_number:   (formData.get("document_number") as string)?.trim() || null,
+    document_number:   cleanDocNumberOnly(formData.get("document_number") as string) || null,
     authorization_number,
     expense_date,
     category,

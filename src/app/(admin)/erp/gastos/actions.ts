@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen } from "@/lib/accounting";
-import { resolveFacturaSriClave } from "@/lib/expense-areas";
+import { resolveFacturaSriClave, cleanDocNumberOnly } from "@/lib/expense-areas";
 import { revalidatePath } from "next/cache";
 
 export async function linkExpenseToFactura(expenseId: string, claveAcceso: string) {
@@ -33,21 +33,28 @@ export async function linkExpenseToFactura(expenseId: string, claveAcceso: strin
       return { success: false, error: "No se encontró el gasto especificado" };
     }
 
-    // 3. Actualizar notas para incluir la clave si no la tiene
+    // 3. Actualizar notas para incluir la clave y tipo factura si no los tiene
     let notes = expense.notes || "";
     if (!notes.includes("[FACTURA_SRI:")) {
       notes = notes ? `${notes} [FACTURA_SRI:${claveAcceso}]` : `[FACTURA_SRI:${claveAcceso}]`;
+    }
+    if (notes.includes("[TIPO:")) {
+      notes = notes.replace(/\[TIPO:[^\]]+\]/gi, "[TIPO:factura]");
+    } else {
+      notes = `${notes} [TIPO:factura]`;
     }
 
     // Al vincular la factura SRI, SIEMPRE tomar de la factura:
     // - Nombre / Razón Social del proveedor
     // - RUC del emisor
-    // - Número de factura (comprobante)
+    // - Número de factura limpio (sin palabra "Factura")
     // - N° Autorización / Clave de acceso (49 dígitos)
+    const cleanNum = cleanDocNumberOnly(factura.numero_comprobante) || cleanDocNumberOnly(expense.document_number) || null;
+
     const expenseUpdate: Record<string, any> = {
       supplier_name: factura.razon_social?.trim() || expense.supplier_name,
       supplier_ruc: factura.ruc_emisor?.trim() || expense.supplier_ruc,
-      document_number: factura.numero_comprobante?.trim() || expense.document_number,
+      document_number: cleanNum,
       authorization_number: claveAcceso,
       factura_recibida_clave_acceso: claveAcceso,
       notes,

@@ -29,6 +29,8 @@ import {
   cleanVisibleNotes,
   resolveFacturaSriClave,
   resolveExpenseDocType,
+  cleanDocNumberOnly,
+  formatExpenseDocNumber,
 } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
@@ -153,15 +155,15 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
     }
   }
 
-  // 3. Por número de comprobante si coincide exactamente
+  // 3. Por número de comprobante si coincide
   if (!linkedFactura && expense.document_number) {
     try {
-      const cleanNum = expense.document_number.replace(/[^0-9-]/g, "").trim();
+      const cleanNum = cleanDocNumberOnly(expense.document_number);
       if (cleanNum) {
         const { data: facByNum } = await supabase
           .from("facturas_recibidas")
           .select("*")
-          .eq("numero_comprobante", cleanNum)
+          .ilike("numero_comprobante", `%${cleanNum}%`)
           .maybeSingle();
         if (facByNum) {
           linkedFactura = facByNum as FacturaRecibida;
@@ -361,7 +363,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               <FileCheck2 size={11} className="text-lilac-600" /> N° Comprobante / Secuencial
             </span>
             <p className="text-sm font-mono font-bold text-ink-900 mt-0.5">
-              {expense.document_number || "Sin número (Gasto Directo)"}
+              {formatExpenseDocNumber(expense) || cleanDocNumberOnly(expense.document_number) || "Sin número (Gasto Directo)"}
             </p>
           </div>
 
