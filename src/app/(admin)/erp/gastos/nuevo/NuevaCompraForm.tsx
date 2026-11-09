@@ -1073,20 +1073,20 @@ export default function NuevaCompraForm({
           </div>
 
           {/* Tabla de ítems */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto -mx-1 px-1">
+            <table className="w-full min-w-[780px] text-xs table-auto">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2.5 pr-3 font-bold w-full min-w-[280px] sm:min-w-[340px]">Descripción del Bien / Servicio</th>
-                  <th className="py-2.5 px-2 w-36 sm:w-44 font-bold">GRUPO</th>
-                  <th className="py-2.5 px-2 w-40 sm:w-48 font-bold">GASTO</th>
-                  <th className="py-2.5 px-2 w-14 text-center font-bold">Cant.</th>
-                  <th className="py-2.5 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
+                  <th className="py-2.5 pr-2 font-bold w-[28%] min-w-[180px]">Descripción del Bien / Servicio</th>
+                  <th className="py-2.5 px-2 font-bold w-[22%] min-w-[150px]">GRUPO</th>
+                  <th className="py-2.5 px-2 font-bold w-[23%] min-w-[160px]">GASTO</th>
+                  <th className="py-2.5 px-1.5 text-center font-bold w-[7%] min-w-[50px]">Cant.</th>
+                  <th className="py-2.5 px-2 text-right font-bold w-[10%] min-w-[75px]">P. Unitario ($)</th>
                   {docType === "factura" && (
-                    <th className="py-2.5 px-2 w-16 text-center font-bold">IVA</th>
+                    <th className="py-2.5 px-1.5 text-center font-bold w-[7%] min-w-[55px]">IVA</th>
                   )}
-                  <th className="py-2.5 pl-2 pr-1 w-20 text-right font-bold">Subtotal</th>
-                  <th className="py-2.5 pl-1 w-7"></th>
+                  <th className="py-2.5 pl-2 pr-1 text-right font-bold w-[9%] min-w-[70px]">Subtotal</th>
+                  <th className="py-2.5 pl-1 text-center font-bold w-[4%] min-w-[28px]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-100">
@@ -1100,19 +1100,19 @@ export default function NuevaCompraForm({
 
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-3 align-middle">
-                        <input
-                          type="text"
+                      <td className="py-2 pr-2 align-top">
+                        <textarea
+                          rows={2}
                           required
                           value={item.description}
                           onChange={(e) => updateItemRow(item.id, "description", e.target.value)}
-                          placeholder={`Ej. Descripción del bien o servicio ${idx + 1}`}
-                          className="w-full border border-lilac-200 rounded-lg px-3 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                          placeholder={`Descripción del bien o servicio ${idx + 1}`}
+                          className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none resize-none leading-snug"
                         />
                       </td>
 
                       {/* Selector Grupo Contable */}
-                      <td className="py-2 px-2 align-middle w-36 sm:w-44">
+                      <td className="py-2 px-2 align-top">
                         <select
                           value={grpCode}
                           onChange={(e) => updateItemGroup(item.id, e.target.value)}
@@ -1128,7 +1128,7 @@ export default function NuevaCompraForm({
                       </td>
 
                       {/* Selector Cuenta de Gasto (Movimiento) */}
-                      <td className="py-2 px-2 align-middle w-40 sm:w-48">
+                      <td className="py-2 px-2 align-top">
                         <select
                           value={selectedAcc}
                           onChange={(e) => updateItemAccount(item.id, e.target.value)}
@@ -1143,7 +1143,7 @@ export default function NuevaCompraForm({
                         </select>
                       </td>
 
-                      <td className="py-2 px-2 align-top">
+                      <td className="py-2 px-1.5 align-top">
                         <input
                           type="number"
                           min="0.01"
@@ -1151,10 +1151,10 @@ export default function NuevaCompraForm({
                           required
                           value={item.quantity}
                           onChange={(e) => updateItemRow(item.id, "quantity", e.target.value)}
-                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-center text-ink-900 text-xs font-mono focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                          className="w-full border border-lilac-200 rounded-lg px-1.5 py-1.5 bg-white text-center text-ink-900 text-xs font-mono focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2 px-2 align-top">
                         <input
                           type="number"
                           min="0"
@@ -1167,28 +1167,28 @@ export default function NuevaCompraForm({
                         />
                       </td>
                       {docType === "factura" && (
-                        <td className="py-2 px-2 text-center">
+                        <td className="py-2 px-1.5 align-top text-center">
                           <select
                             value={item.iva_rate}
                             onChange={(e) => updateItemRow(item.id, "iva_rate", Number(e.target.value))}
-                            className="border border-lilac-200 rounded-lg px-1.5 py-1.5 bg-white text-xs font-semibold text-ink-800 focus:ring-1 focus:ring-lilac-400 focus:outline-none"
+                            className="w-full border border-lilac-200 rounded-lg px-1 py-1.5 bg-white text-xs font-semibold text-ink-800 focus:ring-1 focus:ring-lilac-400 focus:outline-none text-center"
                           >
                             <option value={15}>15%</option>
                             <option value={0}>0%</option>
                           </select>
                         </td>
                       )}
-                      <td className="py-2 pl-2 pr-1 text-right font-mono font-bold text-ink-900 text-xs">
+                      <td className="py-2 pl-2 pr-1 align-top text-right font-mono font-bold text-ink-900 text-xs pt-3">
                         ${calc.subtotal.toFixed(2)}
                       </td>
-                      <td className="py-2 pl-1 text-center">
+                      <td className="py-2 pl-1 align-top text-center pt-2.5">
                         <button
                           type="button"
                           onClick={() => removeItemRow(item.id)}
                           className="text-ink-300 hover:text-red-600 p-1 rounded transition"
                           title="Eliminar fila"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={14} />
                         </button>
                       </td>
                     </tr>
