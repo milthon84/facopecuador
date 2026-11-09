@@ -144,7 +144,7 @@ export default async function GastosPage({
     try {
       const { data: matchedDbExpenses } = await supabase
         .from("expenses")
-        .select("id, factura_recibida_clave_acceso, authorization_number, notes")
+        .select("id, factura_recibida_clave_acceso, notes")
         .eq("status", "registered")
         .in("factura_recibida_clave_acceso", pendingClaves);
 

@@ -30,6 +30,8 @@ import {
   resolvePaymentReceiptUrl,
   cleanVisibleNotes,
   resolveFacturaSriClave,
+  resolveExpenseAuthorization,
+  cleanExpenseDescription,
   resolveExpenseDocType,
   cleanDocNumberOnly,
   formatExpenseDocNumber,
@@ -63,6 +65,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
   credito:         "Cuentas por Pagar Proveedores (Pendiente de Pago)",
+  prestamo_accionistas: "Préstamo Accionistas (Pasivo 2.1.05.01)",
 };
 
 const DOC_TYPE_CONFIG: Record<
@@ -124,6 +127,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
   // Consultar factura SRI vinculada si existe
   let linkedFactura: FacturaRecibida | null = null;
   let clave = resolveFacturaSriClave(expense);
+  const resolvedAuthNumber = clave || resolveExpenseAuthorization(expense);
 
   // 1. Por clave de acceso SRI
   if (clave && clave.length === 49) {
@@ -319,11 +323,16 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
       if (expense.payment_method === "efectivo") {
         payCode = "1.1.01.02";
         payName = "Caja Chica";
+      } else if (expense.payment_method === "prestamo_accionistas") {
+        payCode = "2.1.05.01";
+        payName = "Préstamos Accionistas por Pagar";
       }
       journalEntries.push({
         id: "proj-pago",
         entry_date: expense.expense_date,
-        description: `Pago / Cruce Bancario — ${expense.supplier_name} (${payName})`,
+        description: expense.payment_method === "prestamo_accionistas"
+          ? `Cruce Pasivo Préstamo Accionistas — ${expense.supplier_name}`
+          : `Pago / Cruce Bancario — ${expense.supplier_name} (${payName})`,
         reference_type: "expense",
         reference_id: expense.id,
         journal_lines: [
@@ -339,7 +348,9 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             account_name: payName,
             debit: 0,
             credit: tot,
-            description: `Salida de fondos (${expense.payment_method})`,
+            description: expense.payment_method === "prestamo_accionistas"
+              ? `Préstamo Accionistas por Pagar`
+              : `Salida de fondos (${expense.payment_method})`,
           },
         ],
       });
@@ -370,19 +381,6 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
-              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${areaConfig.badgeCls}`}>
-                {area === "clinica" && <Stethoscope size={12} />}
-                {area === "cursos" && <GraduationCap size={12} />}
-                {area === "general" && <Building2 size={12} />}
-                {areaConfig.label}
-              </span>
-              <span
-                className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${docTypeInfo.badgeCls}`}
-                title={docTypeInfo.fullDesc}
-              >
-                <FileText size={12} />
-                {docTypeInfo.name}
-              </span>
               {clave ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
                   <CheckCircle2 size={12} className="text-emerald-600" /> Factura SRI Vinculada
@@ -419,6 +417,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           <AsientoContableModal
             entries={journalEntries}
             expenseTotal={Number(expense.total)}
+            buttonText="Ver Asiento"
           />
         </div>
       </div>
@@ -432,56 +431,6 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       )}
-
-      {/* Tarjeta de Factura Recibida SRI Vinculada */}
-      {linkedFactura ? (
-        <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/60 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Receipt size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-ink-900">Factura Electrónica SRI Vinculada</span>
-                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  REGISTRADA
-                </span>
-              </div>
-              <p className="text-[11px] text-ink-600 font-mono mt-0.5">
-                N°: {linkedFactura.numero_comprobante} · Clave: {linkedFactura.clave_acceso}
-              </p>
-              {linkedFactura.razon_social && (
-                <p className="text-[11px] text-ink-500 mt-0.5">
-                  Emisor: {linkedFactura.razon_social} (RUC: {linkedFactura.ruc_emisor})
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            <span className="text-[11px] text-ink-400 block">Total Factura SRI</span>
-            <span className="text-sm font-bold font-mono text-emerald-950">${Number(linkedFactura.total || 0).toFixed(2)}</span>
-          </div>
-        </div>
-      ) : clave ? (
-        <div className="bg-gradient-to-r from-emerald-50/80 to-teal-50/60 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Receipt size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-ink-900">Factura Electrónica SRI Vinculada</span>
-                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.2 rounded-full uppercase tracking-wider">
-                  Vinculada al SRI
-                </span>
-              </div>
-              <p className="text-[11px] text-ink-600 font-mono mt-0.5 break-all">
-                Clave de Acceso: {clave}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {/* Cabecera / Datos Generales */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5 space-y-4 relative">
@@ -592,16 +541,22 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
 
-          {(clave || expense.authorization_number) && (
+          {resolvedAuthNumber && (
             <div className="col-span-1 sm:col-span-2">
               <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
                 <Key size={11} className="text-emerald-600" /> Clave de Acceso SRI / N° Autorización
               </span>
               <p className="text-xs font-mono font-bold text-emerald-950 mt-1 break-all bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
-                <span>{clave || expense.authorization_number}</span>
-                <span className="text-[10px] font-sans px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold shrink-0">
-                  SRI REGISTRADO
-                </span>
+                <span>{resolvedAuthNumber}</span>
+                {resolvedAuthNumber.length === 49 ? (
+                  <span className="text-[10px] font-sans px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded font-bold shrink-0">
+                    SRI REGISTRADO
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-sans px-2 py-0.5 bg-lilac-200 text-lilac-900 rounded font-bold shrink-0">
+                    AUT. FÍSICA
+                  </span>
+                )}
               </p>
             </div>
           )}
@@ -616,11 +571,11 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           )}
         </div>
 
-        {expense.description && (
+        {cleanExpenseDescription(expense.description) && (
           <div className="pt-2 border-t border-lilac-50">
             <span className="text-[11px] text-ink-400 uppercase tracking-wide">Descripción / Justificación</span>
             <p className="text-sm text-ink-800 mt-0.5 bg-lilac-50/40 p-2.5 rounded-xl border border-lilac-100">
-              {expense.description}
+              {cleanExpenseDescription(expense.description)}
             </p>
           </div>
         )}

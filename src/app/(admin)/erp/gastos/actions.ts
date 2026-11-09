@@ -136,7 +136,7 @@ export async function deleteOrVoidExpense(expenseId: string) {
 
     const { data: exp } = await supabase
       .from("expenses")
-      .select("id, expense_date, factura_recibida_clave_acceso, authorization_number, notes")
+      .select("id, expense_date, factura_recibida_clave_acceso, notes")
       .eq("id", expenseId)
       .single();
 

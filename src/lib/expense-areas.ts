@@ -156,6 +156,8 @@ export function resolveFacturaSriClave(expense: {
   if (expense.notes) {
     const match = expense.notes.match(/\[FACTURA_SRI:([0-9]{49})\]/i);
     if (match && match[1]) return match[1].trim();
+    const matchAut = expense.notes.match(/\[AUT:([0-9]{49})\]/i);
+    if (matchAut && matchAut[1]) return matchAut[1].trim();
     const rawMatch = expense.notes.match(/\b([0-9]{49})\b/);
     if (rawMatch && rawMatch[1]) return rawMatch[1].trim();
   }
@@ -168,10 +170,62 @@ export function resolveFacturaSriClave(expense: {
     if (match && match[1]) return match[1].trim();
   }
   if (expense.description) {
+    const matchAutDesc = expense.description.match(/Aut:\s*([0-9]{49})/i);
+    if (matchAutDesc && matchAutDesc[1]) return matchAutDesc[1].trim();
     const match = expense.description.match(/\b([0-9]{49})\b/);
     if (match && match[1]) return match[1].trim();
   }
   return null;
+}
+
+/**
+ * Resuelve cualquier número de autorización o clave SRI asociada a un gasto
+ * (electrónica de 49 dígitos o física de 10-37 dígitos)
+ */
+export function resolveExpenseAuthorization(expense: {
+  factura_recibida_clave_acceso?: string | null;
+  authorization_number?: string | null;
+  notes?: string | null;
+  description?: string | null;
+  clave_acceso?: string | null;
+}): string | null {
+  if (expense.authorization_number && expense.authorization_number.trim()) {
+    return expense.authorization_number.trim();
+  }
+  if (expense.factura_recibida_clave_acceso && expense.factura_recibida_clave_acceso.trim()) {
+    return expense.factura_recibida_clave_acceso.trim();
+  }
+  if (expense.clave_acceso && expense.clave_acceso.trim()) {
+    return expense.clave_acceso.trim();
+  }
+  if (expense.notes) {
+    const matchAut = expense.notes.match(/\[AUT:([0-9A-Za-z_-]+)\]/i);
+    if (matchAut && matchAut[1]) return matchAut[1].trim();
+    const matchSri = expense.notes.match(/\[FACTURA_SRI:([0-9]{49})\]/i);
+    if (matchSri && matchSri[1]) return matchSri[1].trim();
+    const rawMatch = expense.notes.match(/\b([0-9]{49})\b/);
+    if (rawMatch && rawMatch[1]) return rawMatch[1].trim();
+  }
+  if (expense.description) {
+    const matchAutDesc = expense.description.match(/Aut:\s*([0-9A-Za-z_-]+)/i);
+    if (matchAutDesc && matchAutDesc[1]) return matchAutDesc[1].trim();
+    const match49 = expense.description.match(/\b([0-9]{49})\b/);
+    if (match49 && match49[1]) return match49[1].trim();
+  }
+  return null;
+}
+
+/**
+ * Limpia la descripción general o de ítem de cualquier sufijo o prefijo residual de autorización
+ * (ej: "Prueba 4 | Aut: 25022026..." -> "Prueba 4")
+ */
+export function cleanExpenseDescription(desc: string | null | undefined): string {
+  if (!desc) return "";
+  return desc
+    .replace(/\s*\|\s*Aut:\s*[0-9A-Za-z_-]+/gi, "")
+    .replace(/^Aut:\s*[0-9A-Za-z_-]+\s*\|\s*/gi, "")
+    .replace(/^Aut:\s*[0-9A-Za-z_-]+$/gi, "")
+    .trim();
 }
 
 /**
@@ -260,7 +314,7 @@ export function formatExpenseDocNumber(expense: {
 }
 
 /**
- * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [COMPROBANTE_PAGO:...], [FACTURA_SRI:...], [TIPO:...]) de las notas visibles
+ * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [COMPROBANTE_PAGO:...], [FACTURA_SRI:...], [AUT:...], [TIPO:...]) de las notas visibles
  */
 export function cleanVisibleNotes(notes: string | null | undefined): string {
   if (!notes) return "";
@@ -269,6 +323,7 @@ export function cleanVisibleNotes(notes: string | null | undefined): string {
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
     .replace(/\[COMPROBANTE_PAGO:[^\]]+\]/gi, "")
     .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
+    .replace(/\[AUT:[^\]]+\]/gi, "")
     .replace(/\[TIPO:[a-z_]+\]/gi, "")
     .trim();
 }

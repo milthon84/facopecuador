@@ -24,7 +24,14 @@ import {
   CreditCard,
   Key,
 } from "lucide-react";
-import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl, cleanDocNumberOnly } from "@/lib/expense-areas";
+import {
+  resolveExpenseArea,
+  ExpenseArea,
+  resolveReceiptUrl,
+  cleanDocNumberOnly,
+  resolveExpenseAuthorization,
+  cleanExpenseDescription,
+} from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import {
   FacturaRecibida,
@@ -65,6 +72,7 @@ interface Props {
   initialItems?: ExpenseItemRow[];
   accountsCatalog?: ExpenseAccountsCatalog;
   saveExpense: (formData: FormData) => Promise<void | { success?: boolean; error?: string; url?: string }>;
+  isAdmin?: boolean;
 }
 
 export default function NuevaCompraForm({
@@ -78,6 +86,7 @@ export default function NuevaCompraForm({
   initialItems = [],
   accountsCatalog,
   saveExpense,
+  isAdmin = false,
 }: Props) {
   const isEditing = Boolean(initialData?.id);
   const [area, setArea] = useState<ExpenseArea>(resolveExpenseArea(initialData || {}));
@@ -94,9 +103,14 @@ export default function NuevaCompraForm({
   const [supplierName, setSupplierName] = useState(initialData?.supplier_name || "");
   const [docNumber, setDocNumber] = useState(() => cleanDocNumberOnly(initialData?.document_number || ""));
   const [expenseDate, setExpenseDate] = useState(initialData?.expense_date || today);
-  const [authNumber, setAuthNumber] = useState(initialData?.authorization_number || "");
+  const initialAuth = resolveExpenseAuthorization(initialData || {});
+  const [authNumber, setAuthNumber] = useState(
+    initialData?.authorization_number || initialAuth || ""
+  );
   const [selectedFacturaClave, setSelectedFacturaClave] = useState<string | null>(
-    initialFacturaClave || initialData?.factura_recibida_clave_acceso || null
+    initialFacturaClave ||
+      initialData?.factura_recibida_clave_acceso ||
+      (initialAuth && initialAuth.length === 49 ? initialAuth : null)
   );
 
   // Selector y buscador de facturas recibidas
@@ -157,11 +171,12 @@ export default function NuevaCompraForm({
       const mov = allMovements.find((m) => m.code === accCode);
       const grpCode = initialData.group_code || mov?.group_code || defaultGroupCode;
       const grp = groups.find((g) => g.code === grpCode);
+      const cleanDesc = cleanExpenseDescription(initialData.description);
       const result: ExpenseItemRow[] = [];
       if (sub15 > 0) {
         result.push({
           id: "init-15",
-          description: initialData.description || "Bienes / Servicios gravados IVA",
+          description: cleanDesc || "Bienes / Servicios gravados IVA",
           group_code: grpCode,
           group_name: grp?.name || "",
           account_code: accCode,
@@ -175,7 +190,7 @@ export default function NuevaCompraForm({
       if (sub0 > 0) {
         result.push({
           id: "init-0",
-          description: initialData.description || "Bienes / Servicios tarifa 0%",
+          description: cleanDesc || "Bienes / Servicios tarifa 0%",
           group_code: grpCode,
           group_name: grp?.name || "",
           account_code: accCode,
@@ -700,11 +715,14 @@ export default function NuevaCompraForm({
       formData.set("total", effectiveTotal.toString());
       const mainCategory = validItems[0]?.account_name || (area === "clinica" ? "Insumos Dentales" : "Suministros de Oficina");
       formData.set("category", mainCategory);
+      const finalAuth = authNumber.trim();
+      if (finalAuth) {
+        formData.set("authorization_number", finalAuth);
+      }
       if (selectedFacturaClave) {
         formData.set("factura_recibida_clave_acceso", selectedFacturaClave);
-      }
-      if (authNumber) {
-        formData.set("authorization_number", authNumber);
+      } else if (finalAuth.length === 49) {
+        formData.set("factura_recibida_clave_acceso", finalAuth);
       }
       formData.set("document_number", cleanDocNumberOnly(docNumber));
       formData.set("area", area);
@@ -1109,7 +1127,7 @@ export default function NuevaCompraForm({
           <label className="text-xs font-semibold text-ink-700">Descripción / Justificación General</label>
           <input
             name="description"
-            defaultValue={initialData?.description || ""}
+            defaultValue={cleanExpenseDescription(initialData?.description) || ""}
             placeholder="Resumen o justificación del gasto (opcional)"
             className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
           />
@@ -1454,11 +1472,12 @@ export default function NuevaCompraForm({
                   </div>
                 </div>
 
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 flex-wrap">
                   {[
                     { value: "efectivo", label: "💵 Efectivo (Caja)" },
                     { value: "transferencia", label: "🏦 Transferencia" },
                     { value: "tarjeta_credito", label: "💳 Tarjeta" },
+                    ...(isAdmin ? [{ value: "prestamo_accionistas", label: "🤝 Préstamo Accionistas" }] : []),
                   ].map((m) => (
                     <button
                       key={m.value}
@@ -1553,6 +1572,37 @@ export default function NuevaCompraForm({
                 </div>
               )}
 
+              {method === "prestamo_accionistas" && (
+                <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-3.5 space-y-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-lg leading-none mt-0.5">🤝</span>
+                    <div className="space-y-1 text-xs">
+                      <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                        <span>Cruce Pasivo: Préstamo Accionistas</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-200/70 text-amber-900 font-bold">
+                          Cuenta 2.1.05.01
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        El desembolso fue asumido personalmente por un accionista/socio. No se debita dinero de bancos ni de caja chica. El sistema registrará el asiento contable cancelando <strong>Cuentas por Pagar Proveedores (2.1.01.01)</strong> y acreditando la cuenta de pasivo <strong>2.1.05.01 Préstamos Accionistas por Pagar</strong>.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-amber-200/60">
+                    <label className="text-[11px] font-bold text-amber-900 block mb-1">
+                      Nombre del Accionista / Nota de Referencia (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentRef}
+                      onChange={(e) => setPaymentRef(e.target.value)}
+                      placeholder="Ej. Milton Aguilera / Tarjeta personal del accionista"
+                      className="w-full border border-amber-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white text-ink-900 placeholder:text-ink-400"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Input oculto para adjuntar comprobante de pago */}
               <input
                 ref={paymentFileInputRef}
@@ -1625,12 +1675,20 @@ export default function NuevaCompraForm({
                   {isSubmittingPayment ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      <span>Cruzando con Banco...</span>
+                      <span>
+                        {method === "prestamo_accionistas"
+                          ? "Registrando Cruce a Pasivo..."
+                          : "Cruzando con Banco..."}
+                      </span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 size={15} />
-                      <span>Registrar y Guardar Pago</span>
+                      <span>
+                        {method === "prestamo_accionistas"
+                          ? "Registrar Cruce a Préstamo Accionistas"
+                          : "Registrar y Guardar Pago"}
+                      </span>
                     </>
                   )}
                 </button>

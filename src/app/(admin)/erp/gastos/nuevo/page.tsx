@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
+import { createExpenseJournalEntry, createExpensePaymentJournalEntry, assertMonthOpen } from "@/lib/accounting";
 import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "./NuevaCompraForm";
-import { assertWritePermission } from "@/lib/auth-action";
+import { assertWritePermission, getUserRole } from "@/lib/auth-action";
 import { FacturaRecibida } from "@/lib/expense-types";
-import { cleanDocNumberOnly } from "@/lib/expense-areas";
+import { cleanDocNumberOnly, cleanExpenseDescription } from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +55,9 @@ async function saveExpense(formData: FormData) {
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   const factura_recibida_clave_acceso = (formData.get("factura_recibida_clave_acceso") as string)?.trim() || null;
   let description = (formData.get("description") as string)?.trim() || null;
+  if (description) {
+    description = cleanExpenseDescription(description) || null;
+  }
 
   // Manejo de archivo de respaldo / comprobante digital
   const receiptFile = formData.get("receipt_file") as File | null;
@@ -126,19 +129,27 @@ async function saveExpense(formData: FormData) {
   }
 
   const document_type = (formData.get("document_type") as string) || "factura";
+  const effectiveAuth = authorization_number || factura_recibida_clave_acceso || null;
+  const effectiveSri =
+    (factura_recibida_clave_acceso && factura_recibida_clave_acceso.length === 49)
+      ? factura_recibida_clave_acceso
+      : (authorization_number && authorization_number.length === 49 ? authorization_number : null);
+
   let notes = `[AREA:${area}] [TIPO:${document_type}]`;
   if (receiptUrl) {
     notes += ` [COMPROBANTE:${receiptUrl}]`;
   }
-  if (factura_recibida_clave_acceso) {
-    notes += ` [FACTURA_SRI:${factura_recibida_clave_acceso}]`;
+  if (effectiveAuth) {
+    notes += ` [AUT:${effectiveAuth}]`;
+  }
+  if (effectiveSri) {
+    notes += ` [FACTURA_SRI:${effectiveSri}]`;
   }
 
   const insertPayload: Record<string, any> = {
     supplier_name,
     supplier_ruc,
     document_number:   cleanDocNumberOnly(formData.get("document_number") as string) || null,
-    authorization_number,
     expense_date,
     category,
     account_code:      account_code || null,
@@ -158,8 +169,13 @@ async function saveExpense(formData: FormData) {
     created_by_id:     user?.id ?? null,
     created_by_email:  user?.email ?? null,
     receipt_url:       receiptUrl || null,
-    factura_recibida_clave_acceso: factura_recibida_clave_acceso || null,
   };
+  if (effectiveAuth) {
+    insertPayload.authorization_number = effectiveAuth;
+  }
+  if (effectiveSri) {
+    insertPayload.factura_recibida_clave_acceso = effectiveSri;
+  }
 
   let { data: expense, error: expenseError } = await supabase
     .from("expenses")
@@ -167,7 +183,7 @@ async function saveExpense(formData: FormData) {
     .select()
     .single();
 
-  // Retry si alguna columna no existe aún en la base de datos
+  // Retry si alguna columna no existe aún en la base de datos o si falla FK de clave SRI
   const potentialMissingCols = [
     "account_code",
     "account_name",
@@ -179,13 +195,17 @@ async function saveExpense(formData: FormData) {
     "authorization_number",
   ];
 
-  while (expenseError && (expenseError.code === "PGRST204" || expenseError.code === "42703" || expenseError.message.includes("does not exist") || expenseError.message.includes("Could not find"))) {
+  while (expenseError && (
+    expenseError.code === "PGRST204" ||
+    expenseError.code === "42703" ||
+    expenseError.code === "23503" ||
+    expenseError.message.includes("does not exist") ||
+    expenseError.message.includes("Could not find") ||
+    expenseError.message.includes("violates foreign key constraint")
+  )) {
     let changed = false;
     for (const col of potentialMissingCols) {
-      if (expenseError.message.includes(col) && col in insertPayload) {
-        if (col === "authorization_number" && authorization_number) {
-          insertPayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
-        }
+      if ((expenseError.message.includes(col) || (expenseError.code === "23503" && col === "factura_recibida_clave_acceso")) && col in insertPayload) {
         delete (insertPayload as any)[col];
         changed = true;
       }
@@ -338,6 +358,34 @@ async function saveExpense(formData: FormData) {
     console.error("Asiento contable no generado:", err);
   }
 
+  // Si se guardó directamente con una forma de pago distinta a crédito, generar Asiento 2 (Pago / Cruce de Pasivo)
+  if (payment_method && payment_method !== "credito") {
+    try {
+      let bankName: string | null = null;
+      if (bank_account_id) {
+        const { data: bAcc } = await supabase
+          .from("bank_accounts")
+          .select("bank_name, account_number")
+          .eq("id", bank_account_id)
+          .maybeSingle();
+        if (bAcc) bankName = `${bAcc.bank_name} (${bAcc.account_number})`;
+      }
+      await createExpensePaymentJournalEntry({
+        expense_id: expense.id,
+        payment_date: expense_date,
+        supplier_name,
+        payment_method,
+        amount: total,
+        bank_account_name: bankName,
+        payment_reference,
+        user_id: user?.id,
+        user_email: user?.email,
+      });
+    } catch (payJErr) {
+      console.warn("Asiento contable de pago no generado:", payJErr);
+    }
+  }
+
   revalidatePath("/erp/gastos");
 
   return {
@@ -356,6 +404,8 @@ export default async function NuevoGastoPage({
   searchParams?: Promise<{ factura?: string }>;
 }) {
   await assertWritePermission("/erp/gastos");
+  const userRole = await getUserRole();
+  const isAdmin  = userRole === "admin";
   const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   const today    = new Date().toISOString().split("T")[0];
   const supabase = createAdminClient();
@@ -447,6 +497,7 @@ export default async function NuevoGastoPage({
         initialFacturaClave={searchParams.factura || null}
         accountsCatalog={accountsCatalog}
         saveExpense={saveExpense}
+        isAdmin={isAdmin}
       />
     </div>
   );

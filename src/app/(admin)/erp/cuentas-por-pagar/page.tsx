@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CreditCard, CheckCircle2, AlertCircle, Clock } from "lucide-react";
-import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
+import { assertPermission, assertWritePermission, hasWritePermission, getUserRole } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +51,23 @@ async function recordExpensePayment(formData: FormData) {
     }).then(() => {});
   }
 
+  // Asiento contable de cruce para préstamo accionistas
+  if (payment_method === "prestamo_accionistas") {
+    try {
+      const { createExpensePaymentJournalEntry } = await import("@/lib/accounting");
+      await createExpensePaymentJournalEntry({
+        expense_id,
+        payment_date,
+        supplier_name: expense.supplier_name,
+        payment_method: "prestamo_accionistas",
+        amount,
+        payment_reference: reference || notes,
+      });
+    } catch (jErr) {
+      console.warn("No se pudo generar asiento de préstamo accionistas en CxP:", jErr);
+    }
+  }
+
   redirect("/erp/cuentas-por-pagar");
 }
 
@@ -61,6 +78,8 @@ export default async function CuentasPorPagarPage({
 }: { searchParams: Promise<{ pay?: string }> }) {
   await assertPermission("/erp/cuentas-por-pagar");
   const canEdit = await hasWritePermission("/erp/cuentas-por-pagar");
+  const userRole = await getUserRole();
+  const isAdmin  = userRole === "admin";
 
   const searchParams = await searchParamsPromise;
   const supabase = createAdminClient();
@@ -157,6 +176,9 @@ export default async function CuentasPorPagarPage({
                 
                 
                 <option value="tarjeta_credito">Tarjeta Crédito</option>
+                {isAdmin && (
+                  <option value="prestamo_accionistas">🤝 Préstamo Accionistas (Pasivo 2.1.05.01)</option>
+                )}
               </select>
             </div>
             <div className="space-y-1">

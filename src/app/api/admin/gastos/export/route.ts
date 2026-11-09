@@ -7,6 +7,8 @@ import type { UserRole } from "@/lib/roles";
 import {
   resolveExpenseArea,
   resolveFacturaSriClave,
+  resolveExpenseAuthorization,
+  cleanExpenseDescription,
   resolveExpenseDocType,
   cleanVisibleNotes,
   cleanDocNumberOnly,
@@ -20,6 +22,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
   credito:         "Crédito",
+  prestamo_accionistas: "Préstamo Accionistas",
 };
 
 export async function GET(req: Request) {
@@ -110,14 +113,14 @@ export async function GET(req: Request) {
         "Categoría": exp.category || "",
         "Tipo Comprobante": docTypeLabel,
         "N° Comprobante": cleanDocNumberOnly(exp.document_number) || "",
-        "Clave SRI / Autorización": sriClave || exp.authorization_number || "",
+        "Clave SRI / Autorización": sriClave || resolveExpenseAuthorization(exp) || "",
         "Forma de Pago": PAYMENT_LABELS[exp.payment_method] || exp.payment_method || "",
         "Subtotal 0%": Number(exp.subtotal_0 || 0),
         "Subtotal 15%": Number(exp.subtotal_15 || 0),
         "Subtotal": Number(exp.subtotal || 0),
         "IVA": Number(exp.iva_amount || 0),
         "Total": Number(exp.total || 0),
-        "Descripción / Detalle": exp.description || "",
+        "Descripción / Detalle": cleanExpenseDescription(exp.description) || "",
         "Notas": cleanVisibleNotes(exp.notes),
       };
     });

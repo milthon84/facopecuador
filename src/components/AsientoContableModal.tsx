@@ -217,12 +217,12 @@ export default function AsientoContableModal({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-lilac-300 hover:bg-lilac-50 text-lilac-900 text-xs font-bold transition shadow-xs hover:border-lilac-400 active:scale-[0.98]"
-          title="Ver Asiento Contable Completo"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-lilac-300 hover:bg-lilac-50 text-lilac-900 text-xs font-bold transition shadow-xs hover:border-lilac-400 active:scale-[0.98] shrink-0"
+          title="Ver Asiento Contable"
         >
-          <Eye size={14} className="text-lilac-600" />
-          <span>{buttonText || "Ver Asiento Contable"}</span>
-          <span className="text-[10px] bg-lilac-100 text-lilac-800 border border-lilac-200 px-1.5 py-0.2 rounded-full font-bold font-mono">
+          <Eye size={14} className="text-lilac-600 shrink-0" />
+          <span className="whitespace-nowrap">{buttonText || "Ver Asiento"}</span>
+          <span className="text-[10px] bg-lilac-100 text-lilac-800 border border-lilac-200 px-1.5 py-0.2 rounded-full font-bold font-mono shrink-0">
             {entries.length}
           </span>
         </button>

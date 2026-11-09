@@ -36,6 +36,8 @@ export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: stri
 // ── Mapeo: forma de pago del gasto → cuenta de contrapartida ──────────────
 function paymentAccount(method: string): { code: string; name: string } {
   if (method === "credito") return { code: "2.1.01.01", name: "Cuentas por Pagar Proveedores" };
+  if (method === "prestamo_accionistas") return { code: "2.1.05.01", name: "Préstamos Accionistas por Pagar" };
+  if (method === "efectivo") return { code: "1.1.01.02", name: "Caja Chica" };
   if (method === "transferencia") return { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
   return { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" }; // efectivo y tarjeta → bancos
 }
@@ -488,8 +490,16 @@ export async function createExpensePaymentJournalEntry(params: {
   user_email?:        string | null;
 }) {
   let payAccount = { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+  let creditDescription = `Salida de fondos (${params.payment_method}) — ${params.bank_account_name || params.payment_reference || params.supplier_name}`;
+  let entryDescription = `Pago / Cruce Bancario — ${params.supplier_name} (${payAccount.name})`;
+
   if (params.payment_method === "efectivo") {
     payAccount = { code: "1.1.01.02", name: "Caja Chica" };
+    entryDescription = `Pago / Cruce Caja Chica — ${params.supplier_name}`;
+  } else if (params.payment_method === "prestamo_accionistas") {
+    payAccount = { code: "2.1.05.01", name: "Préstamos Accionistas por Pagar" };
+    creditDescription = `Préstamo Accionistas por Pagar — ${params.payment_reference || params.supplier_name}`;
+    entryDescription = `Cruce Pasivo Préstamo Accionistas — ${params.supplier_name}`;
   }
 
   const lines: JournalLine[] = [
@@ -505,13 +515,13 @@ export async function createExpensePaymentJournalEntry(params: {
       account_name: payAccount.name,
       debit:  0,
       credit: r2(params.amount),
-      description: `Salida de fondos (${params.payment_method}) — ${params.bank_account_name || params.payment_reference || params.supplier_name}`,
+      description: creditDescription,
     },
   ];
 
   return insertJournalEntry({
     entry_date:     params.payment_date,
-    description:    `Pago / Cruce Bancario — ${params.supplier_name} (${payAccount.name})`,
+    description:    entryDescription,
     reference_type: "expense",
     reference_id:   params.expense_id,
     lines,

@@ -43,6 +43,8 @@ import {
   resolveExpenseArea,
   resolveReceiptUrl,
   resolveFacturaSriClave,
+  resolveExpenseAuthorization,
+  cleanExpenseDescription,
   resolveExpenseDocType,
   cleanVisibleNotes,
   cleanDocNumberOnly,
@@ -102,6 +104,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
   credito:         "Crédito",
+  prestamo_accionistas: "Préstamo Accionistas",
 };
 
 interface Props {
@@ -169,21 +172,10 @@ export default function GastosListClient({
     setReceiptRotation(0);
   };
 
-  // Filtros compactos mediante combos de selección
+  // Filtros de la lista de gastos
   const [textSearch, setTextSearch] = useState("");
   const [docTypeFilter, setDocTypeFilter] = useState<string>("all");
-  const [areaFilter, setAreaFilter] = useState<string>(activeAreaFilter || "all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [paymentFilter, setPaymentFilter] = useState<string>("all");
-
-  // Lista de categorías únicas presentes en los gastos del mes
-  const availableCategories = useMemo(() => {
-    const cats = new Set<string>();
-    rawItems.forEach((it: any) => {
-      if (it.category) cats.add(it.category);
-    });
-    return Array.from(cats).sort();
-  }, [rawItems]);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all"); // "all" | "pagadas" | "pendientes"
 
   // Lista de gastos filtrados en tiempo real
   const displayedItems = useMemo(() => {
@@ -192,32 +184,18 @@ export default function GastosListClient({
       const hasSri = Boolean(sriClave);
       const docType = resolveExpenseDocType(exp);
 
-      // 1. Filtro por Área (Combo)
-      if (areaFilter !== "all" && exp.resolvedArea !== areaFilter) {
-        return false;
-      }
-
-      // 2. Filtro por Tipo de Comprobante (Combo en vez de SRI)
+      // 1. Filtro por Tipo de Comprobante
       if (docTypeFilter === "factura_sri" && !hasSri) return false;
       if (docTypeFilter === "factura" && docType !== "factura") return false;
       if (docTypeFilter === "nota_venta" && docType !== "nota_venta") return false;
       if (docTypeFilter === "sin_documento" && docType !== "sin_documento") return false;
 
-      // 3. Filtro por Categoría (Combo)
-      if (categoryFilter !== "all" && exp.category !== categoryFilter) {
-        return false;
-      }
+      // 2. Filtro por Estado de Pago: Pagadas y No Pagadas (Pendientes)
+      const isPaid = exp.payment_method !== "credito";
+      if (paymentStatusFilter === "pagadas" && !isPaid) return false;
+      if (paymentStatusFilter === "pendientes" && isPaid) return false;
 
-      // 4. Filtro por Forma de pago (Combo)
-      if (paymentFilter !== "all") {
-        if (paymentFilter === "tarjeta") {
-          if (exp.payment_method !== "tarjeta" && exp.payment_method !== "tarjeta_credito") return false;
-        } else if (exp.payment_method !== paymentFilter) {
-          return false;
-        }
-      }
-
-      // 5. Búsqueda de texto libre (más pequeña)
+      // 3. Búsqueda de texto libre
       if (textSearch.trim()) {
         const q = textSearch.toLowerCase().trim();
         const sup = (exp.supplier_name || "").toLowerCase();
@@ -226,7 +204,7 @@ export default function GastosListClient({
         const docLabel = getExpenseDocTypeLabel(exp).toLowerCase();
         const desc = (exp.description || "").toLowerCase();
         const cat = (exp.category || "").toLowerCase();
-        const auth = (sriClave || exp.authorization_number || "").toLowerCase();
+        const auth = (sriClave || resolveExpenseAuthorization(exp) || "").toLowerCase();
         const tot = String(exp.total || "");
 
         const matches =
@@ -244,21 +222,17 @@ export default function GastosListClient({
 
       return true;
     });
-  }, [rawItems, areaFilter, docTypeFilter, categoryFilter, paymentFilter, textSearch]);
+  }, [rawItems, docTypeFilter, paymentStatusFilter, textSearch]);
 
   const hasActiveFilters =
-    areaFilter !== "all" ||
     docTypeFilter !== "all" ||
-    categoryFilter !== "all" ||
-    paymentFilter !== "all" ||
+    paymentStatusFilter !== "all" ||
     Boolean(textSearch.trim());
 
   const resetFilters = () => {
     setTextSearch("");
     setDocTypeFilter("all");
-    setAreaFilter("all");
-    setCategoryFilter("all");
-    setPaymentFilter("all");
+    setPaymentStatusFilter("all");
   };
 
   // Modal 2: Relacionar Factura SRI a un gasto existente
@@ -376,14 +350,14 @@ export default function GastosListClient({
           "Categoría": exp.category || "",
           "Tipo Comprobante": docTypeLabel,
           "N° Comprobante": cleanDocNumberOnly(exp.document_number) || "",
-          "Clave SRI / Autorización": sriClave || exp.authorization_number || "",
+          "Clave SRI / Autorización": sriClave || resolveExpenseAuthorization(exp) || "",
           "Forma de Pago": PAYMENT_LABELS[exp.payment_method] || exp.payment_method || "",
           "Subtotal 0%": Number(exp.subtotal_0 || 0),
           "Subtotal 15%": Number(exp.subtotal_15 || 0),
           "Subtotal": Number(exp.subtotal || 0),
           "IVA": Number(exp.iva_amount || 0),
           "Total": Number(exp.total || 0),
-          "Descripción / Detalle": exp.description || "",
+          "Descripción / Detalle": cleanExpenseDescription(exp.description) || "",
           "Notas": cleanVisibleNotes(exp.notes),
         };
       });
@@ -439,7 +413,7 @@ export default function GastosListClient({
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Gastos");
 
-      const filterSuffix = areaFilter !== "all" ? `_${areaFilter}` : "";
+      const filterSuffix = paymentStatusFilter !== "all" ? `_${paymentStatusFilter}` : "";
       const monthPrefix = activeMonth === "all" ? "todos" : activeMonth;
       XLSX.writeFile(wb, `gastos_${monthPrefix}${filterSuffix}.xlsx`);
     } catch (err) {
@@ -577,15 +551,15 @@ export default function GastosListClient({
       {/* Barra de Filtros Compacta en una sola línea */}
       <div className="bg-white p-2 rounded-2xl border border-lilac-200/80 shadow-xs flex items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto text-xs">
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Buscador compacto */}
-          <div className="relative w-28 sm:w-36">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          {/* Buscador más grande y cómodo */}
+          <div className="relative w-44 sm:w-60 md:w-72">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
             <input
               type="text"
               value={textSearch}
               onChange={(e) => setTextSearch(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full pl-7 pr-6 py-1 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-1 focus:ring-lilac-400 text-ink-900"
+              placeholder="Buscar gasto, proveedor, RUC, factura..."
+              className="w-full pl-8 pr-6 py-1.5 text-xs rounded-xl border border-lilac-200 bg-lilac-50/20 focus:bg-white focus:outline-none focus:ring-1 focus:ring-lilac-400 text-ink-900 transition-all placeholder:text-ink-400"
             />
             {textSearch && (
               <button
@@ -598,57 +572,28 @@ export default function GastosListClient({
             )}
           </div>
 
-          {/* Combo: Área */}
+          {/* Combo: Estado de Pago (Pagadas y No Pagadas) */}
           <select
-            value={areaFilter}
-            onChange={(e) => setAreaFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+            value={paymentStatusFilter}
+            onChange={(e) => setPaymentStatusFilter(e.target.value)}
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
           >
-            <option value="all">Áreas</option>
-            <option value="clinica">Clínica</option>
-            <option value="cursos">Cursos</option>
-            <option value="general">General</option>
+            <option value="all">Estado: Todos</option>
+            <option value="pagadas">Pagadas</option>
+            <option value="pendientes">No Pagadas (Pendientes)</option>
           </select>
 
           {/* Combo: Tipo de Comprobante */}
           <select
             value={docTypeFilter}
             onChange={(e) => setDocTypeFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
+            className="text-xs bg-white border border-lilac-200 rounded-xl px-2.5 py-1.5 text-ink-700 font-semibold focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
           >
             <option value="all">Comprobantes</option>
             <option value="factura_sri">Factura SRI</option>
             <option value="factura">Factura</option>
             <option value="nota_venta">Nota de Venta</option>
             <option value="sin_documento">Sin Comprobante</option>
-          </select>
-
-          {/* Combo: Categoría */}
-          {availableCategories.length > 0 && (
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 max-w-[140px] truncate shadow-2xs"
-            >
-              <option value="all">Categorías</option>
-              {availableCategories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Combo: Forma de Pago */}
-          <select
-            value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value)}
-            className="text-xs bg-white border border-lilac-200 rounded-xl px-2 py-1 text-ink-700 font-medium focus:outline-none focus:ring-1 focus:ring-lilac-400 shadow-2xs"
-          >
-            <option value="all">Formas de Pago</option>
-            <option value="efectivo">Efectivo</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="tarjeta">Tarjeta</option>
           </select>
 
           {hasActiveFilters && (
@@ -821,6 +766,13 @@ export default function GastosListClient({
                           <Clock size={10} className="text-amber-600" />
                           <span>Pendiente</span>
                         </span>
+                      ) : exp.payment_method === "prestamo_accionistas" ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] bg-purple-50 text-purple-900 border border-purple-300 px-1.5 py-0.5 rounded-md font-bold shadow-2xs"
+                          title="Gasto financiado con Préstamo de Accionistas (Pasivo 2.1.05.01)"
+                        >
+                          <span>🤝 Accionista</span>
+                        </span>
                       ) : (
                         <span
                           className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-md font-bold shadow-2xs"
@@ -851,8 +803,8 @@ export default function GastosListClient({
                       )}
                     </div>
 
-                    {exp.description && (
-                      <p className="text-xs text-ink-400 mt-0.5 truncate">{exp.description}</p>
+                    {cleanExpenseDescription(exp.description) && (
+                      <p className="text-xs text-ink-400 mt-0.5 truncate">{cleanExpenseDescription(exp.description)}</p>
                     )}
                   </Link>
 

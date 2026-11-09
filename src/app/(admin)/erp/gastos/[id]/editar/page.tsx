@@ -3,12 +3,17 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
-import { assertPermission, assertWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry } from "@/lib/accounting";
+import { assertPermission, assertWritePermission, getUserRole } from "@/lib/auth-action";
+import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry, createExpensePaymentJournalEntry } from "@/lib/accounting";
 import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
 import { ExpenseItemRow, parseItemCategoryAndDesc } from "@/lib/expense-types";
-import { cleanDocNumberOnly } from "@/lib/expense-areas";
+import {
+  cleanDocNumberOnly,
+  cleanExpenseDescription,
+  resolveExpenseAuthorization,
+  resolveFacturaSriClave,
+} from "@/lib/expense-areas";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +54,9 @@ async function updateExpense(formData: FormData) {
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   const factura_recibida_clave_acceso = (formData.get("factura_recibida_clave_acceso") as string)?.trim() || null;
   let description         = (formData.get("description") as string)?.trim() || null;
+  if (description) {
+    description = cleanExpenseDescription(description) || null;
+  }
   let payment_reference   = (formData.get("payment_reference") as string)?.trim() || null;
 
   // Manejo de comprobante digital / archivo de respaldo
@@ -133,15 +141,25 @@ async function updateExpense(formData: FormData) {
     .replace(/\[AREA:[a-z]+\]/gi, "")
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
     .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
+    .replace(/\[AUT:[^\]]+\]/gi, "")
     .replace(/\[TIPO:[a-z_]+\]/gi, "")
     .trim();
+
+  const effectiveAuth = authorization_number || factura_recibida_clave_acceso || null;
+  const effectiveSri =
+    (factura_recibida_clave_acceso && factura_recibida_clave_acceso.length === 49)
+      ? factura_recibida_clave_acceso
+      : (authorization_number && authorization_number.length === 49 ? authorization_number : null);
 
   let updatedNotes = `[AREA:${area}] [TIPO:${document_type}]`;
   if (receiptUrl) {
     updatedNotes += ` [COMPROBANTE:${receiptUrl}]`;
   }
-  if (factura_recibida_clave_acceso) {
-    updatedNotes += ` [FACTURA_SRI:${factura_recibida_clave_acceso}]`;
+  if (effectiveAuth) {
+    updatedNotes += ` [AUT:${effectiveAuth}]`;
+  }
+  if (effectiveSri) {
+    updatedNotes += ` [FACTURA_SRI:${effectiveSri}]`;
   }
   if (cleanNotes) {
     updatedNotes += ` ${cleanNotes}`;
@@ -151,7 +169,6 @@ async function updateExpense(formData: FormData) {
     supplier_name,
     supplier_ruc,
     document_number:   cleanDocNumberOnly(formData.get("document_number") as string) || null,
-    authorization_number,
     expense_date:      new_expense_date,
     category,
     account_code:      account_code || null,
@@ -169,8 +186,13 @@ async function updateExpense(formData: FormData) {
     bank_account_id:   bank_account_id || null,
     payment_reference: payment_reference || null,
     receipt_url:       receiptUrl || null,
-    factura_recibida_clave_acceso: factura_recibida_clave_acceso || null,
   };
+  if (effectiveAuth) {
+    updatePayload.authorization_number = effectiveAuth;
+  }
+  if (effectiveSri) {
+    updatePayload.factura_recibida_clave_acceso = effectiveSri;
+  }
 
   let { error } = await supabase.from("expenses").update(updatePayload).eq("id", id);
 
@@ -185,13 +207,17 @@ async function updateExpense(formData: FormData) {
     "authorization_number",
   ];
 
-  while (error && (error.code === "PGRST204" || error.code === "42703" || error.message.includes("does not exist") || error.message.includes("Could not find"))) {
+  while (error && (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    error.code === "23503" ||
+    error.message.includes("does not exist") ||
+    error.message.includes("Could not find") ||
+    error.message.includes("violates foreign key constraint")
+  )) {
     let changed = false;
     for (const col of potentialMissingCols) {
-      if (error.message.includes(col) && col in updatePayload) {
-        if (col === "authorization_number" && authorization_number) {
-          updatePayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
-        }
+      if ((error.message.includes(col) || (error.code === "23503" && col === "factura_recibida_clave_acceso")) && col in updatePayload) {
         delete (updatePayload as any)[col];
         changed = true;
       }
@@ -292,6 +318,46 @@ async function updateExpense(formData: FormData) {
     }
   }
 
+  // Si se definió una forma de pago distinta a crédito, sincronizar asiento contable de pago / cruce
+  if (payment_method && payment_method !== "credito") {
+    try {
+      // Verificar si ya existe un asiento de pago para no duplicar
+      const { data: existingPaymentEntries } = await supabase
+        .from("journal_entries")
+        .select("id, description")
+        .eq("reference_type", "expense")
+        .eq("reference_id", id);
+
+      const hasPayEntry = (existingPaymentEntries || []).some((e: any) =>
+        e.description?.toLowerCase().includes("pago") ||
+        e.description?.toLowerCase().includes("cruce")
+      );
+
+      if (!hasPayEntry) {
+        let bankName: string | null = null;
+        if (bank_account_id) {
+          const { data: bAcc } = await supabase
+            .from("bank_accounts")
+            .select("bank_name, account_number")
+            .eq("id", bank_account_id)
+            .maybeSingle();
+          if (bAcc) bankName = `${bAcc.bank_name} (${bAcc.account_number})`;
+        }
+        await createExpensePaymentJournalEntry({
+          expense_id: id,
+          payment_date: new_expense_date,
+          supplier_name,
+          payment_method,
+          amount: total,
+          bank_account_name: bankName,
+          payment_reference,
+        });
+      }
+    } catch (payJErr) {
+      console.warn("No se pudo sincronizar asiento de pago en editar gasto:", payJErr);
+    }
+  }
+
   revalidatePath("/erp/gastos");
   revalidatePath(`/erp/gastos/${id}`);
   revalidatePath(`/erp/gastos/${id}/editar`);
@@ -302,6 +368,8 @@ async function updateExpense(formData: FormData) {
 export default async function EditarGastoPage({ params }: { params: Promise<{ id: string }> }) {
   await assertPermission("/erp/gastos");
   await assertWritePermission("/erp/gastos");
+  const userRole = await getUserRole();
+  const isAdmin  = userRole === "admin";
 
   const { id } = await params;
   const supabase = createAdminClient();
@@ -333,11 +401,20 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
   if (!rawExpense) notFound();
   const expense = rawExpense as any;
 
+  const resolvedAuth = resolveExpenseAuthorization(expense);
+  const cleanDesc = cleanExpenseDescription(expense.description);
+
+  const cleanExpense = {
+    ...expense,
+    authorization_number: resolvedAuth || expense.authorization_number || "",
+    description: cleanDesc,
+  };
+
   const initialItems: ExpenseItemRow[] = rawItems.map((it: any) => {
     const parsed = parseItemCategoryAndDesc(it.description);
     return {
       id: it.id,
-      description: parsed.description,
+      description: cleanExpenseDescription(parsed.description),
       category: it.category || parsed.category,
       group_code: it.group_code || null,
       group_name: it.group_name || null,
@@ -405,10 +482,11 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
           bankAccounts={bankAccounts}
           cajaAccounts={cajaAccounts}
           knownSuppliersList={knownSuppliersList}
-          initialData={expense}
+          initialData={cleanExpense}
           initialItems={initialItems}
           accountsCatalog={accountsCatalog}
           saveExpense={updateExpense}
+          isAdmin={isAdmin}
         />
       )}
     </div>
