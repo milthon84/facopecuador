@@ -497,186 +497,122 @@ export default function NewInvoiceForm({
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
 
-        {/* ── Selector de Origen / Centro de Ingreso Contable ───────────────────────────── */}
-        <div className={`bg-white border rounded-2xl shadow-sm p-4 sm:p-5 transition-all ${
-          formErrors.billingArea ? "border-red-400 ring-2 ring-red-100" : "border-lilac-100"
+        {/* ── Origen de Facturación / Imputación Contable (Compacto) ── */}
+        <div className={`bg-white border rounded-xl shadow-2xs p-3 transition-all ${
+          formErrors.billingArea ? "border-red-400 ring-2 ring-red-100" : "border-lilac-200"
         }`}>
-          <div className="flex items-center justify-between mb-3 border-b border-lilac-50 pb-2 flex-wrap gap-2">
-            <h3 className="font-semibold text-sm text-ink-700 flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-lilac-600"></span>
-              <span>Origen de la Facturación / Imputación Contable *</span>
-            </h3>
-            {billingArea && (
-              <span className="text-[11px] font-mono text-ink-600 font-semibold bg-lilac-50 border border-lilac-200 px-2 py-0.5 rounded-md">
-                {billingArea === "clinica" && "Cobro: 1.1.02.01 Pacientes ➔ Ingreso: 4.1.01.01 Odontología"}
-                {billingArea === "cursos" && "Cobro: 1.1.02.02 Alumnos ➔ Ingreso: 4.2.01.01 Capacitación"}
-                {billingArea === "coworking" && "Cobro: 1.1.02.03 Inquilinos ➔ Ingreso: 4.3.01.01 Alquiler Sillones"}
-                {billingArea === "otros" && "Cobro: 1.1.02.04 Ctas. x Cobrar ➔ Ingreso: 4.4.01.01 Otros Ingresos"}
-              </span>
-            )}
-          </div>
-
-          {!isDirectInvoice ? (
-            <div className="p-3 bg-lilac-50/70 border border-lilac-200 rounded-xl flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-white border border-lilac-200 flex items-center justify-center text-lilac-700 shadow-2xs shrink-0">
-                {billingArea === "clinica" && <Stethoscope size={18} />}
-                {billingArea === "cursos" && <GraduationCap size={18} />}
-                {billingArea === "coworking" && <Building2 size={18} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-ink-900 flex items-center gap-2 flex-wrap">
-                  <span>
-                    {billingArea === "clinica" && "Clínica Dental (Atención a Pacientes)"}
-                    {billingArea === "cursos" && "Academia / Cursos (Educación Continua)"}
-                    {billingArea === "coworking" && "Coworking Odontológico (Alquiler de Espacios / Sillones)"}
-                  </span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded border border-emerald-200">
-                    Origen Detectado
-                  </span>
-                </div>
-                <p className="text-[11px] text-ink-500 mt-0.5">
-                  Las cuentas contables NIIF de cobro e ingreso se asignan automáticamente según el módulo de origen.
-                </p>
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-lilac-600"></span>
+              <span className="text-xs font-bold text-ink-900">Origen / Centro de Ingreso:</span>
             </div>
-          ) : (
-            <div>
-              <p className="text-xs text-ink-500 mb-3">
-                Selecciona la actividad que origina esta factura para imputar la Cuenta por Cobrar y la Cuenta de Ingreso NIIF correspondiente:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                {/* Opción 1: Clínica Dental */}
+
+            {!isDirectInvoice ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-lilac-50 border border-lilac-200 text-xs font-bold text-lilac-900">
+                {billingArea === "clinica" && <Stethoscope size={13} className="text-teal-600" />}
+                {billingArea === "cursos" && <GraduationCap size={13} className="text-indigo-600" />}
+                {billingArea === "coworking" && <Building2 size={13} className="text-purple-600" />}
+                <span>
+                  {billingArea === "clinica" && "Clínica Dental"}
+                  {billingArea === "cursos" && "Academia / Cursos"}
+                  {billingArea === "coworking" && "Coworking"}
+                </span>
+                <span className="text-[10px] text-ink-500 font-normal font-mono">
+                  {billingArea === "clinica" && "(1.1.02.01 ➔ 4.1.01.01)"}
+                  {billingArea === "cursos" && "(1.1.02.02 ➔ 4.2.01.01)"}
+                  {billingArea === "coworking" && "(1.1.02.03 ➔ 4.3.01.01)"}
+                </span>
+              </span>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-1 sm:justify-end sm:max-w-xl">
                 <button
                   type="button"
                   onClick={() => {
                     setBillingArea("clinica");
                     setFormErrors(p => { const n = { ...p }; delete n.billingArea; return n; });
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-[0.98] ${
                     billingArea === "clinica"
-                      ? "border-teal-500 bg-teal-50/80 ring-2 ring-teal-200 shadow-xs"
-                      : "border-lilac-200 bg-white hover:bg-lilac-50/40"
+                      ? "bg-teal-600 text-white border-teal-600 shadow-2xs ring-1 ring-teal-400"
+                      : "bg-white border-lilac-200 text-ink-700 hover:bg-teal-50 hover:text-teal-900"
                   }`}
+                  title="Atención a pacientes (Ctas. x Cobrar 1.1.02.01 ➔ Ingreso 4.1.01.01)"
                 >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        billingArea === "clinica" ? "bg-teal-600 text-white" : "bg-teal-50 text-teal-700"
-                      }`}>
-                        <Stethoscope size={15} />
-                      </div>
-                      <span className="font-bold text-xs text-ink-900">Clínica Dental</span>
-                    </div>
-                    <p className="text-[11px] text-ink-500 leading-tight">
-                      Atención a pacientes, consultas y tratamientos odontológicos.
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-teal-100 text-[10px] font-mono text-teal-900 font-semibold">
-                    1.1.02.01 ➔ 4.1.01.01
-                  </div>
+                  <Stethoscope size={13} />
+                  <span>Clínica Dental</span>
                 </button>
 
-                {/* Opción 2: Academia / Cursos */}
                 <button
                   type="button"
                   onClick={() => {
                     setBillingArea("cursos");
                     setFormErrors(p => { const n = { ...p }; delete n.billingArea; return n; });
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-[0.98] ${
                     billingArea === "cursos"
-                      ? "border-indigo-500 bg-indigo-50/80 ring-2 ring-indigo-200 shadow-xs"
-                      : "border-lilac-200 bg-white hover:bg-lilac-50/40"
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs ring-1 ring-indigo-400"
+                      : "bg-white border-lilac-200 text-ink-700 hover:bg-indigo-50 hover:text-indigo-900"
                   }`}
+                  title="Cursos y diplomados (Ctas. x Cobrar 1.1.02.02 ➔ Ingreso 4.2.01.01)"
                 >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        billingArea === "cursos" ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700"
-                      }`}>
-                        <GraduationCap size={15} />
-                      </div>
-                      <span className="font-bold text-xs text-ink-900">Academia / Cursos</span>
-                    </div>
-                    <p className="text-[11px] text-ink-500 leading-tight">
-                      Servicios de capacitación, diplomados y matrículas de alumnos.
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-indigo-100 text-[10px] font-mono text-indigo-900 font-semibold">
-                    1.1.02.02 ➔ 4.2.01.01
-                  </div>
+                  <GraduationCap size={13} />
+                  <span>Academia</span>
                 </button>
 
-                {/* Opción 3: Coworking */}
                 <button
                   type="button"
                   onClick={() => {
                     setBillingArea("coworking");
                     setFormErrors(p => { const n = { ...p }; delete n.billingArea; return n; });
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-[0.98] ${
                     billingArea === "coworking"
-                      ? "border-purple-500 bg-purple-50/80 ring-2 ring-purple-200 shadow-xs"
-                      : "border-lilac-200 bg-white hover:bg-lilac-50/40"
+                      ? "bg-purple-600 text-white border-purple-600 shadow-2xs ring-1 ring-purple-400"
+                      : "bg-white border-lilac-200 text-ink-700 hover:bg-purple-50 hover:text-purple-900"
                   }`}
+                  title="Alquiler sillones y aulas (Ctas. x Cobrar 1.1.02.03 ➔ Ingreso 4.3.01.01)"
                 >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        billingArea === "coworking" ? "bg-purple-600 text-white" : "bg-purple-50 text-purple-700"
-                      }`}>
-                        <Building2 size={15} />
-                      </div>
-                      <span className="font-bold text-xs text-ink-900">Coworking Dental</span>
-                    </div>
-                    <p className="text-[11px] text-ink-500 leading-tight">
-                      Alquiler de sillones odontológicos, aulas y puestos de trabajo.
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-purple-100 text-[10px] font-mono text-purple-900 font-semibold">
-                    1.1.02.03 ➔ 4.3.01.01
-                  </div>
+                  <Building2 size={13} />
+                  <span>Coworking</span>
                 </button>
 
-                {/* Opción 4: Otros Ingresos */}
                 <button
                   type="button"
                   onClick={() => {
                     setBillingArea("otros");
                     setFormErrors(p => { const n = { ...p }; delete n.billingArea; return n; });
                   }}
-                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-[0.98] ${
                     billingArea === "otros"
-                      ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-200 shadow-xs"
-                      : "border-lilac-200 bg-white hover:bg-lilac-50/40"
+                      ? "bg-amber-600 text-white border-amber-600 shadow-2xs ring-1 ring-amber-400"
+                      : "bg-white border-lilac-200 text-ink-700 hover:bg-amber-50 hover:text-amber-900"
                   }`}
+                  title="Ingresos varios (Ctas. x Cobrar 1.1.02.04 ➔ Ingreso 4.4.01.01)"
                 >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        billingArea === "otros" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700"
-                      }`}>
-                        <Briefcase size={15} />
-                      </div>
-                      <span className="font-bold text-xs text-ink-900">Otros Ingresos</span>
-                    </div>
-                    <p className="text-[11px] text-ink-500 leading-tight">
-                      Ingresos no operacionales, servicios administrativos o varios.
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-amber-100 text-[10px] font-mono text-amber-900 font-semibold">
-                    1.1.02.04 ➔ 4.4.01.01
-                  </div>
+                  <Briefcase size={13} />
+                  <span>Otros</span>
                 </button>
               </div>
+            )}
+          </div>
 
-              {formErrors.billingArea && (
-                <p className="text-xs text-red-500 font-bold mt-2.5 flex items-center gap-1">
-                  <AlertCircle size={13} />
-                  <span>{formErrors.billingArea}</span>
-                </p>
-              )}
+          {billingArea && (
+            <div className="mt-2 pt-1.5 border-t border-lilac-100 flex items-center justify-between text-[11px] text-ink-500 font-mono">
+              <span className="text-[10px] text-ink-400">Imputación contable automática:</span>
+              <span className="font-semibold text-lilac-900">
+                {billingArea === "clinica" && "1.1.02.01 Pacientes ➔ 4.1.01.01 Odontología"}
+                {billingArea === "cursos" && "1.1.02.02 Alumnos ➔ 4.2.01.01 Capacitación"}
+                {billingArea === "coworking" && "1.1.02.03 Inquilinos ➔ 4.3.01.01 Alquiler Sillones (15% IVA)"}
+                {billingArea === "otros" && "1.1.02.04 Ctas. x Cobrar ➔ 4.4.01.01 Otros Ingresos"}
+              </span>
             </div>
+          )}
+
+          {formErrors.billingArea && (
+            <p className="text-xs text-red-500 font-semibold mt-1.5 flex items-center gap-1">
+              <AlertCircle size={13} />
+              <span>{formErrors.billingArea}</span>
+            </p>
           )}
         </div>
 
