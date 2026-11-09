@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createExpenseJournalEntry, assertMonthOpen } from "@/lib/accounting";
+import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "./NuevaCompraForm";
 import { assertWritePermission } from "@/lib/auth-action";
 import { FacturaRecibida } from "@/lib/expense-types";
@@ -36,6 +37,11 @@ async function saveExpense(formData: FormData) {
   const area              = ((formData.get("area") as string) || "clinica").toLowerCase();
   const payment_method    = formData.get("payment_method") as string;
   const supplier_name     = (formData.get("supplier_name") as string).trim();
+  const supplier_ruc      = ((formData.get("supplier_ruc") as string) || "").trim() || null;
+  const account_code      = ((formData.get("account_code") as string) || "").trim() || null;
+  const account_name      = ((formData.get("account_name") as string) || "").trim() || null;
+  const group_code        = ((formData.get("group_code") as string) || "").trim() || null;
+  const group_name        = ((formData.get("group_name") as string) || "").trim() || null;
   const bank_account_id   = (formData.get("bank_account_id") as string) || null;
   let payment_reference = (formData.get("payment_reference") as string)?.trim() || null;
 
@@ -130,11 +136,15 @@ async function saveExpense(formData: FormData) {
 
   const insertPayload: Record<string, any> = {
     supplier_name,
-    supplier_ruc:      (formData.get("supplier_ruc") as string)?.trim() || null,
+    supplier_ruc,
     document_number:   cleanDocNumberOnly(formData.get("document_number") as string) || null,
     authorization_number,
     expense_date,
     category,
+    account_code:      account_code || null,
+    account_name:      account_name || null,
+    group_code:        group_code || null,
+    group_name:        group_name || null,
     area,
     description,
     notes,
@@ -157,35 +167,33 @@ async function saveExpense(formData: FormData) {
     .select()
     .single();
 
-  if (expenseError && (expenseError.message.includes("factura_recibida_clave_acceso") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
-    delete insertPayload.factura_recibida_clave_acceso;
-    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
-    expense = retry.data;
-    expenseError = retry.error;
-  }
+  // Retry si alguna columna no existe aún en la base de datos
+  const potentialMissingCols = [
+    "account_code",
+    "account_name",
+    "group_code",
+    "group_name",
+    "factura_recibida_clave_acceso",
+    "receipt_url",
+    "area",
+    "authorization_number",
+  ];
 
-  if (expenseError && (expenseError.message.includes("receipt_url") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
-    delete insertPayload.receipt_url;
-    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
-    expense = retry.data;
-    expenseError = retry.error;
-  }
-
-  if (expenseError && (expenseError.message.includes("area") || expenseError.code === "PGRST204" || expenseError.code === "42703")) {
-    delete insertPayload.area;
-    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
-    expense = retry.data;
-    expenseError = retry.error;
-  }
-
-  if (expenseError && (expenseError.message.includes("authorization_number") || expenseError.code === "PGRST204")) {
-    delete insertPayload.authorization_number;
-    if (authorization_number) {
-      insertPayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
+  while (expenseError && (expenseError.code === "PGRST204" || expenseError.code === "42703" || expenseError.message.includes("does not exist") || expenseError.message.includes("Could not find"))) {
+    let changed = false;
+    for (const col of potentialMissingCols) {
+      if (expenseError.message.includes(col) && col in insertPayload) {
+        if (col === "authorization_number" && authorization_number) {
+          insertPayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
+        }
+        delete (insertPayload as any)[col];
+        changed = true;
+      }
     }
-    const fallback = await supabase.from("expenses").insert(insertPayload).select().single();
-    expense = fallback.data;
-    expenseError = fallback.error;
+    if (!changed) break;
+    const retry = await supabase.from("expenses").insert(insertPayload).select().single();
+    expense = retry.data;
+    expenseError = retry.error;
   }
 
   if (expenseError || !expense) throw new Error(expenseError?.message ?? "Error al guardar la compra");
@@ -201,6 +209,11 @@ async function saveExpense(formData: FormData) {
         const itemsToInsert = parsedItems.map((it: any) => ({
           expense_id: expense.id,
           description: it.category ? `[${it.category}] ${it.description || "Item de gasto"}` : (it.description || "Item de gasto"),
+          category: it.category || null,
+          account_code: it.account_code || account_code || null,
+          account_name: it.account_name || account_name || null,
+          group_code: it.group_code || group_code || null,
+          group_name: it.group_name || group_name || null,
           quantity: Number(it.quantity) || 1,
           unit_price: Number(it.unit_price) || 0,
           iva_rate: Number(it.iva_rate) || 0,
@@ -208,13 +221,42 @@ async function saveExpense(formData: FormData) {
           iva_amount: Number(it.iva_amount) || 0,
           total: Number(it.total) || 0,
         }));
-        const { error: itemsErr } = await supabase.from("expense_items").insert(itemsToInsert);
+        let { error: itemsErr } = await supabase.from("expense_items").insert(itemsToInsert);
+        if (itemsErr && (itemsErr.message.includes("account_code") || itemsErr.message.includes("group_code") || itemsErr.code === "42703")) {
+          const fallbackItems = itemsToInsert.map(i => {
+            const { account_code, account_name, group_code, group_name, ...rest } = i;
+            return rest;
+          });
+          const retryItems = await supabase.from("expense_items").insert(fallbackItems);
+          itemsErr = retryItems.error;
+        }
         if (itemsErr) {
           console.warn("No se pudieron registrar las líneas en expense_items:", itemsErr.message);
         }
       }
     } catch (itParseErr) {
       console.error("Error al procesar líneas de detalle de gasto:", itParseErr);
+    }
+  }
+
+  // Guardar o actualizar la memoria de cuenta habitual del proveedor
+  const effectiveAccCode = account_code || parsedItemsList[0]?.account_code || null;
+  const effectiveAccName = account_name || parsedItemsList[0]?.account_name || null;
+  const effectiveGrpCode = group_code || parsedItemsList[0]?.group_code || null;
+  const effectiveGrpName = group_name || parsedItemsList[0]?.group_name || null;
+
+  if (supplier_ruc && effectiveAccCode) {
+    try {
+      await saveSupplierAccountMemory({
+        ruc: supplier_ruc,
+        razon_social: supplier_name,
+        group_code: effectiveGrpCode,
+        group_name: effectiveGrpName,
+        account_code: effectiveAccCode,
+        account_name: effectiveAccName,
+      });
+    } catch (suppErr) {
+      console.warn("No se pudo guardar memoria de proveedor:", suppErr);
     }
   }
 
@@ -268,13 +310,15 @@ async function saveExpense(formData: FormData) {
     }
   }
 
-  // Asiento contable automático direccionando según categorías de ítems
+  // Asiento contable automático direccionando según cuentas de movimiento de ítems
   try {
     await createExpenseJournalEntry({
       expense_id: expense.id,
       expense_date,
       supplier_name,
       category,
+      account_code: effectiveAccCode,
+      account_name: effectiveAccName,
       payment_method,
       subtotal_0: subtotal0,
       subtotal_15: subtotal15,
@@ -285,6 +329,8 @@ async function saveExpense(formData: FormData) {
       items: parsedItemsList.map((it: any) => ({
         description: it.description || "",
         category: it.category || category,
+        account_code: it.account_code || effectiveAccCode,
+        account_name: it.account_name || effectiveAccName,
         subtotal: Number(it.subtotal) || 0,
       })),
     });
@@ -323,6 +369,7 @@ export default async function NuevoGastoPage({
   const [
     { data: allAccounts },
     { data: pastExpenses },
+    accountsCatalog,
   ] = await Promise.all([
     supabase
       .from("bank_accounts")
@@ -335,6 +382,7 @@ export default async function NuevoGastoPage({
       .not("supplier_ruc", "is", null)
       .not("supplier_name", "is", null)
       .order("created_at", { ascending: false }),
+    getExpenseAccountsCatalog(),
   ]);
 
   // Si se solicitó una factura específica por URL y no está en la lista de pendientes
@@ -390,6 +438,7 @@ export default async function NuevoGastoPage({
         knownSuppliersList={knownSuppliersList}
         pendingFacturas={pendingFacturas}
         initialFacturaClave={searchParams.factura || null}
+        accountsCatalog={accountsCatalog}
         saveExpense={saveExpense}
       />
     </div>

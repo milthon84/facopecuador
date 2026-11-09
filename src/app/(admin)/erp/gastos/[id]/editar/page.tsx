@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
 import { assertPermission, assertWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
+import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry } from "@/lib/accounting";
+import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
 import { ExpenseItemRow, parseItemCategoryAndDesc } from "@/lib/expense-types";
 import { cleanDocNumberOnly } from "@/lib/expense-areas";
@@ -39,6 +40,11 @@ async function updateExpense(formData: FormData) {
   const area              = ((formData.get("area") as string) || "clinica").toLowerCase();
   const payment_method    = formData.get("payment_method") as string;
   const supplier_name     = (formData.get("supplier_name") as string).trim();
+  const supplier_ruc      = ((formData.get("supplier_ruc") as string) || "").trim() || null;
+  const account_code      = ((formData.get("account_code") as string) || "").trim() || null;
+  const account_name      = ((formData.get("account_name") as string) || "").trim() || null;
+  const group_code        = ((formData.get("group_code") as string) || "").trim() || null;
+  const group_name        = ((formData.get("group_name") as string) || "").trim() || null;
   const bank_account_id   = (formData.get("bank_account_id") as string) || null;
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   const factura_recibida_clave_acceso = (formData.get("factura_recibida_clave_acceso") as string)?.trim() || null;
@@ -143,11 +149,15 @@ async function updateExpense(formData: FormData) {
 
   const updatePayload: Record<string, any> = {
     supplier_name,
-    supplier_ruc:      (formData.get("supplier_ruc") as string)?.trim() || null,
+    supplier_ruc,
     document_number:   cleanDocNumberOnly(formData.get("document_number") as string) || null,
     authorization_number,
     expense_date:      new_expense_date,
     category,
+    account_code:      account_code || null,
+    account_name:      account_name || null,
+    group_code:        group_code || null,
+    group_name:        group_name || null,
     area,
     description,
     notes:             updatedNotes,
@@ -164,29 +174,29 @@ async function updateExpense(formData: FormData) {
 
   let { error } = await supabase.from("expenses").update(updatePayload).eq("id", id);
 
-  if (error && (error.message.includes("factura_recibida_clave_acceso") || error.code === "PGRST204" || error.code === "42703")) {
-    delete updatePayload.factura_recibida_clave_acceso;
-    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
-    error = retry.error;
-  }
+  const potentialMissingCols = [
+    "account_code",
+    "account_name",
+    "group_code",
+    "group_name",
+    "factura_recibida_clave_acceso",
+    "receipt_url",
+    "area",
+    "authorization_number",
+  ];
 
-  if (error && (error.message.includes("receipt_url") || error.code === "PGRST204" || error.code === "42703")) {
-    delete updatePayload.receipt_url;
-    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
-    error = retry.error;
-  }
-
-  if (error && (error.message.includes("area") || error.code === "PGRST204" || error.code === "42703")) {
-    delete updatePayload.area;
-    const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
-    error = retry.error;
-  }
-
-  if (error && (error.message.includes("authorization_number") || error.code === "PGRST204")) {
-    delete updatePayload.authorization_number;
-    if (authorization_number) {
-      updatePayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
+  while (error && (error.code === "PGRST204" || error.code === "42703" || error.message.includes("does not exist") || error.message.includes("Could not find"))) {
+    let changed = false;
+    for (const col of potentialMissingCols) {
+      if (error.message.includes(col) && col in updatePayload) {
+        if (col === "authorization_number" && authorization_number) {
+          updatePayload.description = description ? `${description} | Aut: ${authorization_number}` : `Aut: ${authorization_number}`;
+        }
+        delete (updatePayload as any)[col];
+        changed = true;
+      }
     }
+    if (!changed) break;
     const retry = await supabase.from("expenses").update(updatePayload).eq("id", id);
     error = retry.error;
   }
@@ -198,15 +208,22 @@ async function updateExpense(formData: FormData) {
 
   // Actualizar líneas de detalle en expense_items
   const itemsJson = formData.get("items_json") as string | null;
+  let parsedItemsList: any[] = [];
   if (itemsJson) {
     try {
       const parsedItems = JSON.parse(itemsJson);
       if (Array.isArray(parsedItems)) {
+        parsedItemsList = parsedItems;
         await supabase.from("expense_items").delete().eq("expense_id", id);
         if (parsedItems.length > 0) {
           const itemsToInsert = parsedItems.map((it: any) => ({
             expense_id: id,
             description: it.category ? `[${it.category}] ${it.description || "Item de gasto"}` : (it.description || "Item de gasto"),
+            category: it.category || null,
+            account_code: it.account_code || account_code || null,
+            account_name: it.account_name || account_name || null,
+            group_code: it.group_code || group_code || null,
+            group_name: it.group_name || group_name || null,
             quantity: Number(it.quantity) || 1,
             unit_price: Number(it.unit_price) || 0,
             iva_rate: Number(it.iva_rate) || 0,
@@ -214,11 +231,39 @@ async function updateExpense(formData: FormData) {
             iva_amount: Number(it.iva_amount) || 0,
             total: Number(it.total) || 0,
           }));
-          await supabase.from("expense_items").insert(itemsToInsert);
+          let { error: itemsErr } = await supabase.from("expense_items").insert(itemsToInsert);
+          if (itemsErr && (itemsErr.message.includes("account_code") || itemsErr.message.includes("group_code") || itemsErr.code === "42703")) {
+            const fallbackItems = itemsToInsert.map(i => {
+              const { account_code, account_name, group_code, group_name, ...rest } = i;
+              return rest;
+            });
+            await supabase.from("expense_items").insert(fallbackItems);
+          }
         }
       }
     } catch (err) {
-      console.error("Error actualizando expense_items:", err);
+      console.warn("Error actualizando expense_items:", err);
+    }
+  }
+
+  // Guardar o actualizar la memoria de cuenta habitual del proveedor
+  const effectiveAccCode = account_code || parsedItemsList[0]?.account_code || null;
+  const effectiveAccName = account_name || parsedItemsList[0]?.account_name || null;
+  const effectiveGrpCode = group_code || parsedItemsList[0]?.group_code || null;
+  const effectiveGrpName = group_name || parsedItemsList[0]?.group_name || null;
+
+  if (supplier_ruc && effectiveAccCode) {
+    try {
+      await saveSupplierAccountMemory({
+        ruc: supplier_ruc,
+        razon_social: supplier_name,
+        group_code: effectiveGrpCode,
+        group_name: effectiveGrpName,
+        account_code: effectiveAccCode,
+        account_name: effectiveAccName,
+      });
+    } catch (suppErr) {
+      console.warn("No se pudo guardar memoria de proveedor:", suppErr);
     }
   }
 
@@ -277,10 +322,12 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
     { data: rawExpense },
     { data: allAccounts },
     { data: pastExpenses },
+    accountsCatalog,
   ] = await Promise.all([
     supabase.from("expenses").select("*").eq("id", id).single(),
     supabase.from("bank_accounts").select("id, bank_name, account_number, account_type, notes").eq("is_active", true).order("bank_name"),
     supabase.from("expenses").select("supplier_ruc, supplier_name").not("supplier_ruc", "is", null).not("supplier_name", "is", null).order("created_at", { ascending: false }),
+    getExpenseAccountsCatalog(),
   ]);
 
   if (!rawExpense) notFound();
@@ -292,6 +339,10 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
       id: it.id,
       description: parsed.description,
       category: it.category || parsed.category,
+      group_code: it.group_code || null,
+      group_name: it.group_name || null,
+      account_code: it.account_code || null,
+      account_name: it.account_name || null,
       quantity: Number(it.quantity) || 1,
       unit_price: Number(it.unit_price) || 0,
       iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,
@@ -356,6 +407,7 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
           knownSuppliersList={knownSuppliersList}
           initialData={expense}
           initialItems={initialItems}
+          accountsCatalog={accountsCatalog}
           saveExpense={updateExpense}
         />
       )}

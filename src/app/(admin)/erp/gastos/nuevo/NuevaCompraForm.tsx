@@ -35,6 +35,14 @@ import {
   EXPENSE_CATEGORY_DETAILS,
   normalizeCategoryName,
 } from "@/lib/expense-types";
+import {
+  ExpenseAccountsCatalog,
+  ExpenseGroup,
+  ExpenseMovementAccount,
+  FALLBACK_EXPENSE_GROUPS,
+  FALLBACK_EXPENSE_MOVEMENTS,
+} from "@/lib/expense-accounts";
+import { lookupSupplierAccountAction } from "../actions";
 
 type Account = {
   id: string;
@@ -55,6 +63,7 @@ interface Props {
   initialFacturaClave?: string | null;
   initialData?: any;
   initialItems?: ExpenseItemRow[];
+  accountsCatalog?: ExpenseAccountsCatalog;
   saveExpense: (formData: FormData) => Promise<void | { success?: boolean; error?: string; url?: string }>;
 }
 
@@ -67,6 +76,7 @@ export default function NuevaCompraForm({
   initialFacturaClave = null,
   initialData,
   initialItems = [],
+  accountsCatalog,
   saveExpense,
 }: Props) {
   const isEditing = Boolean(initialData?.id);
@@ -96,24 +106,65 @@ export default function NuevaCompraForm({
   // Guía interactiva de categorías
   const [guiaCategoriasOpen, setGuiaCategoriasOpen] = useState(false);
 
+  // Catálogo contable dinámico
+  const groups = accountsCatalog?.groups || FALLBACK_EXPENSE_GROUPS;
+  const accountsByGroup = accountsCatalog?.accountsByGroup || {};
+  const allMovements = accountsCatalog?.allMovements || FALLBACK_EXPENSE_MOVEMENTS;
+
+  const defaultGroupCode = area === "clinica" ? "5.1.01" : "5.2.05";
+  const defaultAccountCode = area === "clinica" ? "5.1.01.01" : "5.2.05.01";
+
+  function getDefaultMovementForGroup(groupCode: string): ExpenseMovementAccount | undefined {
+    const list = accountsByGroup[groupCode];
+    if (list && list.length > 0) return list[0];
+    return allMovements.find((m) => m.group_code === groupCode);
+  }
+
+  // Memoria del proveedor (cuenta contable habitual)
+  const [detectedSupplierAccount, setDetectedSupplierAccount] = useState<{
+    group_code?: string;
+    group_name?: string;
+    account_code?: string;
+    account_name?: string;
+    isNew?: boolean;
+  } | null>(null);
+  const [isLookingUpSupplier, setIsLookingUpSupplier] = useState(false);
+
   // Líneas de detalle del gasto (Cabecera y Detalle)
   const [items, setItems] = useState<ExpenseItemRow[]>(() => {
     if (initialItems && initialItems.length > 0) {
-      return initialItems.map((it) => ({
-        ...it,
-        category: normalizeCategoryName(it.category),
-      }));
+      return initialItems.map((it) => {
+        const accCode = it.account_code || defaultAccountCode;
+        const mov = allMovements.find((m) => m.code === accCode);
+        const grpCode = it.group_code || mov?.group_code || defaultGroupCode;
+        const grp = groups.find((g) => g.code === grpCode);
+        return {
+          ...it,
+          group_code: grpCode,
+          group_name: it.group_name || grp?.name || "",
+          account_code: accCode,
+          account_name: it.account_name || mov?.name || "",
+          category: it.category || mov?.name || "Gasto Operativo",
+        };
+      });
     }
     if (initialData) {
       const sub0 = Number(initialData.subtotal_0) || 0;
       const sub15 = Number(initialData.subtotal_15) || 0;
-      const defaultCat = normalizeCategoryName(initialData.category);
+      const accCode = initialData.account_code || defaultAccountCode;
+      const mov = allMovements.find((m) => m.code === accCode);
+      const grpCode = initialData.group_code || mov?.group_code || defaultGroupCode;
+      const grp = groups.find((g) => g.code === grpCode);
       const result: ExpenseItemRow[] = [];
       if (sub15 > 0) {
         result.push({
           id: "init-15",
           description: initialData.description || "Bienes / Servicios gravados IVA",
-          category: defaultCat,
+          group_code: grpCode,
+          group_name: grp?.name || "",
+          account_code: accCode,
+          account_name: mov?.name || "",
+          category: mov?.name || "Gasto Operativo",
           quantity: 1,
           unit_price: sub15,
           iva_rate: 15,
@@ -123,7 +174,11 @@ export default function NuevaCompraForm({
         result.push({
           id: "init-0",
           description: initialData.description || "Bienes / Servicios tarifa 0%",
-          category: defaultCat,
+          group_code: grpCode,
+          group_name: grp?.name || "",
+          account_code: accCode,
+          account_name: mov?.name || "",
+          category: mov?.name || "Gasto Operativo",
           quantity: 1,
           unit_price: sub0,
           iva_rate: 0,
@@ -135,7 +190,11 @@ export default function NuevaCompraForm({
       {
         id: "item-1",
         description: "",
-        category: "Insumo y Material",
+        group_code: defaultGroupCode,
+        group_name: groups.find((g) => g.code === defaultGroupCode)?.name || "",
+        account_code: defaultAccountCode,
+        account_name: allMovements.find((m) => m.code === defaultAccountCode)?.name || "",
+        category: "Insumos Clínicos",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -183,15 +242,61 @@ export default function NuevaCompraForm({
     }
   }, [initialFacturaClave, pendingFacturas, isEditing]);
 
+  async function lookupSupplier(ruc: string) {
+    const clean = ruc.trim();
+    if (!clean || clean.length < 10) return;
+    setIsLookingUpSupplier(true);
+    try {
+      const res = await lookupSupplierAccountAction(clean);
+      if (res?.success && res.data?.default_account_code) {
+        const accCode = res.data.default_account_code;
+        const mov = allMovements.find((m) => m.code === accCode);
+        const grpCode = res.data.default_group_code || mov?.group_code || defaultGroupCode;
+        const grp = groups.find((g) => g.code === grpCode);
+        const accName = mov?.name || res.data.default_account_name || "";
+
+        setDetectedSupplierAccount({
+          group_code: grpCode,
+          group_name: grp?.name,
+          account_code: accCode,
+          account_name: accName,
+          isNew: false,
+        });
+
+        // Auto-aplicar la cuenta habitual a todas las filas
+        setItems((prev) =>
+          prev.map((it) => ({
+            ...it,
+            group_code: grpCode,
+            group_name: grp?.name || "",
+            account_code: accCode,
+            account_name: accName,
+          }))
+        );
+      } else {
+        setDetectedSupplierAccount({ isNew: true });
+      }
+    } catch (err) {
+      console.warn("Error buscando cuenta habitual de proveedor:", err);
+    } finally {
+      setIsLookingUpSupplier(false);
+    }
+  }
+
   function aplicarFacturaRecibida(factura: FacturaRecibida) {
     setSelectedFacturaClave(factura.clave_acceso);
-    setSupplierRuc(factura.ruc_emisor || "");
+    const ruc = factura.ruc_emisor || "";
+    setSupplierRuc(ruc);
     setSupplierName(factura.razon_social || "");
     const cleanNum = cleanDocNumberOnly(factura.numero_comprobante || "");
     setDocNumber(cleanNum);
     if (factura.fecha_emision) setExpenseDate(factura.fecha_emision);
     setAuthNumber(factura.clave_acceso || "");
     setDocType("factura");
+
+    if (ruc && ruc.length >= 10) {
+      lookupSupplier(ruc);
+    }
 
     // Construir filas de detalle con base en los montos de la factura
     const subtotal = Number(factura.subtotal) || 0;
@@ -205,12 +310,21 @@ export default function NuevaCompraForm({
       setCustomIva(0);
     }
 
+    const effectiveGrp = detectedSupplierAccount?.group_code || defaultGroupCode;
+    const grp = groups.find(g => g.code === effectiveGrp);
+    const effectiveAcc = detectedSupplierAccount?.account_code || defaultAccountCode;
+    const mov = allMovements.find(m => m.code === effectiveAcc);
+
     const newRows: ExpenseItemRow[] = [];
     if (subtotal > 0) {
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${cleanNum}` : "Compra según factura electrónica",
-        category: "Insumo y Material",
+        group_code: effectiveGrp,
+        group_name: grp?.name || "",
+        account_code: effectiveAcc,
+        account_name: mov?.name || "",
+        category: mov?.name || "Gasto Operativo",
         quantity: 1,
         unit_price: subtotal,
         iva_rate: iva > 0 ? 15 : 0,
@@ -219,7 +333,11 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social ? `${factura.razon_social} - Fac #${cleanNum}` : "Compra según factura electrónica",
-        category: "Insumo y Material",
+        group_code: effectiveGrp,
+        group_name: grp?.name || "",
+        account_code: effectiveAcc,
+        account_name: mov?.name || "",
+        category: mov?.name || "Gasto Operativo",
         quantity: 1,
         unit_price: total,
         iva_rate: 0,
@@ -228,7 +346,11 @@ export default function NuevaCompraForm({
       newRows.push({
         id: `fac-${Date.now()}-1`,
         description: factura.razon_social || "Factura electrónica SRI",
-        category: "Insumo y Material",
+        group_code: effectiveGrp,
+        group_name: grp?.name || "",
+        account_code: effectiveAcc,
+        account_name: mov?.name || "",
+        category: mov?.name || "Gasto Operativo",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -249,18 +371,32 @@ export default function NuevaCompraForm({
     if (cleanRuc) {
       const match = knownSuppliersList.find((s) => s.ruc === cleanRuc);
       if (match) setSupplierName(match.name);
+      if (cleanRuc.length >= 10) {
+        lookupSupplier(cleanRuc);
+      }
+    } else {
+      setDetectedSupplierAccount(null);
     }
   }
 
   // Manejo de filas de detalle
   function addItemRow() {
-    const lastCategory = items[items.length - 1]?.category || "Insumo y Material";
+    const lastItem = items[items.length - 1];
+    const lastGrp = lastItem?.group_code || detectedSupplierAccount?.group_code || defaultGroupCode;
+    const lastAcc = lastItem?.account_code || detectedSupplierAccount?.account_code || defaultAccountCode;
+    const grp = groups.find((g) => g.code === lastGrp);
+    const mov = allMovements.find((m) => m.code === lastAcc);
+
     setItems((prev) => [
       ...prev,
       {
         id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         description: "",
-        category: lastCategory,
+        group_code: lastGrp,
+        group_name: grp?.name || "",
+        account_code: lastAcc,
+        account_name: mov?.name || "",
+        category: mov?.name || "Gasto Operativo",
         quantity: 1,
         unit_price: "",
         iva_rate: docType === "factura" ? 15 : 0,
@@ -277,6 +413,43 @@ export default function NuevaCompraForm({
     );
   }
 
+  function updateItemGroup(id: string, newGroupCode: string) {
+    const grp = groups.find((g) => g.code === newGroupCode);
+    const grpMovements = accountsByGroup[newGroupCode] || [];
+    const firstAcc = grpMovements[0] || allMovements.find((m) => m.group_code === newGroupCode);
+    setItems((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        return {
+          ...row,
+          group_code: newGroupCode,
+          group_name: grp?.name || "",
+          account_code: firstAcc?.code || "",
+          account_name: firstAcc?.name || "",
+          category: firstAcc?.name || "",
+        };
+      })
+    );
+  }
+
+  function updateItemAccount(id: string, newAccountCode: string) {
+    const mov = allMovements.find((m) => m.code === newAccountCode);
+    const grp = mov?.group_code ? groups.find((g) => g.code === mov.group_code) : undefined;
+    setItems((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        return {
+          ...row,
+          account_code: newAccountCode,
+          account_name: mov?.name || "",
+          category: mov?.name || "",
+          group_code: grp ? grp.code : row.group_code,
+          group_name: grp ? grp.name : row.group_name,
+        };
+      })
+    );
+  }
+
   function removeItemRow(id: string) {
     if (items.length <= 1) {
       // Dejar una fila limpia en lugar de vaciar
@@ -284,6 +457,11 @@ export default function NuevaCompraForm({
         {
           id: `item-${Date.now()}`,
           description: "",
+          group_code: defaultGroupCode,
+          group_name: groups.find((g) => g.code === defaultGroupCode)?.name || "",
+          account_code: defaultAccountCode,
+          account_name: allMovements.find((m) => m.code === defaultAccountCode)?.name || "",
+          category: allMovements.find((m) => m.code === defaultAccountCode)?.name || "Gasto Operativo",
           quantity: 1,
           unit_price: "",
           iva_rate: docType === "factura" ? 15 : 0,
@@ -369,9 +547,18 @@ export default function NuevaCompraForm({
             rowIva = customIva;
           }
           const rowTotal = Math.round((calc.subtotal + rowIva) * 100) / 100;
+          const grpCode = it.group_code || defaultGroupCode;
+          const grp = groups.find((g) => g.code === grpCode);
+          const accCode = it.account_code || accountsByGroup[grpCode]?.[0]?.code || defaultAccountCode;
+          const mov = allMovements.find((m) => m.code === accCode);
+
           return {
             description: it.description.trim() || "Item de gasto",
-            category: normalizeCategoryName(it.category),
+            category: mov?.name || it.category || "Gasto Operativo",
+            group_code: grpCode,
+            group_name: it.group_name || grp?.name || "",
+            account_code: accCode,
+            account_name: it.account_name || mov?.name || "",
             quantity: calc.qty || 1,
             unit_price: calc.price || 0,
             iva_rate: it.iva_rate,
@@ -382,11 +569,15 @@ export default function NuevaCompraForm({
         });
 
       formData.set("items_json", JSON.stringify(validItems));
+      formData.set("account_code", validItems[0]?.account_code || "");
+      formData.set("account_name", validItems[0]?.account_name || "");
+      formData.set("group_code", validItems[0]?.group_code || "");
+      formData.set("group_name", validItems[0]?.group_name || "");
       formData.set("subtotal_0", totals.subtotal0.toString());
       formData.set("subtotal_15", totals.subtotal15.toString());
       formData.set("iva_amount", effectiveIva.toString());
       formData.set("total", effectiveTotal.toString());
-      const mainCategory = validItems[0]?.category || initialData?.category || (area === "clinica" ? "Insumo y Material" : "Suministro");
+      const mainCategory = validItems[0]?.account_name || (area === "clinica" ? "Insumos Dentales" : "Suministros de Oficina");
       formData.set("category", mainCategory);
       if (selectedFacturaClave) {
         formData.set("factura_recibida_clave_acceso", selectedFacturaClave);
@@ -677,6 +868,36 @@ export default function NuevaCompraForm({
           </div>
         </div>
 
+        {/* Indicador de memoria de cuenta habitual del proveedor */}
+        {(detectedSupplierAccount || isLookingUpSupplier) && (
+          <div className="flex items-center gap-2 text-xs">
+            {isLookingUpSupplier ? (
+              <div className="flex items-center gap-1.5 text-ink-500 bg-lilac-50/70 border border-lilac-200/80 px-2.5 py-1 rounded-xl">
+                <Loader2 size={13} className="animate-spin text-lilac-600" />
+                <span>Consultando cuenta contable habitual del proveedor...</span>
+              </div>
+            ) : detectedSupplierAccount?.isNew ? (
+              <div className="flex items-center gap-1.5 text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 rounded-xl">
+                <Sparkles size={13} className="text-indigo-600 shrink-0" />
+                <span>
+                  <strong>Proveedor nuevo:</strong> Selecciona el grupo y cuenta de gasto en el detalle para recordarlo en sus próximas facturas.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-teal-900 bg-teal-50 border border-teal-200/90 px-2.5 py-1 rounded-xl">
+                <CheckCircle2 size={13} className="text-teal-600 shrink-0" />
+                <span>
+                  <strong>Cuenta habitual detectada:</strong>{" "}
+                  <span className="font-mono bg-teal-100 text-teal-950 px-1.5 py-0.5 rounded font-semibold text-[11px]">
+                    {detectedSupplierAccount?.account_code}
+                  </span>{" "}
+                  · {detectedSupplierAccount?.account_name} (preseleccionada en el detalle)
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── 3. N° Documento, Autorización SRI y Fecha ── */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {!isSinDocumento ? (
@@ -773,6 +994,13 @@ export default function NuevaCompraForm({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => setGuiaCategoriasOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-200 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
+              >
+                <HelpCircle size={13} /> Ver Plan de Cuentas
+              </button>
+              <button
+                type="button"
                 onClick={addItemRow}
                 className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
               >
@@ -786,8 +1014,9 @@ export default function NuevaCompraForm({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2 pr-3 font-bold">Descripción del Bien / Servicio</th>
-                  <th className="py-2 px-2 w-36 sm:w-40 font-bold">Categoría Contable</th>
+                  <th className="py-2 pr-2 font-bold min-w-[150px]">Descripción del Bien / Servicio</th>
+                  <th className="py-2 px-2 w-44 sm:w-48 font-bold">Grupo Contable</th>
+                  <th className="py-2 px-2 w-48 sm:w-56 font-bold">Cuenta de Gasto (Movimiento)</th>
                   <th className="py-2 px-2 w-16 text-center font-bold">Cant.</th>
                   <th className="py-2 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
@@ -800,11 +1029,15 @@ export default function NuevaCompraForm({
               <tbody className="divide-y divide-lilac-100">
                 {items.map((item, idx) => {
                   const calc = calculateItemRow(item);
-                  const currentCat = normalizeCategoryName(item.category);
-                  const catDetail = EXPENSE_CATEGORY_DETAILS[currentCat];
+                  const grpCode = item.group_code || defaultGroupCode;
+                  const movList = accountsByGroup[grpCode] && accountsByGroup[grpCode].length > 0
+                    ? accountsByGroup[grpCode]
+                    : allMovements;
+                  const selectedAcc = item.account_code || movList[0]?.code || "";
+
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-3 align-middle">
+                      <td className="py-2 pr-2 align-middle">
                         <input
                           type="text"
                           required
@@ -814,24 +1047,39 @@ export default function NuevaCompraForm({
                           className="w-full border border-lilac-200 rounded-lg px-3 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none"
                         />
                       </td>
-                      <td className="py-2 px-2 align-middle w-36 sm:w-40">
+
+                      {/* Selector Grupo Contable */}
+                      <td className="py-2 px-2 align-middle w-44 sm:w-48">
                         <select
-                          value={currentCat}
-                          onChange={(e) => updateItemRow(item.id, "category", e.target.value)}
-                          title={`${catDetail?.description || currentCat} — Contempla: ${catDetail?.examples || ""}`}
+                          value={grpCode}
+                          onChange={(e) => updateItemGroup(item.id, e.target.value)}
+                          title={`${grpCode} - ${item.group_name || ""}`}
                           className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
                         >
-                          {EXPENSE_ITEM_CATEGORIES.map((cat) => (
-                            <option
-                              key={cat}
-                              value={cat}
-                              title={`${EXPENSE_CATEGORY_DETAILS[cat]?.description} (${EXPENSE_CATEGORY_DETAILS[cat]?.examples})`}
-                            >
-                              {cat}
+                          {groups.map((g) => (
+                            <option key={g.code} value={g.code}>
+                              {g.code} {g.name}
                             </option>
                           ))}
                         </select>
                       </td>
+
+                      {/* Selector Cuenta de Gasto (Movimiento) */}
+                      <td className="py-2 px-2 align-middle w-48 sm:w-56">
+                        <select
+                          value={selectedAcc}
+                          onChange={(e) => updateItemAccount(item.id, e.target.value)}
+                          title={`${selectedAcc} - ${item.account_name || ""}`}
+                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-medium focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
+                        >
+                          {movList.map((m) => (
+                            <option key={m.code} value={m.code}>
+                              {m.code} {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+
                       <td className="py-2 px-2 align-top">
                         <input
                           type="number"
@@ -1194,24 +1442,26 @@ export default function NuevaCompraForm({
         </div>
       )}
 
-      {/* Modal Guía de Categorías Contables */}
+      {/* Modal Catálogo de Cuentas de Gasto */}
       {guiaCategoriasOpen && (
         <div
           className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setGuiaCategoriasOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-lilac-200 animate-scaleIn"
+            className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-lilac-200 animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-lilac-100 flex items-center justify-between bg-lilac-50/60">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-lilac-600 text-white flex items-center justify-center shadow-xs">
-                  <HelpCircle size={18} />
+                  <FileCheck2 size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-ink-900">Guía de Categorías Contables</h3>
-                  <p className="text-[11px] text-ink-500">¿Qué contempla cada categoría y a qué cuenta NIIF se direcciona?</p>
+                  <h3 className="text-sm font-bold text-ink-900">Plan de Cuentas de Gasto (NIIF)</h3>
+                  <p className="text-[11px] text-ink-500">
+                    Estructura contable: el asiento siempre se genera en una <strong>cuenta de movimiento (hija)</strong>
+                  </p>
                 </div>
               </div>
               <button
@@ -1224,37 +1474,52 @@ export default function NuevaCompraForm({
             </div>
 
             <div className="p-4 overflow-y-auto space-y-3">
-              {EXPENSE_ITEM_CATEGORIES.map((catKey) => {
-                const detail = EXPENSE_CATEGORY_DETAILS[catKey];
+              {groups.map((grp) => {
+                const movements = accountsByGroup[grp.code] || [];
                 return (
-                  <div key={catKey} className="p-3.5 rounded-xl border border-lilac-100 bg-white hover:bg-lilac-50/40 transition space-y-1.5 shadow-2xs">
+                  <div key={grp.code} className="p-3.5 rounded-xl border border-lilac-100 bg-white space-y-2 shadow-2xs">
                     <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-xs font-bold text-ink-950 flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-lilac-600"></span>
-                        {detail.name}
-                      </span>
-                      <span className="text-[10px] font-mono font-bold bg-lilac-100 text-lilac-800 px-2 py-0.5 rounded-full border border-lilac-200">
-                        Cta {detail.accountCode} · {detail.accountName}
+                        <span className="text-xs font-mono font-bold text-lilac-800 bg-lilac-50 px-2 py-0.5 rounded border border-lilac-200">
+                          {grp.code}
+                        </span>
+                        <span className="text-xs font-bold text-ink-950">{grp.name}</span>
+                        <span className="text-[10px] font-semibold text-ink-400 bg-ink-50 px-1.5 py-0.5 rounded uppercase">
+                          GRUPO
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-ink-500 font-semibold">
+                        {movements.length} {movements.length === 1 ? "cuenta de movimiento" : "cuentas de movimiento"}
                       </span>
                     </div>
-                    <p className="text-[11px] text-ink-700 font-medium leading-relaxed">
-                      {detail.description}
-                    </p>
-                    <div className="text-[11px] text-ink-600 bg-lilac-50/60 rounded-lg p-2 border border-lilac-100/80 leading-relaxed">
-                      <strong className="text-ink-900">¿Qué contempla?</strong> {detail.examples}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 pl-3 border-l-2 border-lilac-200">
+                      {movements.map((mov) => (
+                        <div key={mov.code} className="flex items-center gap-2 text-xs text-ink-800 bg-lilac-50/50 hover:bg-lilac-100/60 px-2 py-1.5 rounded transition">
+                          <span className="font-mono text-[11px] font-bold text-lilac-900 shrink-0">{mov.code}</span>
+                          <span className="truncate font-medium">{mov.name}</span>
+                        </div>
+                      ))}
+                      {movements.length === 0 && (
+                        <span className="text-[11px] text-ink-400 italic">Sin cuentas de movimiento asignadas</span>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="p-3 border-t border-lilac-100 bg-lilac-50/30 flex justify-end">
+            <div className="p-3 border-t border-lilac-100 bg-lilac-50/30 flex items-center justify-between">
+              <span className="text-[11px] text-ink-500">
+                Al seleccionar el <strong>Grupo</strong>, se filtran automáticamente sus <strong>Cuentas de Movimiento</strong>.
+              </span>
               <button
                 type="button"
                 onClick={() => setGuiaCategoriasOpen(false)}
                 className="px-4 py-2 bg-ink-900 hover:bg-ink-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
               >
-                Cerrar Guía
+                Cerrar Plan
               </button>
             </div>
           </div>

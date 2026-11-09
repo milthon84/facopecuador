@@ -187,3 +187,17 @@ export async function deleteOrVoidExpense(expenseId: string) {
     return { success: false, error: err?.message || "Error al anular/eliminar el gasto" };
   }
 }
+
+/**
+ * Consulta la cuenta contable predeterminada o habitual de un proveedor según su RUC
+ */
+export async function lookupSupplierAccountAction(ruc: string) {
+  try {
+    const { getSupplierDefaultAccount } = await import("@/lib/expense-accounts-server");
+    const accountInfo = await getSupplierDefaultAccount(ruc);
+    return { success: true, data: accountInfo };
+  } catch (err: any) {
+    console.error("Error en lookupSupplierAccountAction:", err);
+    return { success: false, error: err?.message || "Error al consultar proveedor" };
+  }
+}

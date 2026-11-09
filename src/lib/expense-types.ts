@@ -99,6 +99,10 @@ export interface ExpenseItem {
   expense_id?: string;
   description: string;
   category?: string | null;
+  group_code?: string | null;
+  group_name?: string | null;
+  account_code?: string | null;
+  account_name?: string | null;
   quantity: number;
   unit_price: number;
   iva_rate: number; // 15 o 0
@@ -111,6 +115,10 @@ export interface ExpenseItemRow {
   id: string; // id temporal en cliente (e.g. "row-1")
   description: string;
   category?: string;
+  group_code?: string;
+  group_name?: string;
+  account_code?: string;
+  account_name?: string;
   quantity: number | string;
   unit_price: number | string;
   iva_rate: 0 | 15;

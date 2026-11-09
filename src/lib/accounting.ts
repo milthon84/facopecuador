@@ -307,7 +307,9 @@ export async function createExpenseJournalEntry(params: {
   expense_id:      string;
   expense_date:    string;
   supplier_name:   string;
-  category:        string;
+  category?:       string | null;
+  account_code?:   string | null;
+  account_name?:   string | null;
   payment_method:  string;
   subtotal_0:      number;
   subtotal_15:     number;
@@ -318,6 +320,8 @@ export async function createExpenseJournalEntry(params: {
   items?: {
     description: string;
     category?: string | null;
+    account_code?: string | null;
+    account_name?: string | null;
     subtotal: number;
   }[];
 }) {
@@ -325,26 +329,34 @@ export async function createExpenseJournalEntry(params: {
   const subtotalTotal  = r2(params.subtotal_0 + params.subtotal_15);
   const lines: JournalLine[] = [];
 
-  // Si vienen ítems con sus categorías, direccionamos contablemente cada ítem
+  // Si vienen ítems con sus cuentas o categorías, direccionamos contablemente cada ítem
   if (params.items && params.items.length > 0) {
     const debitsByAccount = new Map<string, { code: string; name: string; amount: number; descriptions: string[] }>();
 
     for (const it of params.items) {
       const itCategory = (it.category || params.category || "Otros").trim();
-      const account = EXPENSE_CATEGORY_ACCOUNT[itCategory]
-        ?? EXPENSE_CATEGORY_ACCOUNT[params.category]
-        ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+      let code = it.account_code || params.account_code;
+      let name = it.account_name || params.account_name;
+
+      if (!code) {
+        const account = EXPENSE_CATEGORY_ACCOUNT[itCategory]
+          ?? (params.category ? EXPENSE_CATEGORY_ACCOUNT[params.category] : undefined)
+          ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+        code = account.code;
+        name = account.name;
+      }
+
       const amt = r2(Number(it.subtotal || 0));
       if (amt <= 0) continue;
 
-      const existing = debitsByAccount.get(account.code);
+      const existing = debitsByAccount.get(code);
       if (existing) {
         existing.amount = r2(existing.amount + amt);
         if (it.description) existing.descriptions.push(it.description);
       } else {
-        debitsByAccount.set(account.code, {
-          code: account.code,
-          name: account.name,
+        debitsByAccount.set(code, {
+          code,
+          name: name || code,
           amount: amt,
           descriptions: it.description ? [it.description] : [],
         });
@@ -369,13 +381,20 @@ export async function createExpenseJournalEntry(params: {
     }
   }
 
-  // Fallback si no hay ítems detallados: debitar la cuenta de la categoría del gasto
+  // Fallback si no hay ítems detallados: debitar la cuenta seleccionada o la categoría
   if (lines.length === 0) {
-    const expenseAccount = EXPENSE_CATEGORY_ACCOUNT[params.category]
-      ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+    let code = params.account_code;
+    let name = params.account_name;
+    if (!code) {
+      const expenseAccount = (params.category ? EXPENSE_CATEGORY_ACCOUNT[params.category] : undefined)
+        ?? EXPENSE_CATEGORY_ACCOUNT["Otros"];
+      code = expenseAccount.code;
+      name = expenseAccount.name;
+    }
+
     lines.push({
-      account_code: expenseAccount.code,
-      account_name: expenseAccount.name,
+      account_code: code,
+      account_name: name || "Gasto Operativo",
       debit:  subtotalTotal,
       credit: 0,
       description: params.supplier_name,

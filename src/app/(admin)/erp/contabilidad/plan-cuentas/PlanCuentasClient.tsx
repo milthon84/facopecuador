@@ -10,6 +10,7 @@ type Account = {
   name: string;
   type: string;
   subtype: string;
+  is_movement?: boolean;
 };
 
 export default function PlanCuentasClient({ initialAccounts }: { initialAccounts: Account[] }) {
@@ -64,7 +65,7 @@ export default function PlanCuentasClient({ initialAccounts }: { initialAccounts
                 </tr>
               ) : (
                 filtered.map(acc => {
-                  const isGroup = acc.subtype === "grupo";
+                  const isGroup = acc.is_movement === false || acc.subtype === "grupo";
                   return (
                     <tr key={acc.id} className={`hover:bg-lilac-50/20 transition-colors ${isGroup ? 'bg-lilac-50/40 font-semibold' : ''}`}>
                       <td className="px-5 py-2.5 font-mono text-ink-600 text-xs">{acc.code}</td>
