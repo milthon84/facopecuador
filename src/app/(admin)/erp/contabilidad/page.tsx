@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck, ListTree } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
+import ExportarExcelContableButton from "./ExportarExcelContableButton";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 function fmt(n: number) { return n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 function periodLabel(period: string) {
+  if (period === "all") return "Todo el Historial";
   const [y, m] = period.split("-");
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("es-EC", { month: "long", year: "numeric" });
 }
@@ -26,9 +28,7 @@ export default async function ContabilidadPage({
   const period = searchParams.period
     ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const [year, month] = period.split("-").map(Number);
-  const from  = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const to    = new Date(year, month, 0).toISOString().split("T")[0];
+  const isAllPeriod = period === "all";
 
   // Meses disponibles (últimos 12)
   const months: string[] = [];
@@ -49,13 +49,20 @@ export default async function ContabilidadPage({
   const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
 
   // Cargar asientos del período con sus líneas
-  const { data: entries } = await supabase
+  let entriesQuery = supabase
     .from("journal_entries")
     .select("*, lines:journal_lines(*)")
-    .gte("entry_date", from)
-    .lte("entry_date", to)
     .eq("status", "posted")
-    .order("entry_date");
+    .order("entry_date", { ascending: true });
+
+  if (!isAllPeriod) {
+    const [year, month] = period.split("-").map(Number);
+    const from  = new Date(year, month - 1, 1).toISOString().split("T")[0];
+    const to    = new Date(year, month, 0).toISOString().split("T")[0];
+    entriesQuery = entriesQuery.gte("entry_date", from).lte("entry_date", to);
+  }
+
+  const { data: entries } = await entriesQuery;
 
   const allEntries = entries ?? [];
 
@@ -125,7 +132,17 @@ export default async function ContabilidadPage({
           <h1 className="text-xl font-bold text-ink-900">Contabilidad</h1>
         </div>
         {/* Selector de período */}
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex gap-1 overflow-x-auto items-center">
+          <Link
+            href={`/erp/contabilidad?tab=${tab}&period=all`}
+            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors flex items-center justify-center font-bold leading-tight ${
+              period === "all"
+                ? "bg-lilac-600 text-white shadow-xs"
+                : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
+            }`}
+          >
+            Todos
+          </Link>
           {months.map(m => {
             const yearNum = Number(m.split("-")[0]);
             const isAnnualClosed = annualClosedYears.has(yearNum);
@@ -221,9 +238,17 @@ export default async function ContabilidadPage({
       {/* ── LIBRO DIARIO ──────────────────────────────────────────────────── */}
       {tab === "diario" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30">
-            <h2 className="font-semibold text-sm text-ink-800">Libro Diario — {periodLabel(period)}</h2>
-            <p className="text-xs text-ink-400">{allEntries.length} asientos · {allLines.length} líneas</p>
+          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="font-semibold text-sm text-ink-800">Libro Diario / Mayor — {periodLabel(period)}</h2>
+              <p className="text-xs text-ink-400">{allEntries.length} asientos · {allLines.length} líneas</p>
+            </div>
+            <ExportarExcelContableButton
+              tab="diario"
+              period={period}
+              periodLabel={periodLabel(period)}
+              entries={allEntries}
+            />
           </div>
           {allEntries.length === 0 ? (
             <p className="text-center text-sm text-ink-400 py-12">Sin asientos en este período.</p>
@@ -271,13 +296,27 @@ export default async function ContabilidadPage({
       {tab === "resultados" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
-            <h2 className="font-semibold text-sm text-ink-800">Estado de Resultados — {periodLabel(period)}</h2>
-            <Link
-              href={`/erp/contabilidad/resultados?period=${period}`}
-              className="text-xs font-semibold text-lilac-600 hover:text-lilac-800 hover:underline flex items-center gap-1 bg-white border border-lilac-200 px-3 py-1 rounded-lg shadow-sm"
-            >
-              Ver más (Reporte completo) →
-            </Link>
+            <div>
+              <h2 className="font-semibold text-sm text-ink-800">Estado de Resultados — {periodLabel(period)}</h2>
+              <p className="text-xs text-ink-400">Ingresos, costos y utilidad neta NIIF</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <ExportarExcelContableButton
+                tab="resultados"
+                period={period}
+                periodLabel={periodLabel(period)}
+                balanceRows={balanceRows}
+                ingresos={ingresos}
+                gastos={gastos}
+                utilidad={utilidad}
+              />
+              <Link
+                href={`/erp/contabilidad/resultados?period=${period}`}
+                className="text-xs font-semibold text-lilac-600 hover:text-lilac-800 hover:underline flex items-center gap-1 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl shadow-2xs"
+              >
+                Ver más (Reporte completo) →
+              </Link>
+            </div>
           </div>
           <div className="p-5 space-y-4">
             {/* Ingresos */}
@@ -330,8 +369,17 @@ export default async function ContabilidadPage({
       {/* ── BALANCE DE COMPROBACIÓN ───────────────────────────────────────── */}
       {tab === "balance" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30">
-            <h2 className="font-semibold text-sm text-ink-800">Balance de Comprobación — {periodLabel(period)}</h2>
+          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="font-semibold text-sm text-ink-800">Balance de Comprobación — {periodLabel(period)}</h2>
+              <p className="text-xs text-ink-400">{balanceRows.length} cuentas registradas</p>
+            </div>
+            <ExportarExcelContableButton
+              tab="balance"
+              period={period}
+              periodLabel={periodLabel(period)}
+              balanceRows={balanceRows}
+            />
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -380,13 +428,24 @@ export default async function ContabilidadPage({
         <div className="space-y-4">
           <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-              <h2 className="font-semibold text-sm text-ink-800">Resumen IVA — {periodLabel(period)}</h2>
-              <Link
-                href={`/erp/contabilidad/iva?period=${period}`}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg shadow-sm"
-              >
-                Ver más (Form. 104 completo) →
-              </Link>
+              <div>
+                <h2 className="font-semibold text-sm text-ink-800">Resumen IVA — {periodLabel(period)}</h2>
+                <p className="text-xs text-ink-400">Declaración mensual de retenciones e impuestos</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <ExportarExcelContableButton
+                  tab="iva"
+                  period={period}
+                  periodLabel={periodLabel(period)}
+                  ivaData={{ ivaVentas, ivaCompras, ivaPagar }}
+                />
+                <Link
+                  href={`/erp/contabilidad/iva?period=${period}`}
+                  className="text-xs font-semibold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl shadow-2xs"
+                >
+                  Ver más (Form. 104 completo) →
+                </Link>
+              </div>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center py-3 border-b border-lilac-50">

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { TrendingUp, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { assertPermission } from "@/lib/auth-action";
+import ExportarExcelContableButton from "../ExportarExcelContableButton";
 
 export const dynamic = "force-dynamic";
 
@@ -96,17 +97,32 @@ export default async function EstadoResultadosPage({
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/erp/contabilidad"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0">
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-ink-900 flex items-center gap-2">
-            <TrendingUp className="text-lilac-600" /> Estado de Resultados
-          </h1>
-          <p className="text-sm text-ink-500">{title}</p>
+      <div className="flex items-center gap-3 mb-6 justify-between flex-wrap">
+        <div className="flex items-center gap-3">
+          <Link href="/erp/contabilidad"
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0">
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-ink-900 flex items-center gap-2">
+              <TrendingUp className="text-lilac-600" /> Estado de Resultados
+            </h1>
+            <p className="text-sm text-ink-500">{title}</p>
+          </div>
         </div>
+
+        <ExportarExcelContableButton
+          tab="resultados"
+          period={mode === "period" ? (searchParams.period ?? currentPeriod) : "rango"}
+          periodLabel={title}
+          balanceRows={[
+            ...ingresos.map(i => ({ code: i.code, name: i.name, debit: 0, credit: i.balance })),
+            ...gastos.map(g => ({ code: g.code, name: g.name, debit: g.balance, credit: 0 })),
+          ]}
+          ingresos={totalIngresos}
+          gastos={totalGastos}
+          utilidad={utilidadNeta}
+        />
       </div>
 
       {/* Filtros */}
