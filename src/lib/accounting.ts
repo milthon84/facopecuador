@@ -7,28 +7,30 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-// ── Mapeo: categoría de gasto → cuenta contable ────────────────────────────
+// ── Mapeo: categoría de gasto → cuenta contable (SIEMPRE cuentas de MOVIMIENTO) ──────────────────
+//   ⚠️  REGLA CONTABLE NIIF: Nunca se imputa a cuentas de Grupo (nodos intermedios del plan).
+//       Toda línea de asiento debe apuntar a una cuenta hija de movimiento (4 segmentos).
 export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: string }> = {
-  // 6 Categorías oficiales solicitadas
-  "Insumo y Material":         { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
-  "Suministro":                { code: "5.2.05",    name: "Suministros Oficina y Aseo" },
+  // ── 6 Categorías principales → cuentas hijas de movimiento ──────────────
+  "Insumo y Material":         { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
+  "Suministro":                { code: "5.2.05.01", name: "Útiles de Oficina" },
   "Activo fijo":               { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
-  "Servicio":                  { code: "5.2.03",    name: "Servicios Básicos (Luz, Agua, Internet)" },
+  "Servicio":                  { code: "5.2.03.01", name: "Energía Eléctrica" },
   "Software y Licencias":      { code: "1.2.01.03", name: "Equipos de Computación y Software" },
-  "Otros Gastos":              { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
+  "Otros Gastos":              { code: "5.2.19.01", name: "Alimentación Cafetería" },
 
-  // Compatibilidad con nombres anteriores y registros existentes
-  "Materiales e Instrumental": { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
-  "Seguros y Suscripciones":   { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
-  "Insumos dentales":          { code: "5.1.01",    name: "Insumos y Materiales Clínicos" },
+  // ── Alias / compatibilidad con categorías anteriores ───────────────────
+  "Materiales e Instrumental": { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
+  "Insumos dentales":          { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
   "Equipos":                   { code: "1.2.01.01", name: "Equipos Médicos y Odontológicos" },
-  "Arriendo":                  { code: "5.2.02",    name: "Arriendo del Local / Consultorio" },
-  "Servicios básicos":         { code: "5.2.03",    name: "Servicios Básicos (Luz, Agua, Internet)" },
-  "Salarios":                  { code: "5.2.01",    name: "Sueldos, Salarios y Beneficios" },
-  "Suministros oficina":       { code: "5.2.05",    name: "Suministros Oficina y Aseo" },
-  "Mantenimiento":             { code: "5.2.04",    name: "Mantenimiento Equipos e Instalaciones" },
-  "Publicidad":                { code: "5.2.06",    name: "Publicidad, Marketing y Comisiones" },
-  "Otros":                     { code: "5.2.09",    name: "Impuestos, Tasas y Otros Gastos" },
+  "Arriendo":                  { code: "5.2.02.01", name: "Arriendo de Local" },
+  "Servicios básicos":         { code: "5.2.03.01", name: "Energía Eléctrica" },
+  "Salarios":                  { code: "5.2.01.01", name: "Sueldos y Salarios" },
+  "Suministros oficina":       { code: "5.2.05.01", name: "Útiles de Oficina" },
+  "Mantenimiento":             { code: "5.2.04.01", name: "Mantenimiento Instalaciones/Adecuaciones" },
+  "Publicidad":                { code: "5.2.06",    name: "Publicidad, Marketing y Comisiones" },   // sin hijas creadas aún
+  "Seguros y Suscripciones":   { code: "5.2.10.01", name: "Seguro" },
+  "Otros":                     { code: "5.2.19.01", name: "Alimentación Cafetería" },
 };
 
 // ── Mapeo: forma de pago del gasto → cuenta de contrapartida ──────────────
@@ -47,6 +49,17 @@ interface JournalLine {
   description?: string;
 }
 
+// ── Cuentas de GRUPO que nunca deben recibir imputaciones directas ──────────
+// Regla NIIF: solo las cuentas hijas (is_movement = true) admiten débitos/créditos.
+const FORBIDDEN_GROUP_CODES = new Set([
+  "5.1.01","5.1.02","5.1.03","5.1.04","5.1.05",
+  "5.2.01","5.2.02","5.2.03","5.2.04","5.2.05",
+  "5.2.06","5.2.07","5.2.08","5.2.09","5.2.10",
+  "5.2.11","5.2.19","5.4","5.4.01",
+  "4.1.01","4.1.02","4.1.03","4.1.04",
+  "4.2.01","4.3.01","4.4.01",
+]);
+
 // ── Insertar asiento completo ──────────────────────────────────────────────
 async function insertJournalEntry(params: {
   entry_date:      string;
@@ -64,6 +77,16 @@ async function insertJournalEntry(params: {
   const totalCredit = r2(params.lines.reduce((s, l) => s + l.credit, 0));
   if (totalDebit !== totalCredit) {
     throw new Error(`Asiento descuadrado: débitos ${totalDebit} ≠ créditos ${totalCredit}`);
+  }
+
+  // ⚠️ Validar que ninguna línea impute a una cuenta de GRUPO
+  for (const line of params.lines) {
+    if (FORBIDDEN_GROUP_CODES.has(line.account_code)) {
+      throw new Error(
+        `Error contable: La cuenta "${line.account_code} — ${line.account_name}" es una cuenta de GRUPO ` +
+        `y no puede recibir imputaciones directas. Use la cuenta hija correspondiente.`
+      );
+    }
   }
 
   const { data: entry, error } = await supabase
@@ -124,8 +147,9 @@ export async function createInvoiceJournalEntry(params: {
       description: params.client_name,
     },
     {
-      account_code: "4.1.01",
-      account_name: "Servicios de Prevención e Higiene", // Generic default fallback for invoice
+      // ⚠️ Cuenta de MOVIMIENTO: 4.1.01.01 (Servicios Odontológicos), no el grupo 4.1.01
+      account_code: "4.1.01.01",
+      account_name: "Servicios Odontológicos",
       debit:  0,
       credit: subtotalTotal,
     },
@@ -388,6 +412,9 @@ export async function createExpenseJournalEntry(params: {
 
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────
 const ASSET_ACCOUNTS: Record<string, { asset: string; assetName: string; dep: string; depName: string; depExp: string; depExpName: string }> = {
+  // ⚠️ depExp apunta a cuentas de movimiento hijas de 5.2.08 (cuando existan) —
+  //    por ahora 5.2.08 es el único grupo de Depreciaciones sin hijas creadas aún;
+  //    se mantiene para no romper asientos existentes hasta que se creen las subcuentas.
   "Equipos odontológicos":      { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
   "Muebles y enseres":          { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08", depExpName: "Depreciaciones" },
   "Equipos de computación":     { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08", depExpName: "Depreciaciones" },

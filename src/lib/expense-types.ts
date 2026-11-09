@@ -20,15 +20,15 @@ export interface CategoryDetail {
 export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetail> = {
   "Insumo y Material": {
     name: "Insumo y Material",
-    accountCode: "5.1.01",
-    accountName: "Insumos y Materiales Clínicos",
+    accountCode: "5.1.01.01",
+    accountName: "Insumos Dentales Utilizados",
     description: "Insumos clínicos, odontológicos y materiales de atención",
     examples: "Guantes, gasas, anestesias, resinas, suturas, jeringas, instrumental descartable o menor, biomateriales, brackets y fármacos.",
   },
   "Suministro": {
     name: "Suministro",
-    accountCode: "5.2.05",
-    accountName: "Suministros Oficina y Aseo",
+    accountCode: "5.2.05.01",
+    accountName: "Útiles de Oficina",
     description: "Artículos de papelería, oficina, limpieza y cafetería",
     examples: "Papel bond, tóner, archivadores, cloro, desinfectantes, papel higiénico, jabón, café, azúcar y útiles de oficina.",
   },
@@ -41,10 +41,10 @@ export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetai
   },
   "Servicio": {
     name: "Servicio",
-    accountCode: "5.2.03",
-    accountName: "Servicios Básicos y Tercerizados",
+    accountCode: "5.2.03.01",
+    accountName: "Energía Eléctrica",
     description: "Servicios básicos, mantenimientos, fletes y servicios externos",
-    examples: "Agua potable, energía eléctrica, internet, telefonía, mantenimientos preventivos o correctivos de equipos, mensajería y seguridad.",
+    examples: "Agua potable, energía eléctrica, internet, telefonía, Datafast, mantenimientos preventivos o correctivos de equipos, mensajería y seguridad.",
   },
   "Software y Licencias": {
     name: "Software y Licencias",
@@ -55,10 +55,10 @@ export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetai
   },
   "Otros Gastos": {
     name: "Otros Gastos",
-    accountCode: "5.2.09",
-    accountName: "Impuestos, Tasas y Otros Gastos",
-    description: "Seguros, suscripciones, tasas municipales y notariales",
-    examples: "Pólizas de seguros médicos o de infraestructura, tasas de bomberos, patentes municipales, notariales y suscripciones a gremios.",
+    accountCode: "5.2.19.01",
+    accountName: "Alimentación Cafetería",
+    description: "Gastos varios no clasificados, cafetería y otros misceláneos",
+    examples: "Refrigerios, alimentación de personal, gastos menores no categorizados.",
   },
 };
 
