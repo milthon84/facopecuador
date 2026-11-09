@@ -83,8 +83,13 @@ export async function getExpenseAccountsCatalog(): Promise<ExpenseAccountsCatalo
     accountsByGroup[mov.group_code].push(mov);
   }
 
+  // Solo incluir grupos que tengan al menos una cuenta de movimiento
+  const groupsWithMovements = groups.filter(
+    (g) => accountsByGroup[g.code] && accountsByGroup[g.code].length > 0
+  );
+
   return {
-    groups,
+    groups: groupsWithMovements,
     accountsByGroup,
     allMovements,
   };

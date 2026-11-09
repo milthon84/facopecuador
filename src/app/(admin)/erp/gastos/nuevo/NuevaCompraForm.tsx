@@ -107,9 +107,14 @@ export default function NuevaCompraForm({
   const [guiaCategoriasOpen, setGuiaCategoriasOpen] = useState(false);
 
   // Catálogo contable dinámico
-  const groups = accountsCatalog?.groups || FALLBACK_EXPENSE_GROUPS;
   const accountsByGroup = accountsCatalog?.accountsByGroup || {};
   const allMovements = accountsCatalog?.allMovements || FALLBACK_EXPENSE_MOVEMENTS;
+  const rawGroups = accountsCatalog?.groups || FALLBACK_EXPENSE_GROUPS;
+
+  // Solo mostrar grupos que tengan al menos una cuenta de movimiento
+  const groups = rawGroups.filter(
+    (g) => accountsByGroup[g.code] && accountsByGroup[g.code].length > 0
+  );
 
   const defaultGroupCode = area === "clinica" ? "5.1.01" : "5.2.05";
   const defaultAccountCode = area === "clinica" ? "5.1.01.01" : "5.2.05.01";
@@ -888,10 +893,10 @@ export default function NuevaCompraForm({
                 <CheckCircle2 size={13} className="text-teal-600 shrink-0" />
                 <span>
                   <strong>Cuenta habitual detectada:</strong>{" "}
-                  <span className="font-mono bg-teal-100 text-teal-950 px-1.5 py-0.5 rounded font-semibold text-[11px]">
-                    {detectedSupplierAccount?.account_code}
+                  <span className="bg-teal-100 text-teal-950 px-2 py-0.5 rounded font-semibold text-xs">
+                    {detectedSupplierAccount?.account_name}
                   </span>{" "}
-                  · {detectedSupplierAccount?.account_name} (preseleccionada en el detalle)
+                  (preseleccionada en el detalle)
                 </span>
               </div>
             )}
@@ -1049,32 +1054,32 @@ export default function NuevaCompraForm({
                       </td>
 
                       {/* Selector Grupo Contable */}
-                      <td className="py-2 px-2 align-middle w-44 sm:w-48">
+                      <td className="py-2 px-2 align-middle w-44 sm:w-52">
                         <select
                           value={grpCode}
                           onChange={(e) => updateItemGroup(item.id, e.target.value)}
-                          title={`${grpCode} - ${item.group_name || ""}`}
+                          title={item.group_name || grpCode}
                           className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
                         >
                           {groups.map((g) => (
                             <option key={g.code} value={g.code}>
-                              {g.code} {g.name}
+                              {g.name}
                             </option>
                           ))}
                         </select>
                       </td>
 
                       {/* Selector Cuenta de Gasto (Movimiento) */}
-                      <td className="py-2 px-2 align-middle w-48 sm:w-56">
+                      <td className="py-2 px-2 align-middle w-48 sm:w-60">
                         <select
                           value={selectedAcc}
                           onChange={(e) => updateItemAccount(item.id, e.target.value)}
-                          title={`${selectedAcc} - ${item.account_name || ""}`}
+                          title={item.account_name || selectedAcc}
                           className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-medium focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
                         >
                           {movList.map((m) => (
                             <option key={m.code} value={m.code}>
-                              {m.code} {m.name}
+                              {m.name}
                             </option>
                           ))}
                         </select>
