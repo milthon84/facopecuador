@@ -11,6 +11,7 @@ import AnularFacturaButton from "@/components/AnularFacturaButton";
 import EmitirNotaCreditoModal from "@/components/EmitirNotaCreditoModal";
 import SyncNotaCreditoButton from "@/components/SyncNotaCreditoButton";
 import InvoicePhotosSection, { InvoicePhoto } from "@/components/InvoicePhotosSection";
+import AsientoContableModal, { JournalEntryItem, JournalLineItem } from "@/components/AsientoContableModal";
 import { getTipoIdentificacion } from "@/lib/sri";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 
@@ -176,6 +177,201 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const isInvoiceLocked = invoice.sri_status === "authorized" || invoice.sri_status === "cancelled" || invoice.sri_status === "submitted";
   const hasPhotos = allPhotos.length > 0;
 
+  // Consultar asientos contables vinculados a la factura y/o nota de crédito
+  let journalEntries: JournalEntryItem[] = [];
+  try {
+    const refIds = [id];
+    if (existingCreditNote?.id) refIds.push(existingCreditNote.id);
+
+    const { data: rawEntries } = await supabase
+      .from("journal_entries")
+      .select(`
+        id,
+        entry_number,
+        entry_date,
+        description,
+        reference_type,
+        reference_id,
+        status,
+        created_at,
+        journal_lines (
+          id,
+          account_code,
+          account_name,
+          debit,
+          credit,
+          description
+        )
+      `)
+      .in("reference_type", ["invoice", "credit_note"])
+      .in("reference_id", refIds)
+      .order("created_at", { ascending: true });
+
+    if (rawEntries && rawEntries.length > 0) {
+      journalEntries = rawEntries as any[];
+    }
+  } catch (jErr) {
+    console.warn("No se pudieron consultar asientos de journal_entries para factura:", jErr);
+  }
+
+  // Si no hay asiento registrado de venta en journal_entries, proyectar el devengo NIIF
+  const hasSaleEntry = journalEntries.some(
+    (e) =>
+      e.reference_type === "invoice" &&
+      e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("4."))
+  );
+
+  const tot = Number(invoice.total || 0);
+  const subtotalTotal = Number(invoice.subtotal_0 || 0) + Number(invoice.subtotal_15 || 0);
+  const ivaAmt = Number(invoice.iva_amount || 0);
+  const invDate =
+    invoice.issue_date ||
+    (invoice.created_at ? invoice.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+
+  if (!hasSaleEntry) {
+    const saleLines: JournalLineItem[] = [
+      {
+        account_code: "1.1.02.01",
+        account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+        debit: tot,
+        credit: 0,
+        description: invoice.client_name,
+      },
+      {
+        account_code: "4.1.01.01",
+        account_name: "Servicios Odontológicos",
+        debit: 0,
+        credit: subtotalTotal > 0 ? subtotalTotal : tot,
+      },
+    ];
+
+    if (ivaAmt > 0) {
+      saleLines.push({
+        account_code: "2.1.03.01",
+        account_name: "IVA en Ventas por Pagar",
+        debit: 0,
+        credit: ivaAmt,
+      });
+    }
+
+    journalEntries.unshift({
+      id: "proj-invoice-sale",
+      entry_date: invDate,
+      description: `Factura de Venta ${invoice.invoice_number || "Borrador"} — ${invoice.client_name}`,
+      reference_type: "invoice",
+      reference_id: invoice.id,
+      journal_lines: saleLines,
+    });
+  }
+
+  // Verificar si hay cobros/pagos registrados para mostrarlos en el asiento
+  const hasPaymentEntry = journalEntries.some(
+    (e) =>
+      e.journal_lines.some(
+        (l) => (l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02") && Number(l.debit) > 0
+      )
+  );
+
+  if (!hasPaymentEntry) {
+    if (payments && payments.length > 0) {
+      payments.forEach((p: any, idx: number) => {
+        const pAmt = Number(p.amount || 0);
+        const pDate = p.payment_date || p.created_at?.split("T")[0] || invDate;
+        const isEfectivo = p.payment_method === "efectivo";
+        journalEntries.push({
+          id: `proj-pay-${p.id || idx}`,
+          entry_date: pDate,
+          description: `Cobro Factura ${invoice.invoice_number || ""} (${p.payment_method || "Cobro"})`,
+          reference_type: "invoice",
+          reference_id: invoice.id,
+          journal_lines: [
+            {
+              account_code: isEfectivo ? "1.1.01.02" : "1.1.01.03",
+              account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
+              debit: pAmt,
+              credit: 0,
+            },
+            {
+              account_code: "1.1.02.01",
+              account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+              debit: 0,
+              credit: pAmt,
+              description: `Liquidación cobro factura ${invoice.client_name}`,
+            },
+          ],
+        });
+      });
+    } else if (invoice.payment_status === "paid") {
+      journalEntries.push({
+        id: "proj-pay-full",
+        entry_date: invDate,
+        description: `Cobro Total Factura ${invoice.invoice_number || ""}`,
+        reference_type: "invoice",
+        reference_id: invoice.id,
+        journal_lines: [
+          {
+            account_code: "1.1.01.03",
+            account_name: "Bancos Cuentas Corrientes y Ahorros",
+            debit: tot,
+            credit: 0,
+          },
+          {
+            account_code: "1.1.02.01",
+            account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+            debit: 0,
+            credit: tot,
+            description: `Cobro total paciente ${invoice.client_name}`,
+          },
+        ],
+      });
+    }
+  }
+
+  // Verificar si hay Nota de Crédito asociada y reflejarla si no tiene asiento físico
+  const hasCnEntry = journalEntries.some(
+    (e) => e.reference_type === "credit_note" || e.description.toLowerCase().includes("crédito")
+  );
+
+  if (existingCreditNote && !hasCnEntry) {
+    const cnTotal = Number(existingCreditNote.total || tot);
+    const cnSubtotal = Math.max(0, cnTotal - (ivaAmt > 0 ? (cnTotal * 0.15) / 1.15 : 0));
+    const cnIva = Math.round((cnTotal - cnSubtotal) * 100) / 100;
+    const cnDate = existingCreditNote.created_at?.split("T")[0] || invDate;
+
+    const cnLines: JournalLineItem[] = [
+      {
+        account_code: "4.1.01.01",
+        account_name: "Servicios Odontológicos (Reversión)",
+        debit: Math.round(cnSubtotal * 100) / 100,
+        credit: 0,
+      },
+    ];
+    if (cnIva > 0) {
+      cnLines.push({
+        account_code: "2.1.03.01",
+        account_name: "IVA en Ventas por Pagar (Reversión)",
+        debit: cnIva,
+        credit: 0,
+      });
+    }
+    cnLines.push({
+      account_code: "1.1.02.01",
+      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+      debit: 0,
+      credit: cnTotal,
+      description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""}`,
+    });
+
+    journalEntries.push({
+      id: `proj-cn-${existingCreditNote.id}`,
+      entry_date: cnDate,
+      description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""} — Reversión Factura ${invoice.invoice_number}`,
+      reference_type: "credit_note",
+      reference_id: existingCreditNote.id,
+      journal_lines: cnLines,
+    });
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -199,7 +395,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <p className="text-xs text-ink-500 mt-0.5">{issuedAt}</p>
         </div>
         {/* Acciones de Factura */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botón Ver Asiento Contable */}
+          <AsientoContableModal entries={journalEntries} />
+
           {/* Botón Registrar Cobro (Top) */}
           {(invoice.payment_status === "pending" || invoice.payment_status === "partial") && (
             <Link href={`/erp/cuentas-por-cobrar?pay=${invoice.id}`}
