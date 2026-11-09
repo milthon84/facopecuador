@@ -35,7 +35,9 @@ import {
 } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
-import AsientoContableGastoCard, { JournalEntryItem } from "./AsientoContableGastoCard";
+import AsientoContableModal from "./AsientoContableModal";
+import ComprobanteModalButton from "./ComprobanteModalButton";
+import { JournalEntryItem } from "./AsientoContableGastoCard";
 import {
   ExpenseItem,
   FacturaRecibida,
@@ -355,45 +357,65 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      {/* Encabezado */}
-      <div className="flex items-center gap-3">
-        <Link
-          href="/erp/gastos"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
-            <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${areaConfig.badgeCls}`}>
-              {area === "clinica" && <Stethoscope size={12} />}
-              {area === "cursos" && <GraduationCap size={12} />}
-              {area === "general" && <Building2 size={12} />}
-              {areaConfig.label}
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${docTypeInfo.badgeCls}`}
-              title={docTypeInfo.fullDesc}
-            >
-              <FileText size={12} />
-              {docTypeInfo.name}
-            </span>
-            {clave ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
-                <CheckCircle2 size={12} className="text-emerald-600" /> Factura SRI Vinculada
+      {/* Encabezado con Botones de Ver Asiento y Ver Comprobantes */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/erp/gastos"
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-ink-900 truncate">{expense.supplier_name}</h1>
+              <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${areaConfig.badgeCls}`}>
+                {area === "clinica" && <Stethoscope size={12} />}
+                {area === "cursos" && <GraduationCap size={12} />}
+                {area === "general" && <Building2 size={12} />}
+                {areaConfig.label}
               </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
-                Sin Factura SRI
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${docTypeInfo.badgeCls}`}
+                title={docTypeInfo.fullDesc}
+              >
+                <FileText size={12} />
+                {docTypeInfo.name}
               </span>
-            )}
+              {clave ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
+                  <CheckCircle2 size={12} className="text-emerald-600" /> Factura SRI Vinculada
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
+                  Sin Factura SRI
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-ink-500 capitalize mt-0.5">{dateStr}</p>
           </div>
-          <p className="text-xs text-ink-500 capitalize mt-0.5">{dateStr}</p>
         </div>
-        {expense.status === "void" && (
-          <span className="text-xs font-bold bg-red-100 text-red-700 border border-red-200 px-2.5 py-1 rounded-full">Anulado</span>
-        )}
+
+        {/* Botones de Acción Superiores: Ver Asiento Contable y Ver Comprobantes con el Ojo */}
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-center sm:ml-auto">
+          {expense.status === "void" && (
+            <span className="text-xs font-bold bg-red-100 text-red-700 border border-red-200 px-2.5 py-1 rounded-full">
+              Anulado
+            </span>
+          )}
+
+          <AsientoContableModal
+            entries={journalEntries}
+            expenseTotal={Number(expense.total)}
+          />
+
+          {(receiptUrl || paymentReceiptUrl) && (
+            <ComprobanteModalButton
+              receiptUrl={receiptUrl}
+              paymentReceiptUrl={paymentReceiptUrl}
+            />
+          )}
+        </div>
       </div>
 
       {isClosed && (
@@ -405,13 +427,6 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       )}
-
-      {/* ── Asiento Contable Completo (Libro Diario NIIF) en la parte superior ── */}
-      <AsientoContableGastoCard
-        entries={journalEntries}
-        expenseTotal={Number(expense.total)}
-        paymentMethod={expense.payment_method}
-      />
 
       {/* Tarjeta de Factura Recibida SRI Vinculada */}
       {linkedFactura ? (

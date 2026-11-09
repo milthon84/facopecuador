@@ -192,11 +192,11 @@ export default function NuevaCompraForm({
       {
         id: "item-1",
         description: "",
-        group_code: defaultGroupCode,
-        group_name: groups.find((g) => g.code === defaultGroupCode)?.name || "",
-        account_code: defaultAccountCode,
-        account_name: allMovements.find((m) => m.code === defaultAccountCode)?.name || "",
-        category: "Insumos Clínicos",
+        group_code: "",
+        group_name: "",
+        account_code: "",
+        account_name: "",
+        category: "",
         quantity: 1,
         unit_price: "",
         iva_rate: 15,
@@ -277,6 +277,17 @@ export default function NuevaCompraForm({
         );
       } else {
         setDetectedSupplierAccount({ isNew: true });
+        // Si el proveedor no tiene cuenta habitual, limpiar para obligar a seleccionar
+        setItems((prev) =>
+          prev.map((it) => ({
+            ...it,
+            group_code: "",
+            group_name: "",
+            account_code: "",
+            account_name: "",
+            category: "",
+          }))
+        );
       }
     } catch (err) {
       console.warn("Error buscando cuenta habitual de proveedor:", err);
@@ -384,10 +395,10 @@ export default function NuevaCompraForm({
   // Manejo de filas de detalle
   function addItemRow() {
     const lastItem = items[items.length - 1];
-    const lastGrp = lastItem?.group_code || detectedSupplierAccount?.group_code || defaultGroupCode;
-    const lastAcc = lastItem?.account_code || detectedSupplierAccount?.account_code || defaultAccountCode;
-    const grp = groups.find((g) => g.code === lastGrp);
-    const mov = allMovements.find((m) => m.code === lastAcc);
+    const lastGrp = lastItem?.group_code || detectedSupplierAccount?.group_code || "";
+    const lastAcc = lastItem?.account_code || detectedSupplierAccount?.account_code || "";
+    const grp = lastGrp ? groups.find((g) => g.code === lastGrp) : undefined;
+    const mov = lastAcc ? allMovements.find((m) => m.code === lastAcc) : undefined;
 
     setItems((prev) => [
       ...prev,
@@ -398,7 +409,7 @@ export default function NuevaCompraForm({
         group_name: grp?.name || "",
         account_code: lastAcc,
         account_name: mov?.name || "",
-        category: mov?.name || "Gasto Operativo",
+        category: mov?.name || "",
         quantity: 1,
         unit_price: "",
         iva_rate: docType === "factura" ? 15 : 0,
@@ -417,8 +428,9 @@ export default function NuevaCompraForm({
 
   function updateItemGroup(id: string, newGroupCode: string) {
     const grp = groups.find((g) => g.code === newGroupCode);
-    const grpMovements = accountsByGroup[newGroupCode] || [];
-    const firstAcc = grpMovements[0] || allMovements.find((m) => m.group_code === newGroupCode);
+    const grpMovements = newGroupCode ? accountsByGroup[newGroupCode] || [] : [];
+    // Si el grupo solo tiene 1 movimiento, auto-seleccionarlo; si tiene varios, dejar vacío para que elija
+    const autoAcc = grpMovements.length === 1 ? grpMovements[0] : undefined;
     setItems((prev) =>
       prev.map((row) => {
         if (row.id !== id) return row;
@@ -426,9 +438,9 @@ export default function NuevaCompraForm({
           ...row,
           group_code: newGroupCode,
           group_name: grp?.name || "",
-          account_code: firstAcc?.code || "",
-          account_name: firstAcc?.name || "",
-          category: firstAcc?.name || "",
+          account_code: autoAcc?.code || "",
+          account_name: autoAcc?.name || "",
+          category: autoAcc?.name || "",
         };
       })
     );
@@ -627,6 +639,19 @@ export default function NuevaCompraForm({
     if (effectiveTotal <= 0) {
       setErrorMsg("El total del gasto debe ser mayor a cero.");
       return;
+    }
+
+    // Validación obligatoria de Grupo y Gasto en cada fila
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it.group_code || it.group_code.trim() === "") {
+        setErrorMsg(`Debes seleccionar el GRUPO contable obligatorio para el ítem #${i + 1}.`);
+        return;
+      }
+      if (!it.account_code || it.account_code.trim() === "") {
+        setErrorMsg(`Debes seleccionar la cuenta de GASTO obligatoria para el ítem #${i + 1}.`);
+        return;
+      }
     }
 
     setLoading(true);
@@ -1133,11 +1158,11 @@ export default function NuevaCompraForm({
               <tbody className="divide-y divide-lilac-100">
                 {items.map((item, idx) => {
                   const calc = calculateItemRow(item);
-                  const grpCode = item.group_code || defaultGroupCode;
-                  const movList = accountsByGroup[grpCode] && accountsByGroup[grpCode].length > 0
+                  const grpCode = item.group_code || "";
+                  const movList = grpCode && accountsByGroup[grpCode] && accountsByGroup[grpCode].length > 0
                     ? accountsByGroup[grpCode]
-                    : allMovements;
-                  const selectedAcc = item.account_code || movList[0]?.code || "";
+                    : [];
+                  const selectedAcc = item.account_code || "";
 
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
@@ -1157,9 +1182,15 @@ export default function NuevaCompraForm({
                         <select
                           value={grpCode}
                           onChange={(e) => updateItemGroup(item.id, e.target.value)}
-                          title={item.group_name || grpCode}
-                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
+                          title={item.group_name || grpCode || "Seleccionar Grupo"}
+                          required
+                          className={`w-full border rounded-lg px-2 py-1.5 bg-white text-xs font-semibold focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate ${
+                            !grpCode
+                              ? "border-amber-400 bg-amber-50/60 text-amber-900 font-bold"
+                              : "border-lilac-200 text-ink-900"
+                          }`}
                         >
+                          <option value="">— Seleccionar Grupo * —</option>
                           {groups.map((g) => (
                             <option key={g.code} value={g.code}>
                               {g.name}
@@ -1173,9 +1204,18 @@ export default function NuevaCompraForm({
                         <select
                           value={selectedAcc}
                           onChange={(e) => updateItemAccount(item.id, e.target.value)}
-                          title={item.account_name || selectedAcc}
-                          className="w-full border border-lilac-200 rounded-lg px-2 py-1.5 bg-white text-ink-900 text-xs font-medium focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate"
+                          title={item.account_name || selectedAcc || "Seleccionar Gasto"}
+                          required
+                          disabled={!grpCode}
+                          className={`w-full border rounded-lg px-2 py-1.5 bg-white text-xs font-medium focus:ring-1 focus:ring-lilac-400 focus:outline-none truncate ${
+                            !selectedAcc
+                              ? "border-amber-400 bg-amber-50/60 text-amber-900 font-bold"
+                              : "border-lilac-200 text-ink-900"
+                          }`}
                         >
+                          <option value="">
+                            {!grpCode ? "— Primero elige Grupo —" : "— Seleccionar Gasto * —"}
+                          </option>
                           {movList.map((m) => (
                             <option key={m.code} value={m.code}>
                               {m.name}
@@ -1557,42 +1597,43 @@ export default function NuevaCompraForm({
                     </div>
                   )}
                 </div>
+              </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const expId = savedExpenseId || (isEditing ? initialData?.id : null);
-                      if (expId) {
-                        window.location.href = `/erp/gastos/${expId}`;
-                      } else {
-                        window.location.href = "/erp/gastos";
-                      }
-                    }}
-                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-lilac-200 bg-white hover:bg-lilac-50 text-ink-600 text-xs font-semibold transition text-center"
-                  >
-                    Omitir (Dejar pendiente en Ctas. por Pagar) →
-                  </button>
+              {/* Botones de acción alineados estrictamente a la DERECHA */}
+              <div className="pt-3 border-t border-lilac-100 flex items-center justify-end gap-3 w-full ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const expId = savedExpenseId || (isEditing ? initialData?.id : null);
+                    if (expId) {
+                      window.location.href = `/erp/gastos/${expId}`;
+                    } else {
+                      window.location.href = "/erp/gastos";
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl border border-lilac-200 bg-white hover:bg-lilac-50 text-ink-600 text-xs font-semibold transition text-center shadow-2xs"
+                >
+                  Omitir (Dejar pendiente en Ctas. por Pagar) →
+                </button>
 
-                  <button
-                    type="button"
-                    disabled={isSubmittingPayment}
-                    onClick={handleRecordPayment}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
-                  >
-                    {isSubmittingPayment ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Cruzando con Banco...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={15} />
-                        <span>Registrar y Guardar Pago</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  disabled={isSubmittingPayment}
+                  onClick={handleRecordPayment}
+                  className="inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
+                >
+                  {isSubmittingPayment ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Cruzando con Banco...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={15} />
+                      <span>Registrar y Guardar Pago</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
