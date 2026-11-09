@@ -482,119 +482,97 @@ export default function PlanCuentasClient({
 
       {/* Contenedor Principal: Filtros y Tabla */}
       <div className="bg-white border border-lilac-200/80 rounded-2xl shadow-xs overflow-hidden">
-        {/* Barra de Filtros y Búsqueda */}
-        <div className="p-4 border-b border-lilac-100 bg-lilac-50/30 space-y-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Buscador */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" size={16} />
-              <input
-                type="text"
-                placeholder="Buscar por código (ej. 2.1.05) o nombre..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-lilac-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-lilac-400 focus:ring-2 focus:ring-lilac-100 bg-white transition-all shadow-2xs text-ink-900"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            {/* Selector de Nivel */}
-            <div className="flex items-center gap-1 bg-lilac-100/60 p-1 rounded-xl self-start sm:self-auto">
+        {/* Barra de Filtros Compacta */}
+        <div className="p-2.5 sm:p-3 border-b border-lilac-100 bg-lilac-50/25 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          {/* Buscador compacto */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar código (ej. 2.1.05) o nombre..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 border border-lilac-200 rounded-xl text-xs focus:outline-none focus:border-lilac-400 focus:ring-2 focus:ring-lilac-100 bg-white transition-all text-ink-900 shadow-2xs placeholder:text-ink-400 font-medium"
+            />
+            {search && (
               <button
                 type="button"
-                onClick={() => setLevelFilter("TODOS")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                  levelFilter === "TODOS"
-                    ? "bg-white text-ink-900 shadow-2xs font-bold"
-                    : "text-ink-600 hover:text-ink-900"
-                }`}
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600"
               >
-                Todos ({accounts.length})
+                <X size={13} />
               </button>
-              <button
-                type="button"
-                onClick={() => setLevelFilter("GRUPOS")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 ${
-                  levelFilter === "GRUPOS"
-                    ? "bg-white text-blue-900 shadow-2xs font-bold"
-                    : "text-ink-600 hover:text-ink-900"
-                }`}
-              >
-                <Folder size={12} className="text-blue-600" />
-                Grupos
-              </button>
-              <button
-                type="button"
-                onClick={() => setLevelFilter("MOVIMIENTO")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 ${
-                  levelFilter === "MOVIMIENTO"
-                    ? "bg-white text-teal-900 shadow-2xs font-bold"
-                    : "text-ink-600 hover:text-ink-900"
-                }`}
-              >
-                <FileText size={12} className="text-teal-600" />
-                Movimiento
-              </button>
-            </div>
+            )}
           </div>
 
-          {/* Filtros secundarios: Tipo contable y estado */}
-          <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-lilac-100/60">
-            {/* Botones por tipo contable */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-              <span className="text-[11px] font-bold text-ink-400 uppercase tracking-wide mr-1 flex items-center gap-1 shrink-0">
-                <Filter size={11} /> Tipo:
-              </span>
-              {[
-                { value: "TODOS", label: "Todos" },
-                { value: "ACTIVO", label: "Activo (1)" },
-                { value: "PASIVO", label: "Pasivo (2)" },
-                { value: "PATRIMONIO", label: "Patrimonio (3)" },
-                { value: "INGRESO", label: "Ingresos (4)" },
-                { value: "GASTO", label: "Gastos (5)" },
-                { value: "COSTO", label: "Costos (6)" },
-              ].map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => setTypeFilter(t.value)}
-                  className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition shrink-0 ${
-                    typeFilter === t.value
-                      ? "bg-lilac-600 text-white font-bold shadow-2xs"
-                      : "bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+          {/* Selectores de Filtro en Línea */}
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            {/* Filtro por Tipo */}
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className={`border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-lilac-200 transition ${
+                typeFilter !== "TODOS"
+                  ? "border-lilac-500 bg-lilac-50 text-lilac-900 font-bold"
+                  : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+              }`}
+            >
+              <option value="TODOS">Tipo: Todos</option>
+              <option value="ACTIVO">Activo (1)</option>
+              <option value="PASIVO">Pasivo (2)</option>
+              <option value="PATRIMONIO">Patrimonio (3)</option>
+              <option value="INGRESO">Ingresos (4)</option>
+              <option value="GASTO">Gastos (5)</option>
+              <option value="COSTO">Costos (6)</option>
+            </select>
 
-            {/* Filtro por estado activo / inactivo */}
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-[11px] text-ink-400 font-semibold mr-1">Estado:</span>
-              {(["ACTIVAS", "TODAS", "INACTIVAS"] as const).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition uppercase ${
-                    statusFilter === st
-                      ? "bg-ink-800 text-white"
-                      : "text-ink-500 hover:text-ink-800"
-                  }`}
-                >
-                  {st === "ACTIVAS" ? "Solo Activas" : st === "INACTIVAS" ? "Inactivas" : "Todas"}
-                </button>
-              ))}
-            </div>
+            {/* Filtro por Nivel */}
+            <select
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value as any)}
+              className={`border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-lilac-200 transition ${
+                levelFilter !== "TODOS"
+                  ? "border-lilac-500 bg-lilac-50 text-lilac-900 font-bold"
+                  : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+              }`}
+            >
+              <option value="TODOS">Nivel: Todos ({accounts.length})</option>
+              <option value="GRUPOS">📁 Solo Grupos ({stats.groupsCount})</option>
+              <option value="MOVIMIENTO">📄 Movimiento ({stats.movementCount})</option>
+            </select>
+
+            {/* Filtro por Estado */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className={`border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-lilac-200 transition ${
+                statusFilter !== "ACTIVAS"
+                  ? "border-lilac-500 bg-lilac-50 text-lilac-900 font-bold"
+                  : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
+              }`}
+            >
+              <option value="ACTIVAS">Solo Activas</option>
+              <option value="TODAS">Todas</option>
+              <option value="INACTIVAS">Inactivas ({stats.inactiveCount})</option>
+            </select>
+
+            {/* Botón para restablecer si hay filtros aplicados */}
+            {(search || typeFilter !== "TODOS" || levelFilter !== "TODOS" || statusFilter !== "ACTIVAS") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("TODOS");
+                  setLevelFilter("TODOS");
+                  setStatusFilter("ACTIVAS");
+                }}
+                title="Restablecer filtros"
+                className="px-2 py-1.5 rounded-xl border border-lilac-200 hover:bg-lilac-100 text-ink-500 hover:text-ink-800 text-xs font-semibold flex items-center gap-1 transition"
+              >
+                <X size={13} />
+                <span className="hidden md:inline">Limpiar</span>
+              </button>
+            )}
           </div>
         </div>
 
