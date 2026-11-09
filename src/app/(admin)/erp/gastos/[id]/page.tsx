@@ -19,6 +19,7 @@ import {
   Receipt,
   FileCheck2,
   CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
@@ -389,6 +390,17 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
               ) : (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-500 border-gray-200">
                   Sin Factura SRI
+                </span>
+              )}
+
+              {/* Estado de Pago */}
+              {expense.payment_method === "credito" ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-50 text-amber-900 border-amber-300 shadow-2xs">
+                  <Clock size={12} className="text-amber-600" /> Pendiente de Pago
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs">
+                  <CheckCircle2 size={12} className="text-emerald-600" /> Pagada
                 </span>
               )}
             </div>

@@ -33,6 +33,7 @@ import {
   ZoomOut,
   RotateCw,
   ExternalLink,
+  Clock,
 } from "lucide-react";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import { FacturaRecibida } from "@/lib/expense-types";
@@ -810,6 +811,25 @@ export default function GastosListClient({
                           <span>Sin Comprobante</span>
                         </span>
                       )}
+
+                      {/* Estado de Pago junto al SRI: Pagada o Pendiente */}
+                      {exp.payment_method === "credito" ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded-md font-bold shadow-2xs"
+                          title="Gasto en Cuentas por Pagar (Pendiente de Pago)"
+                        >
+                          <Clock size={10} className="text-amber-600" />
+                          <span>Pendiente</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-md font-bold shadow-2xs"
+                          title={`Pago liquidado (${PAYMENT_LABELS[exp.payment_method] || exp.payment_method})`}
+                        >
+                          <CheckCircle2 size={10} className="text-emerald-600" />
+                          <span>Pagada</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-ink-500">
@@ -837,7 +857,7 @@ export default function GastosListClient({
                   </Link>
 
                   <div className="text-right shrink-0 flex items-center gap-2 sm:gap-2.5">
-                    {/* Botón de Comprobante digital adjunto */}
+                    {/* Botón de Comprobante digital adjunto (solo icono compacto) */}
                     {receiptUrl && (
                       <button
                         type="button"
@@ -859,12 +879,10 @@ export default function GastosListClient({
                             isPdf,
                           });
                         }}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
-                        title="Visualizar comprobante digital de respaldo"
+                        className="inline-flex items-center justify-center w-7 h-7 text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 rounded-lg transition shadow-2xs cursor-pointer shrink-0"
+                        title="Ver comprobante de respaldo (PDF o foto)"
                       >
-                        <Paperclip size={11} className="text-lilac-600" />
-                        <span className="hidden md:inline">Comprobante</span>
-                        <Eye size={11} className="text-lilac-500" />
+                        <Eye size={13} className="text-lilac-600" />
                       </button>
                     )}
 
