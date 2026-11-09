@@ -53,11 +53,11 @@ async function voidExpense(formData: FormData) {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  efectivo:        "Efectivo",
-  transferencia:   "Transferencia",
+  efectivo:        "Efectivo (Caja Chica)",
+  transferencia:   "Transferencia Bancaria",
   tarjeta:         "Tarjeta",
   tarjeta_credito: "Tarjeta",
-  credito:         "Crédito (por pagar)",
+  credito:         "Cuentas por Pagar Proveedores (Pendiente de Pago)",
 };
 
 const DOC_TYPE_CONFIG: Record<
@@ -398,17 +398,27 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
           <div>
             <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-              <CreditCard size={11} className="text-lilac-600" /> Forma de Pago
+              <CreditCard size={11} className="text-lilac-600" /> Forma de Pago / Estado de Cancelación
             </span>
-            <p className="text-sm font-medium text-ink-900 mt-0.5">
-              {PAYMENT_LABELS[expense.payment_method] ?? expense.payment_method}
-              {expense.bank_accounts && (
-                <span className="block text-xs text-ink-500 mt-0.5 font-normal">
-                  {expense.bank_accounts.bank_name}
-                  {expense.bank_accounts.account_number ? ` · Cta: ${expense.bank_accounts.account_number}` : ""}
-                </span>
+            <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium text-ink-900">
+                {PAYMENT_LABELS[expense.payment_method] ?? expense.payment_method}
+                {expense.bank_accounts && (
+                  <span className="block text-xs text-ink-500 mt-0.5 font-normal">
+                    {expense.bank_accounts.bank_name}
+                    {expense.bank_accounts.account_number ? ` · Cta: ${expense.bank_accounts.account_number}` : ""}
+                  </span>
+                )}
+              </p>
+              {expense.payment_method === "credito" && canEdit && !isClosed && (
+                <Link
+                  href={`/erp/gastos/${expense.id}/editar`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-xs transition"
+                >
+                  <CreditCard size={12} /> Registrar Pago / Cruce
+                </Link>
               )}
-            </p>
+            </div>
           </div>
 
           {expense.payment_reference && (

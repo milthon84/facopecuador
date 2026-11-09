@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen } from "@/lib/accounting";
+import { assertMonthOpen, createExpensePaymentJournalEntry } from "@/lib/accounting";
 import { resolveFacturaSriClave, cleanDocNumberOnly } from "@/lib/expense-areas";
 import { revalidatePath } from "next/cache";
 
@@ -199,5 +199,121 @@ export async function lookupSupplierAccountAction(ruc: string) {
   } catch (err: any) {
     console.error("Error en lookupSupplierAccountAction:", err);
     return { success: false, error: err?.message || "Error al consultar proveedor" };
+  }
+}
+
+/**
+ * Registra la forma de pago (Paso 2) de un gasto y realiza el cruce contable con Bancos o Caja Chica:
+ * Débito: Cuentas por Pagar Proveedores (2.1.01.01)
+ * Crédito: Bancos (1.1.01.03) o Caja Chica (1.1.01.02)
+ */
+export async function recordExpensePaymentAction(params: {
+  expense_id: string;
+  payment_method: string;
+  bank_account_id?: string | null;
+  payment_reference?: string | null;
+  payment_date?: string | null;
+  card_type?: string | null;
+  card_lote?: string | null;
+  card_voucher?: string | null;
+}) {
+  try {
+    await assertWritePermission("/erp/gastos");
+    const supabase = createAdminClient();
+
+    // 1. Obtener el gasto existente
+    const { data: expense, error: expErr } = await supabase
+      .from("expenses")
+      .select("*")
+      .eq("id", params.expense_id)
+      .single();
+
+    if (expErr || !expense) {
+      return { success: false, error: "No se encontró el gasto para registrar el pago." };
+    }
+
+    const payDate = params.payment_date || expense.expense_date || new Date().toISOString().split("T")[0];
+    await assertMonthOpen(payDate);
+
+    // Preparar notas si viene tarjeta
+    let updatedNotes = expense.notes || "";
+    if (params.payment_method === "tarjeta_credito" && (params.card_type || params.card_lote || params.card_voucher)) {
+      const cardStr = `[TARJETA:${params.card_type || ""} LOTE:${params.card_lote || ""} VOUCHER:${params.card_voucher || ""}]`;
+      if (!updatedNotes.includes("[TARJETA:")) {
+        updatedNotes = updatedNotes ? `${updatedNotes} ${cardStr}` : cardStr;
+      }
+    }
+
+    // Obtener datos del banco / caja
+    let bankName: string | null = null;
+    if (params.bank_account_id) {
+      const { data: bAcc } = await supabase
+        .from("bank_accounts")
+        .select("bank_name, account_number")
+        .eq("id", params.bank_account_id)
+        .maybeSingle();
+      if (bAcc) {
+        bankName = `${bAcc.bank_name}${bAcc.account_number ? ` (${bAcc.account_number})` : ""}`;
+      }
+    }
+
+    // 2. Actualizar el gasto con la forma de pago y cuenta
+    const { error: updateErr } = await supabase
+      .from("expenses")
+      .update({
+        payment_method: params.payment_method,
+        bank_account_id: params.bank_account_id || null,
+        payment_reference: params.payment_reference || null,
+        notes: updatedNotes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", params.expense_id);
+
+    if (updateErr) {
+      console.warn("Error actualizando forma de pago en gasto:", updateErr);
+    }
+
+    // 3. Registrar egreso en bank_transactions si tiene cuenta bancaria/caja
+    if (params.bank_account_id) {
+      try {
+        await supabase.from("bank_transactions").insert({
+          account_id: params.bank_account_id,
+          type: "egreso",
+          amount: expense.total,
+          date: payDate,
+          description: `Pago compra: ${expense.supplier_name}`,
+          reference: params.payment_reference || null,
+          payment_method: params.payment_method,
+          expense_id: expense.id,
+          status: "confirmado",
+          origin: "automatico",
+        });
+      } catch (bankErr) {
+        console.warn("No se pudo registrar egreso en bank_transactions:", bankErr);
+      }
+    }
+
+    // 4. Asiento 2 de Cruce Contable con Bancos / Caja Chica
+    try {
+      await createExpensePaymentJournalEntry({
+        expense_id: expense.id,
+        payment_date: payDate,
+        supplier_name: expense.supplier_name,
+        payment_method: params.payment_method,
+        amount: Number(expense.total) || 0,
+        bank_account_name: bankName,
+        payment_reference: params.payment_reference,
+      });
+    } catch (jErr) {
+      console.warn("No se pudo registrar el asiento de cruce bancario:", jErr);
+    }
+
+    revalidatePath("/erp/gastos");
+    revalidatePath(`/erp/gastos/${params.expense_id}`);
+
+    return { success: true, url: `/erp/gastos/${params.expense_id}` };
+  } catch (err: any) {
+    console.error("Error en recordExpensePaymentAction:", err);
+    return { success: false, error: err?.message || "Error al registrar el pago del gasto" };
   }
 }

@@ -21,7 +21,7 @@ import {
   Receipt,
   FileCheck2,
   Info,
-  HelpCircle,
+  CreditCard,
   Key,
 } from "lucide-react";
 import { resolveExpenseArea, ExpenseArea, resolveReceiptUrl, cleanDocNumberOnly } from "@/lib/expense-areas";
@@ -42,7 +42,7 @@ import {
   FALLBACK_EXPENSE_GROUPS,
   FALLBACK_EXPENSE_MOVEMENTS,
 } from "@/lib/expense-accounts";
-import { lookupSupplierAccountAction } from "../actions";
+import { lookupSupplierAccountAction, recordExpensePaymentAction } from "../actions";
 
 type Account = {
   id: string;
@@ -102,9 +102,6 @@ export default function NuevaCompraForm({
   // Selector y buscador de facturas recibidas
   const [facturaSearch, setFacturaSearch] = useState("");
   const [facturaDropdownOpen, setFacturaDropdownOpen] = useState(false);
-
-  // Guía interactiva de categorías
-  const [guiaCategoriasOpen, setGuiaCategoriasOpen] = useState(false);
 
   // Catálogo contable dinámico
   const accountsByGroup = accountsCatalog?.accountsByGroup || {};
@@ -489,6 +486,59 @@ export default function NuevaCompraForm({
   const accountOptions = method === "efectivo" ? finalCajaAccounts : bankAccounts;
   const accountLabel = method === "efectivo" ? "Caja Chica de Salida" : "Cuenta Bancaria Emisora";
 
+  // Control de secuencia: Paso 1 (Gasto) -> Paso 2 (Forma de Pago)
+  const [savedExpenseId, setSavedExpenseId] = useState<string | null>(initialData?.id || null);
+  const [selectedBankId, setSelectedBankId] = useState<string>(() => {
+    if (initialData?.bank_account_id) return initialData.bank_account_id;
+    if (method === "efectivo" && finalCajaAccounts.length === 1) return finalCajaAccounts[0].id;
+    return "";
+  });
+  const [paymentRef, setPaymentRef] = useState<string>(initialData?.payment_reference || "");
+  const [cardType, setCardType] = useState<string>("");
+  const [cardLote, setCardLote] = useState<string>("");
+  const [cardVoucher, setCardVoucher] = useState<string>("");
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement>(null);
+
+  async function handleRecordPayment() {
+    if (!savedExpenseId) return;
+    setPaymentError(null);
+
+    if (needsAccount && !selectedBankId) {
+      setPaymentError(`Por favor selecciona la ${accountLabel.toLowerCase()}.`);
+      return;
+    }
+    if (needsReference && !paymentRef.trim()) {
+      setPaymentError("Por favor ingresa el número de referencia o transferencia.");
+      return;
+    }
+
+    setIsSubmittingPayment(true);
+    try {
+      const res = await recordExpensePaymentAction({
+        expense_id: savedExpenseId,
+        payment_method: method,
+        bank_account_id: selectedBankId || null,
+        payment_reference: paymentRef.trim() || null,
+        payment_date: expenseDate,
+        card_type: cardType || null,
+        card_lote: cardLote || null,
+        card_voucher: cardVoucher || null,
+      });
+
+      if (res?.success) {
+        window.location.href = res.url || `/erp/gastos/${savedExpenseId}`;
+      } else {
+        setPaymentError(res?.error || "Error al registrar el pago.");
+        setIsSubmittingPayment(false);
+      }
+    } catch (err: any) {
+      setPaymentError(err?.message || "Error al registrar el pago.");
+      setIsSubmittingPayment(false);
+    }
+  }
+
   const isSinDocumento = docType === "sin_documento";
 
   function handleFileSelected(file: File) {
@@ -593,7 +643,12 @@ export default function NuevaCompraForm({
       formData.set("document_number", cleanDocNumberOnly(docNumber));
       formData.set("area", area);
       formData.set("document_type", docType);
-      formData.set("payment_method", method);
+      // En registro inicial Paso 1: siempre se causa como pasivo a Cuentas por Pagar (credito)
+      formData.set("payment_method", isEditing ? method : "credito");
+      if (isEditing) {
+        formData.set("bank_account_id", selectedBankId || "");
+        formData.set("payment_reference", paymentRef || "");
+      }
       formData.set("supplier_name", supplierName.trim());
       formData.set("supplier_ruc", supplierRuc.trim());
       formData.set("expense_date", expenseDate);
@@ -601,9 +656,19 @@ export default function NuevaCompraForm({
         formData.set("id", initialData.id);
       }
 
-      const res = (await saveExpense(formData)) as { success?: boolean; error?: string; url?: string };
+      const res = (await saveExpense(formData)) as { success?: boolean; error?: string; url?: string; expenseId?: string };
       if (res?.success) {
-        window.location.href = res.url || "/erp/gastos";
+        if (isEditing) {
+          window.location.href = res.url || `/erp/gastos/${initialData.id}`;
+        } else if (res.expenseId) {
+          setSavedExpenseId(res.expenseId);
+          setLoading(false);
+          setTimeout(() => {
+            paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 150);
+        } else {
+          window.location.href = res.url || "/erp/gastos";
+        }
       } else if (res?.error) {
         setErrorMsg(res.error);
         setLoading(false);
@@ -999,13 +1064,6 @@ export default function NuevaCompraForm({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setGuiaCategoriasOpen(true)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-200 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
-              >
-                <HelpCircle size={13} /> Ver Plan de Cuentas
-              </button>
-              <button
-                type="button"
                 onClick={addItemRow}
                 className="inline-flex items-center gap-1 text-xs font-bold text-lilac-700 hover:text-lilac-900 bg-white border border-lilac-300 hover:bg-lilac-50 px-2.5 py-1 rounded-xl shadow-2xs transition"
               >
@@ -1019,16 +1077,16 @@ export default function NuevaCompraForm({
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2 pr-2 font-bold min-w-[150px]">Descripción del Bien / Servicio</th>
-                  <th className="py-2 px-2 w-44 sm:w-48 font-bold">Grupo Contable</th>
-                  <th className="py-2 px-2 w-48 sm:w-56 font-bold">Cuenta de Gasto (Movimiento)</th>
-                  <th className="py-2 px-2 w-16 text-center font-bold">Cant.</th>
-                  <th className="py-2 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
+                  <th className="py-2.5 pr-3 font-bold w-full min-w-[280px] sm:min-w-[340px]">Descripción del Bien / Servicio</th>
+                  <th className="py-2.5 px-2 w-36 sm:w-44 font-bold">GRUPO</th>
+                  <th className="py-2.5 px-2 w-40 sm:w-48 font-bold">GASTO</th>
+                  <th className="py-2.5 px-2 w-14 text-center font-bold">Cant.</th>
+                  <th className="py-2.5 px-2 w-24 text-right font-bold">P. Unitario ($)</th>
                   {docType === "factura" && (
-                    <th className="py-2 px-2 w-16 text-center font-bold">IVA</th>
+                    <th className="py-2.5 px-2 w-16 text-center font-bold">IVA</th>
                   )}
-                  <th className="py-2 pl-2 pr-1 w-20 text-right font-bold">Subtotal</th>
-                  <th className="py-2 pl-1 w-8"></th>
+                  <th className="py-2.5 pl-2 pr-1 w-20 text-right font-bold">Subtotal</th>
+                  <th className="py-2.5 pl-1 w-7"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-100">
@@ -1042,7 +1100,7 @@ export default function NuevaCompraForm({
 
                   return (
                     <tr key={item.id} className="group hover:bg-white/60">
-                      <td className="py-2 pr-2 align-middle">
+                      <td className="py-2 pr-3 align-middle">
                         <input
                           type="text"
                           required
@@ -1054,7 +1112,7 @@ export default function NuevaCompraForm({
                       </td>
 
                       {/* Selector Grupo Contable */}
-                      <td className="py-2 px-2 align-middle w-44 sm:w-52">
+                      <td className="py-2 px-2 align-middle w-36 sm:w-44">
                         <select
                           value={grpCode}
                           onChange={(e) => updateItemGroup(item.id, e.target.value)}
@@ -1070,7 +1128,7 @@ export default function NuevaCompraForm({
                       </td>
 
                       {/* Selector Cuenta de Gasto (Movimiento) */}
-                      <td className="py-2 px-2 align-middle w-48 sm:w-60">
+                      <td className="py-2 px-2 align-middle w-40 sm:w-48">
                         <select
                           value={selectedAcc}
                           onChange={(e) => updateItemAccount(item.id, e.target.value)}
@@ -1189,113 +1247,178 @@ export default function NuevaCompraForm({
           </div>
         </div>
 
-        {/* ── 6. Forma de Pago ── */}
-        <div className="bg-lilac-50/40 border border-lilac-100 rounded-xl p-3 space-y-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className="text-[11px] font-bold text-ink-600 uppercase tracking-wide">Forma de Pago</span>
-            <div className="flex gap-1.5">
-              {[
-                { value: "efectivo", label: "💵 Efectivo" },
-                { value: "transferencia", label: "🏦 Transferencia" },
-                { value: "tarjeta_credito", label: "💳 Tarjeta" },
-              ].map((m) => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => setMethod(m.value)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                    method === m.value
-                      ? "bg-lilac-600 text-white shadow-xs font-bold"
-                      : "bg-white text-ink-600 border border-lilac-200 hover:bg-lilac-50"
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
+        {/* ── 6. Forma de Pago y Cruce Bancario (Paso 2) ── */}
+        <div ref={paymentSectionRef} className="scroll-mt-6">
+          {!savedExpenseId && !isEditing ? (
+            <div className="bg-lilac-50/30 border border-dashed border-lilac-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-3.5 text-center sm:text-left transition">
+              <div className="w-10 h-10 rounded-xl bg-lilac-100 text-lilac-700 flex items-center justify-center shrink-0">
+                <CreditCard size={20} />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-xs font-bold text-ink-900 uppercase tracking-wide">
+                  Paso 2: Forma de Pago y Cruce Bancario
+                </h4>
+                <p className="text-xs text-ink-500 mt-0.5">
+                  Primero guarda el gasto abajo. Se generará automáticamente el asiento de causación a{" "}
+                  <strong className="text-ink-800">Cuentas por Pagar Proveedores</strong>, y luego se habilitará esta sección para registrar la salida de Bancos o Caja Chica.
+                </p>
+              </div>
+              <div className="shrink-0 text-xs font-semibold text-lilac-600 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl">
+                🔒 Se habilita al guardar el gasto
+              </div>
             </div>
-          </div>
-          <input type="hidden" name="payment_method" value={method} />
-
-          {needsAccount && (
-            <div className="space-y-1.5 pt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
-                  <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
-                  <select
-                    name="bank_account_id"
-                    required
-                    defaultValue={
-                      initialData?.bank_account_id ||
-                      (method === "efectivo" && accountOptions.length === 1 ? accountOptions[0].id : "")
-                    }
-                    className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900"
-                  >
-                    <option value="">
-                      {method === "efectivo" ? "— Seleccionar Caja Chica —" : "— Seleccionar Cuenta Bancaria —"}
-                    </option>
-                    {accountOptions.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.bank_name}
-                        {a.account_number ? ` · ${a.account_number}` : ""}
-                      </option>
-                    ))}
-                  </select>
+          ) : (
+            <div className="bg-white border-2 border-lilac-400/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-lilac-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-lilac-600 text-white flex items-center justify-center font-bold text-xs">
+                    2
+                  </span>
+                  <div>
+                    <h4 className="text-xs font-bold text-ink-900 uppercase tracking-wide">
+                      Forma de Pago y Cruce Bancario
+                    </h4>
+                    <p className="text-[11px] text-teal-800 font-medium">
+                      ✓ Gasto causado a Cuentas por Pagar. Selecciona la salida de fondos para cruzar con Bancos o Caja Chica:
+                    </p>
+                  </div>
                 </div>
 
-                {needsReference && (
-                  <div className="sm:col-span-5 space-y-1">
-                    <label className="text-xs font-semibold text-ink-700">N° Referencia *</label>
+                <div className="flex gap-1.5">
+                  {[
+                    { value: "efectivo", label: "💵 Efectivo" },
+                    { value: "transferencia", label: "🏦 Transferencia" },
+                    { value: "tarjeta_credito", label: "💳 Tarjeta" },
+                  ].map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setMethod(m.value)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                        method === m.value
+                          ? "bg-lilac-600 text-white shadow-xs font-bold"
+                          : "bg-lilac-50 text-ink-600 border border-lilac-200 hover:bg-lilac-100"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {paymentError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                  {paymentError}
+                </div>
+              )}
+
+              {needsAccount && (
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                    <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
+                      <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
+                      <select
+                        value={selectedBankId}
+                        onChange={(e) => setSelectedBankId(e.target.value)}
+                        className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900 font-medium"
+                      >
+                        <option value="">
+                          {method === "efectivo" ? "— Seleccionar Caja Chica —" : "— Seleccionar Cuenta Bancaria —"}
+                        </option>
+                        {accountOptions.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.bank_name}
+                            {a.account_number ? ` · ${a.account_number}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {needsReference && (
+                      <div className="sm:col-span-5 space-y-1">
+                        <label className="text-xs font-semibold text-ink-700">N° Referencia / Voucher *</label>
+                        <input
+                          type="text"
+                          value={paymentRef}
+                          onChange={(e) => setPaymentRef(e.target.value)}
+                          placeholder="Ej. TRF-123456"
+                          className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {method === "tarjeta_credito" && (
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-ink-700">Tarjeta *</label>
                     <input
                       type="text"
-                      name="payment_reference"
-                      required
-                      defaultValue={initialData?.payment_reference || ""}
-                      placeholder="Ej. TRF-123456"
-                      className="w-full border border-lilac-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
+                      value={cardType}
+                      onChange={(e) => setCardType(e.target.value)}
+                      placeholder="Visa / Master"
+                      className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
                     />
                   </div>
-                )}
-              </div>
-              <p className="text-[11px] text-ink-500">
-                {method === "efectivo"
-                  ? "ℹ️ Todo pago en efectivo debe liquidarse exclusivamente desde una Caja Chica autorizada."
-                  : "ℹ️ Transferencias originadas exclusivamente desde cuentas bancarias habilitadas de la institución."}
-              </p>
-            </div>
-          )}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-ink-700">Lote *</label>
+                    <input
+                      type="text"
+                      value={cardLote}
+                      onChange={(e) => setCardLote(e.target.value)}
+                      placeholder="0012"
+                      className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-ink-700">Voucher *</label>
+                    <input
+                      type="text"
+                      value={cardVoucher}
+                      onChange={(e) => setCardVoucher(e.target.value)}
+                      placeholder="000123"
+                      className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
+                    />
+                  </div>
+                </div>
+              )}
 
-          {method === "tarjeta_credito" && (
-            <div className="grid grid-cols-3 gap-2.5 pt-1">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-ink-700">Tarjeta *</label>
-                <input
-                  type="text"
-                  name="card_type"
-                  required
-                  placeholder="Visa / Master"
-                  className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-ink-700">Lote *</label>
-                <input
-                  type="text"
-                  name="card_lote"
-                  required
-                  placeholder="0012"
-                  className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-ink-700">Voucher *</label>
-                <input
-                  type="text"
-                  name="card_voucher"
-                  required
-                  placeholder="000123"
-                  className="w-full border border-lilac-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono"
-                />
-              </div>
+              {!isEditing && (
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-lilac-100">
+                  <p className="text-[11px] text-ink-500">
+                    Asiento de cruce: <span className="font-mono text-ink-700 font-semibold">2.1.01.01 Cuentas por Pagar (Debe)</span> vs. <span className="font-mono text-ink-700 font-semibold">Bancos/Caja (Haber)</span>.
+                  </p>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => window.location.href = `/erp/gastos/${savedExpenseId}`}
+                      className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-lilac-200 bg-white hover:bg-lilac-50 text-ink-600 text-xs font-semibold transition text-center"
+                    >
+                      Omitir (Dejar por pagar) →
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmittingPayment}
+                      onClick={handleRecordPayment}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-xs transition"
+                    >
+                      {isSubmittingPayment ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Cruzando con Banco...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={14} />
+                          <span>Registrar Pago y Cruzar con Banco</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1360,22 +1483,35 @@ export default function NuevaCompraForm({
               </span>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> Guardando...
-                </>
-              ) : (
-                <>
-                  <Save size={16} />
-                  {isEditing ? "Guardar Cambios" : "Guardar Gasto"}
-                </>
-              )}
-            </button>
+            {!savedExpenseId || isEditing ? (
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    {isEditing ? "Guardar Cambios" : "Guardar Gasto"}
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+                className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-teal-200 transition active:scale-[0.99]"
+              >
+                <CheckCircle2 size={16} />
+                <span>Gasto Guardado · Continuar a Paso 2 (Forma de Pago) ↑</span>
+              </button>
+            )}
           </div>
         </div>
       </form>
@@ -1442,90 +1578,6 @@ export default function NuevaCompraForm({
                   />
                 )
               ) : null}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Catálogo de Cuentas de Gasto */}
-      {guiaCategoriasOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-ink-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setGuiaCategoriasOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-lilac-200 animate-scaleIn"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-lilac-100 flex items-center justify-between bg-lilac-50/60">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-lilac-600 text-white flex items-center justify-center shadow-xs">
-                  <FileCheck2 size={18} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-ink-900">Plan de Cuentas de Gasto (NIIF)</h3>
-                  <p className="text-[11px] text-ink-500">
-                    Estructura contable: el asiento siempre se genera en una <strong>cuenta de movimiento (hija)</strong>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGuiaCategoriasOpen(false)}
-                className="w-8 h-8 rounded-lg hover:bg-lilac-100 flex items-center justify-center text-ink-500 hover:text-ink-700 transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-3">
-              {groups.map((grp) => {
-                const movements = accountsByGroup[grp.code] || [];
-                return (
-                  <div key={grp.code} className="p-3.5 rounded-xl border border-lilac-100 bg-white space-y-2 shadow-2xs">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-lilac-600"></span>
-                        <span className="text-xs font-mono font-bold text-lilac-800 bg-lilac-50 px-2 py-0.5 rounded border border-lilac-200">
-                          {grp.code}
-                        </span>
-                        <span className="text-xs font-bold text-ink-950">{grp.name}</span>
-                        <span className="text-[10px] font-semibold text-ink-400 bg-ink-50 px-1.5 py-0.5 rounded uppercase">
-                          GRUPO
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-ink-500 font-semibold">
-                        {movements.length} {movements.length === 1 ? "cuenta de movimiento" : "cuentas de movimiento"}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 pl-3 border-l-2 border-lilac-200">
-                      {movements.map((mov) => (
-                        <div key={mov.code} className="flex items-center gap-2 text-xs text-ink-800 bg-lilac-50/50 hover:bg-lilac-100/60 px-2 py-1.5 rounded transition">
-                          <span className="font-mono text-[11px] font-bold text-lilac-900 shrink-0">{mov.code}</span>
-                          <span className="truncate font-medium">{mov.name}</span>
-                        </div>
-                      ))}
-                      {movements.length === 0 && (
-                        <span className="text-[11px] text-ink-400 italic">Sin cuentas de movimiento asignadas</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="p-3 border-t border-lilac-100 bg-lilac-50/30 flex items-center justify-between">
-              <span className="text-[11px] text-ink-500">
-                Al seleccionar el <strong>Grupo</strong>, se filtran automáticamente sus <strong>Cuentas de Movimiento</strong>.
-              </span>
-              <button
-                type="button"
-                onClick={() => setGuiaCategoriasOpen(false)}
-                className="px-4 py-2 bg-ink-900 hover:bg-ink-800 text-white rounded-xl text-xs font-bold transition shadow-xs"
-              >
-                Cerrar Plan
-              </button>
             </div>
           </div>
         </div>

@@ -325,7 +325,8 @@ export async function createExpenseJournalEntry(params: {
     subtotal: number;
   }[];
 }) {
-  const contraAccount  = paymentAccount(params.payment_method);
+  // ⚠️ En la causación de la compra/gasto, la contrapartida contable NIIF siempre es Cuentas por Pagar Proveedores
+  const contraAccount  = { code: "2.1.01.01", name: "Cuentas por Pagar Proveedores" };
   const subtotalTotal  = r2(params.subtotal_0 + params.subtotal_15);
   const lines: JournalLine[] = [];
 
@@ -421,6 +422,56 @@ export async function createExpenseJournalEntry(params: {
   return insertJournalEntry({
     entry_date:     params.expense_date,
     description:    `Gasto — ${params.category} — ${params.supplier_name}`,
+    reference_type: "expense",
+    reference_id:   params.expense_id,
+    lines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
+  });
+}
+
+// ── Asiento por Pago de Gasto / Factura de Compra (Cruce con Bancos / Caja Chica) ─
+/**
+ * Pago o cruce del gasto:
+ *   Dr. Cuentas por Pagar Proveedores (2.1.01.01)  (total)
+ *   Cr.   Bancos / Caja Chica        (1.1.01.03 / 1.1.01.02)  (total)
+ */
+export async function createExpensePaymentJournalEntry(params: {
+  expense_id:         string;
+  payment_date:       string;
+  supplier_name:      string;
+  payment_method:     string;
+  amount:             number;
+  bank_account_name?: string | null;
+  payment_reference?: string | null;
+  user_id?:           string | null;
+  user_email?:        string | null;
+}) {
+  let payAccount = { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+  if (params.payment_method === "efectivo") {
+    payAccount = { code: "1.1.01.02", name: "Caja Chica" };
+  }
+
+  const lines: JournalLine[] = [
+    {
+      account_code: "2.1.01.01",
+      account_name: "Cuentas por Pagar Proveedores",
+      debit:  r2(params.amount),
+      credit: 0,
+      description: `Cancelación cta. por pagar — ${params.supplier_name}`,
+    },
+    {
+      account_code: payAccount.code,
+      account_name: payAccount.name,
+      debit:  0,
+      credit: r2(params.amount),
+      description: `Salida de fondos (${params.payment_method}) — ${params.bank_account_name || params.payment_reference || params.supplier_name}`,
+    },
+  ];
+
+  return insertJournalEntry({
+    entry_date:     params.payment_date,
+    description:    `Pago / Cruce Bancario — ${params.supplier_name} (${payAccount.name})`,
     reference_type: "expense",
     reference_id:   params.expense_id,
     lines,

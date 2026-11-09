@@ -340,7 +340,14 @@ async function saveExpense(formData: FormData) {
 
   revalidatePath("/erp/gastos");
 
-  return { success: true };
+  return {
+    success: true,
+    expenseId: expense.id,
+    total: expense.total,
+    supplier_name: expense.supplier_name,
+    expense_date: expense.expense_date,
+    url: `/erp/gastos/${expense.id}`,
+  };
 }
 
 export default async function NuevoGastoPage({
