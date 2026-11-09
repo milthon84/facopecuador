@@ -16,9 +16,11 @@ import { proxyStorageUrl } from "@/lib/storage-proxy";
 
 interface Props {
   receiptUrl: string;
+  title?: string;
+  badgeLabel?: string;
 }
 
-export default function ComprobanteAdjuntoCard({ receiptUrl }: Props) {
+export default function ComprobanteAdjuntoCard({ receiptUrl, title, badgeLabel }: Props) {
   const proxiedUrl = proxyStorageUrl(receiptUrl);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -56,7 +58,7 @@ export default function ComprobanteAdjuntoCard({ receiptUrl }: Props) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-bold text-ink-900 tracking-wide">
-                Respaldo Digital / Comprobante
+                {title || "Respaldo Digital / Comprobante"}
               </h3>
               <span
                 className={`text-[10px] font-bold px-2 py-0.2 rounded-full uppercase tracking-wider ${
@@ -65,7 +67,7 @@ export default function ComprobanteAdjuntoCard({ receiptUrl }: Props) {
                     : "bg-lilac-100 text-lilac-800 border border-lilac-200"
                 }`}
               >
-                {isPdf ? "PDF" : "IMAGEN"}
+                {badgeLabel || (isPdf ? "PDF" : "IMAGEN")}
               </span>
             </div>
             <p className="text-[11px] text-ink-500 font-mono truncate max-w-[200px] sm:max-w-md mt-0.5">

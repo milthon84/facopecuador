@@ -26,6 +26,7 @@ import {
   resolveExpenseArea,
   EXPENSE_AREA_CONFIG,
   resolveReceiptUrl,
+  resolvePaymentReceiptUrl,
   cleanVisibleNotes,
   resolveFacturaSriClave,
   resolveExpenseDocType,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
+import AsientoContableGastoCard, { JournalEntryItem } from "./AsientoContableGastoCard";
 import {
   ExpenseItem,
   FacturaRecibida,
@@ -217,7 +219,130 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
   const isClosed = await isMonthClosed(expense.expense_date);
   const receiptUrl = resolveReceiptUrl(expense);
+  const paymentReceiptUrl = resolvePaymentReceiptUrl(expense);
   const visibleNotes = cleanVisibleNotes(expense.notes);
+
+  // Consultar asientos contables registrados para este gasto (Causación y Pago si existe)
+  let journalEntries: JournalEntryItem[] = [];
+  try {
+    const { data: rawEntries } = await supabase
+      .from("journal_entries")
+      .select(`
+        id,
+        entry_number,
+        entry_date,
+        description,
+        reference_type,
+        reference_id,
+        status,
+        created_at,
+        journal_lines (
+          id,
+          account_code,
+          account_name,
+          debit,
+          credit,
+          description
+        )
+      `)
+      .eq("reference_type", "expense")
+      .eq("reference_id", id)
+      .order("created_at", { ascending: true });
+
+    if (rawEntries && rawEntries.length > 0) {
+      journalEntries = rawEntries as any[];
+    }
+  } catch (jErr) {
+    console.warn("No se pudieron consultar asientos de journal_entries:", jErr);
+  }
+
+  // Si no hay asientos físicos en journal_entries (gastos previos), proyectar el asiento contable NIIF
+  if (journalEntries.length === 0) {
+    const subtotalTotal = Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0);
+    const ivaAmt = Number(expense.iva_amount || 0);
+    const tot = Number(expense.total || 0);
+
+    const projectedLines: any[] = [];
+    if (items.length > 0) {
+      for (const it of items) {
+        projectedLines.push({
+          account_code: it.account_code || expense.account_code || "5.2.05.01",
+          account_name: it.account_name || expense.account_name || "Gasto Operacional",
+          debit: Number(it.subtotal || 0),
+          credit: 0,
+          description: it.description,
+        });
+      }
+    } else {
+      projectedLines.push({
+        account_code: expense.account_code || "5.2.05.01",
+        account_name: expense.account_name || "Gasto Operacional",
+        debit: subtotalTotal > 0 ? subtotalTotal : tot,
+        credit: 0,
+        description: expense.description || expense.supplier_name,
+      });
+    }
+
+    if (ivaAmt > 0) {
+      projectedLines.push({
+        account_code: "1.1.03.01",
+        account_name: "Crédito Tributario IVA",
+        debit: ivaAmt,
+        credit: 0,
+      });
+    }
+
+    projectedLines.push({
+      account_code: "2.1.01.01",
+      account_name: "Cuentas por Pagar Proveedores",
+      debit: 0,
+      credit: tot,
+      description: expense.supplier_name,
+    });
+
+    journalEntries.push({
+      id: "proj-causacion",
+      entry_date: expense.expense_date,
+      description: `Causación Compra — ${expense.category} — ${expense.supplier_name}`,
+      reference_type: "expense",
+      reference_id: expense.id,
+      journal_lines: projectedLines,
+    });
+
+    // Si ya fue pagado
+    if (expense.payment_method && expense.payment_method !== "credito") {
+      let payCode = "1.1.01.03";
+      let payName = "Bancos Cuentas Corrientes y Ahorros";
+      if (expense.payment_method === "efectivo") {
+        payCode = "1.1.01.02";
+        payName = "Caja Chica";
+      }
+      journalEntries.push({
+        id: "proj-pago",
+        entry_date: expense.expense_date,
+        description: `Pago / Cruce Bancario — ${expense.supplier_name} (${payName})`,
+        reference_type: "expense",
+        reference_id: expense.id,
+        journal_lines: [
+          {
+            account_code: "2.1.01.01",
+            account_name: "Cuentas por Pagar Proveedores",
+            debit: tot,
+            credit: 0,
+            description: `Cancelación cta. por pagar — ${expense.supplier_name}`,
+          },
+          {
+            account_code: payCode,
+            account_name: payName,
+            debit: 0,
+            credit: tot,
+            description: `Salida de fondos (${expense.payment_method})`,
+          },
+        ],
+      });
+    }
+  }
+
   const isPdf = Boolean(
     receiptUrl &&
       (receiptUrl.toLowerCase().includes(".pdf") ||
@@ -280,6 +405,13 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       )}
+
+      {/* ── Asiento Contable Completo (Libro Diario NIIF) en la parte superior ── */}
+      <AsientoContableGastoCard
+        entries={journalEntries}
+        expenseTotal={Number(expense.total)}
+        paymentMethod={expense.payment_method}
+      />
 
       {/* Tarjeta de Factura Recibida SRI Vinculada */}
       {linkedFactura ? (
@@ -550,32 +682,48 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {/* Respaldo Digital Adjunto */}
-      {receiptUrl ? (
-        <ComprobanteAdjuntoCard receiptUrl={receiptUrl} />
-      ) : (
-        <div className="bg-white border border-dashed border-lilac-200 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-500 shrink-0">
-              <Paperclip size={18} />
+      {/* Respaldos Digitales Adjuntos (Gasto y Pago) */}
+      <div className="space-y-3">
+        {/* Comprobante de Respaldo del Gasto */}
+        {receiptUrl ? (
+          <ComprobanteAdjuntoCard
+            receiptUrl={receiptUrl}
+            title="Respaldo Digital / Comprobante de Compra"
+            badgeLabel="COMPROBANTE GASTO"
+          />
+        ) : (
+          <div className="bg-white border border-dashed border-lilac-200 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-500 shrink-0">
+                <Paperclip size={18} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-ink-800">Sin Respaldo Digital de Compra</p>
+                <p className="text-[11px] text-ink-500">
+                  No se adjuntó factura ni nota de respaldo al registrar este comprobante.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-bold text-ink-800">Sin Respaldo Digital Adjunto</p>
-              <p className="text-[11px] text-ink-500">
-                No se adjuntó archivo PDF ni foto de respaldo al registrar este comprobante.
-              </p>
-            </div>
+            {!isClosed && canEdit && expense.status !== "void" && (
+              <Link
+                href={`/erp/gastos/${expense.id}/editar`}
+                className="text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-3 py-1.5 rounded-xl transition shadow-2xs"
+              >
+                + Adjuntar factura/recibo
+              </Link>
+            )}
           </div>
-          {!isClosed && canEdit && expense.status !== "void" && (
-            <Link
-              href={`/erp/gastos/${expense.id}/editar`}
-              className="text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-3 py-1.5 rounded-xl transition shadow-2xs"
-            >
-              + Adjuntar comprobante
-            </Link>
-          )}
-        </div>
-      )}
+        )}
+
+        {/* Comprobante de Respaldo de Pago (si existe) */}
+        {paymentReceiptUrl && (
+          <ComprobanteAdjuntoCard
+            receiptUrl={paymentReceiptUrl}
+            title="Comprobante de Pago / Transferencia Bancaria"
+            badgeLabel="COMPROBANTE PAGO"
+          />
+        )}
+      </div>
 
       {/* Totales */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5">

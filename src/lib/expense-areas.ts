@@ -125,6 +125,18 @@ export function resolveReceiptUrl(expense: {
 }
 
 /**
+ * Extrae la URL del comprobante de pago / transferencia bancaria (desde notes [COMPROBANTE_PAGO:...])
+ */
+export function resolvePaymentReceiptUrl(expense: {
+  notes?: string | null;
+  payment_reference?: string | null;
+}): string | null {
+  if (!expense.notes) return null;
+  const match = expense.notes.match(/\[COMPROBANTE_PAGO:([^\]]+)\]/i);
+  return match && match[1] ? match[1].trim() : null;
+}
+
+/**
  * Extrae la clave de acceso de 49 dígitos del SRI vinculada a un gasto
  * (revisando campo factura_recibida_clave_acceso, notes, authorization_number o description)
  */
@@ -248,13 +260,14 @@ export function formatExpenseDocNumber(expense: {
 }
 
 /**
- * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [FACTURA_SRI:...], [TIPO:...]) de las notas visibles
+ * Limpia las etiquetas de sistema ([AREA:...], [COMPROBANTE:...], [COMPROBANTE_PAGO:...], [FACTURA_SRI:...], [TIPO:...]) de las notas visibles
  */
 export function cleanVisibleNotes(notes: string | null | undefined): string {
   if (!notes) return "";
   return notes
     .replace(/\[AREA:[a-z]+\]/gi, "")
     .replace(/\[COMPROBANTE:[^\]]+\]/gi, "")
+    .replace(/\[COMPROBANTE_PAGO:[^\]]+\]/gi, "")
     .replace(/\[FACTURA_SRI:[^\]]+\]/gi, "")
     .replace(/\[TIPO:[a-z_]+\]/gi, "")
     .trim();

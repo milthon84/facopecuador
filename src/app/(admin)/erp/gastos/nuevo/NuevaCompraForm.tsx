@@ -501,8 +501,45 @@ export default function NuevaCompraForm({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const paymentSectionRef = useRef<HTMLDivElement>(null);
 
+  // Adjunto independiente de Forma de Pago (Transferencia / Voucher)
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [paymentFilePreview, setPaymentFilePreview] = useState<string | null>(null);
+  const paymentFileInputRef = useRef<HTMLInputElement>(null);
+
+  function handlePaymentFileSelected(file: File) {
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isImage && !isPdf) {
+      setPaymentError("Formato de comprobante no compatible. Adjunta un PDF o una foto.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setPaymentError("El comprobante de pago no debe superar los 15MB.");
+      return;
+    }
+    setPaymentFile(file);
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPaymentFilePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setPaymentFilePreview(null);
+    }
+  }
+
+  function removePaymentFile() {
+    setPaymentFile(null);
+    setPaymentFilePreview(null);
+    if (paymentFileInputRef.current) paymentFileInputRef.current.value = "";
+  }
+
   async function handleRecordPayment() {
-    if (!savedExpenseId) return;
+    const targetExpenseId = savedExpenseId || (isEditing ? initialData?.id : null);
+    if (!targetExpenseId) {
+      setPaymentError("Primero debes guardar el gasto para poder registrar el pago.");
+      return;
+    }
     setPaymentError(null);
 
     if (needsAccount && !selectedBankId) {
@@ -516,19 +553,23 @@ export default function NuevaCompraForm({
 
     setIsSubmittingPayment(true);
     try {
-      const res = await recordExpensePaymentAction({
-        expense_id: savedExpenseId,
-        payment_method: method,
-        bank_account_id: selectedBankId || null,
-        payment_reference: paymentRef.trim() || null,
-        payment_date: expenseDate,
-        card_type: cardType || null,
-        card_lote: cardLote || null,
-        card_voucher: cardVoucher || null,
-      });
+      const pFormData = new FormData();
+      pFormData.set("expense_id", targetExpenseId);
+      pFormData.set("payment_method", method);
+      pFormData.set("bank_account_id", selectedBankId || "");
+      pFormData.set("payment_reference", paymentRef.trim() || "");
+      pFormData.set("payment_date", expenseDate);
+      if (cardType) pFormData.set("card_type", cardType);
+      if (cardLote) pFormData.set("card_lote", cardLote);
+      if (cardVoucher) pFormData.set("card_voucher", cardVoucher);
+      if (paymentFile) {
+        pFormData.set("payment_receipt_file", paymentFile);
+      }
+
+      const res = await recordExpensePaymentAction(pFormData);
 
       if (res?.success) {
-        window.location.href = res.url || `/erp/gastos/${savedExpenseId}`;
+        window.location.href = res.url || `/erp/gastos/${targetExpenseId}`;
       } else {
         setPaymentError(res?.error || "Error al registrar el pago.");
         setIsSubmittingPayment(false);
@@ -1074,19 +1115,19 @@ export default function NuevaCompraForm({
 
           {/* Tabla de ítems */}
           <div className="overflow-x-auto -mx-1 px-1">
-            <table className="w-full min-w-[780px] text-xs table-auto">
+            <table className="w-full min-w-[850px] text-xs table-auto">
               <thead>
                 <tr className="border-b border-lilac-200 text-ink-500 text-[11px] font-bold uppercase tracking-wider text-left">
-                  <th className="py-2.5 pr-2 font-bold w-[28%] min-w-[180px]">Descripción del Bien / Servicio</th>
-                  <th className="py-2.5 px-2 font-bold w-[22%] min-w-[150px]">GRUPO</th>
-                  <th className="py-2.5 px-2 font-bold w-[23%] min-w-[160px]">GASTO</th>
-                  <th className="py-2.5 px-1.5 text-center font-bold w-[7%] min-w-[50px]">Cant.</th>
-                  <th className="py-2.5 px-2 text-right font-bold w-[10%] min-w-[75px]">P. Unitario ($)</th>
+                  <th className="py-2.5 pr-2 font-bold w-[35%] min-w-[240px]">Descripción del Bien / Servicio</th>
+                  <th className="py-2.5 px-2 font-bold w-[20%] min-w-[140px]">GRUPO</th>
+                  <th className="py-2.5 px-2 font-bold w-[21%] min-w-[150px]">GASTO</th>
+                  <th className="py-2.5 px-1.5 text-center font-bold w-[6%] min-w-[50px]">Cant.</th>
+                  <th className="py-2.5 px-2 text-right font-bold w-[9%] min-w-[75px]">P. Unitario ($)</th>
                   {docType === "factura" && (
-                    <th className="py-2.5 px-1.5 text-center font-bold w-[7%] min-w-[55px]">IVA</th>
+                    <th className="py-2.5 px-1.5 text-center font-bold w-[6%] min-w-[50px]">IVA</th>
                   )}
-                  <th className="py-2.5 pl-2 pr-1 text-right font-bold w-[9%] min-w-[70px]">Subtotal</th>
-                  <th className="py-2.5 pl-1 text-center font-bold w-[4%] min-w-[28px]"></th>
+                  <th className="py-2.5 pl-2 pr-1 text-right font-bold w-[8%] min-w-[70px]">Subtotal</th>
+                  <th className="py-2.5 pl-1 text-center font-bold w-[3%] min-w-[28px]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-100">
@@ -1245,9 +1286,98 @@ export default function NuevaCompraForm({
               <span className="font-mono text-lilac-700 font-black">${effectiveTotal.toFixed(2)}</span>
             </div>
           </div>
+
+          {/* Input oculto para adjuntar archivo nativo de respaldo del gasto */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            name="receipt_file"
+            accept=".pdf,image/*"
+            onChange={onFileInputChange}
+            className="hidden"
+          />
+
+          {/* ── Franja de Guardar Gasto (Paso 1: Causación a Cuentas por Pagar) ── */}
+          <div className="pt-3 border-t border-lilac-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-lilac-50/40 -mx-4 -mb-4 p-4 rounded-b-2xl">
+            <div>
+              <span className="text-[11px] font-bold text-ink-600 uppercase tracking-wider block mb-1">
+                Respaldo de la Compra / Gasto (Paso 1)
+              </span>
+              {!receiptFile && !existingReceiptUrl ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-lilac-300 bg-white hover:bg-lilac-50 text-xs font-semibold text-lilac-800 transition shadow-2xs"
+                >
+                  <Paperclip size={15} className="text-lilac-600" />
+                  <span>Adjuntar Factura / Nota / Recibo (PDF o Foto)</span>
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-lilac-200 text-xs shadow-2xs">
+                  <Paperclip size={13} className="text-lilac-600 shrink-0" />
+                  <span className="font-semibold text-ink-800 truncate max-w-[170px] sm:max-w-[220px]">
+                    {receiptFile ? receiptFile.name : "Respaldo digital adjunto"}
+                  </span>
+                  {(filePreview || existingReceiptUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModalOpen(true)}
+                      className="text-lilac-700 hover:text-lilac-900 p-1"
+                      title="Ver archivo"
+                    >
+                      <Eye size={14} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={removeReceipt}
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Quitar archivo"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+              <div className="text-left sm:text-right">
+                <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wider block">
+                  Total a Causar
+                </span>
+                <span className="text-2xl font-black text-lilac-700 font-mono">
+                  ${effectiveTotal.toFixed(2)}
+                </span>
+              </div>
+
+              {!savedExpenseId || isEditing ? (
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" /> Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      {isEditing ? "Guardar Cambios del Gasto" : "Guardar Gasto (Paso 1)"}
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 px-3.5 py-2 rounded-xl">
+                  <CheckCircle2 size={16} className="text-teal-600" />
+                  <span>Gasto guardado en Cuentas por Pagar</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* ── 6. Forma de Pago y Cruce Bancario (Paso 2) ── */}
+        {/* ── Forma de Pago y Cruce Bancario (Paso 2 Independiente) ── */}
         <div ref={paymentSectionRef} className="scroll-mt-6">
           {!savedExpenseId && !isEditing ? (
             <div className="bg-lilac-50/30 border border-dashed border-lilac-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-3.5 text-center sm:text-left transition">
@@ -1256,11 +1386,11 @@ export default function NuevaCompraForm({
               </div>
               <div className="flex-1">
                 <h4 className="text-xs font-bold text-ink-900 uppercase tracking-wide">
-                  Paso 2: Forma de Pago y Cruce Bancario
+                  Paso 2: Forma de Pago y Cruce Bancario (Independiente)
                 </h4>
                 <p className="text-xs text-ink-500 mt-0.5">
-                  Primero guarda el gasto abajo. Se generará automáticamente el asiento de causación a{" "}
-                  <strong className="text-ink-800">Cuentas por Pagar Proveedores</strong>, y luego se habilitará esta sección para registrar la salida de Bancos o Caja Chica.
+                  Primero guarda el gasto arriba (Paso 1). Se generará automáticamente el asiento de causación a{" "}
+                  <strong className="text-ink-800">Cuentas por Pagar Proveedores (2.1.01.01)</strong>, y luego se habilitará esta sección independiente con su propio adjunto y botón de guardado para cruzar con Bancos o Caja Chica.
                 </p>
               </div>
               <div className="shrink-0 text-xs font-semibold text-lilac-600 bg-white border border-lilac-200 px-3 py-1.5 rounded-xl">
@@ -1268,7 +1398,7 @@ export default function NuevaCompraForm({
               </div>
             </div>
           ) : (
-            <div className="bg-white border-2 border-lilac-400/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+            <div className="bg-white border-2 border-lilac-400/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 animate-fadeIn">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-lilac-100">
                 <div className="flex items-center gap-2">
                   <span className="w-7 h-7 rounded-lg bg-lilac-600 text-white flex items-center justify-center font-bold text-xs">
@@ -1276,17 +1406,17 @@ export default function NuevaCompraForm({
                   </span>
                   <div>
                     <h4 className="text-xs font-bold text-ink-900 uppercase tracking-wide">
-                      Forma de Pago y Cruce Bancario
+                      Forma de Pago y Cruce Bancario (Paso 2)
                     </h4>
                     <p className="text-[11px] text-teal-800 font-medium">
-                      ✓ Gasto causado a Cuentas por Pagar. Selecciona la salida de fondos para cruzar con Bancos o Caja Chica:
+                      ✓ Causación registrada en Cuentas por Pagar. Selecciona la salida de fondos y adjunta el comprobante de pago:
                     </p>
                   </div>
                 </div>
 
                 <div className="flex gap-1.5">
                   {[
-                    { value: "efectivo", label: "💵 Efectivo" },
+                    { value: "efectivo", label: "💵 Efectivo (Caja)" },
                     { value: "transferencia", label: "🏦 Transferencia" },
                     { value: "tarjeta_credito", label: "💳 Tarjeta" },
                   ].map((m) => (
@@ -1313,40 +1443,38 @@ export default function NuevaCompraForm({
               )}
 
               {needsAccount && (
-                <div className="space-y-1.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                    <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
-                      <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
-                      <select
-                        value={selectedBankId}
-                        onChange={(e) => setSelectedBankId(e.target.value)}
-                        className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900 font-medium"
-                      >
-                        <option value="">
-                          {method === "efectivo" ? "— Seleccionar Caja Chica —" : "— Seleccionar Cuenta Bancaria —"}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className={needsReference ? "sm:col-span-7 space-y-1" : "sm:col-span-12 space-y-1"}>
+                    <label className="text-xs font-semibold text-ink-700">{accountLabel} *</label>
+                    <select
+                      value={selectedBankId}
+                      onChange={(e) => setSelectedBankId(e.target.value)}
+                      className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white text-ink-900 font-medium"
+                    >
+                      <option value="">
+                        {method === "efectivo" ? "— Seleccionar Caja Chica —" : "— Seleccionar Cuenta Bancaria —"}
+                      </option>
+                      {accountOptions.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.bank_name}
+                          {a.account_number ? ` · ${a.account_number}` : ""}
                         </option>
-                        {accountOptions.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.bank_name}
-                            {a.account_number ? ` · ${a.account_number}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {needsReference && (
-                      <div className="sm:col-span-5 space-y-1">
-                        <label className="text-xs font-semibold text-ink-700">N° Referencia / Voucher *</label>
-                        <input
-                          type="text"
-                          value={paymentRef}
-                          onChange={(e) => setPaymentRef(e.target.value)}
-                          placeholder="Ej. TRF-123456"
-                          className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
-                        />
-                      </div>
-                    )}
+                      ))}
+                    </select>
                   </div>
+
+                  {needsReference && (
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-xs font-semibold text-ink-700">N° Referencia / Voucher *</label>
+                      <input
+                        type="text"
+                        value={paymentRef}
+                        onChange={(e) => setPaymentRef(e.target.value)}
+                        placeholder="Ej. TRF-123456"
+                        className="w-full border border-lilac-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white font-mono text-ink-900"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1385,134 +1513,89 @@ export default function NuevaCompraForm({
                 </div>
               )}
 
-              {!isEditing && (
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-lilac-100">
-                  <p className="text-[11px] text-ink-500">
-                    Asiento de cruce: <span className="font-mono text-ink-700 font-semibold">2.1.01.01 Cuentas por Pagar (Debe)</span> vs. <span className="font-mono text-ink-700 font-semibold">Bancos/Caja (Haber)</span>.
-                  </p>
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Input oculto para adjuntar comprobante de pago */}
+              <input
+                ref={paymentFileInputRef}
+                type="file"
+                accept=".pdf,image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handlePaymentFileSelected(f);
+                }}
+                className="hidden"
+              />
+
+              {/* Franja de Adjunto de Pago + Botón Registrar Pago Independiente */}
+              <div className="pt-3 border-t border-lilac-100 flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
+                <div className="w-full sm:w-auto">
+                  <span className="text-[11px] font-bold text-ink-600 uppercase tracking-wider block mb-1">
+                    Comprobante del Pago (Transferencia / Voucher)
+                  </span>
+                  {!paymentFile ? (
                     <button
                       type="button"
-                      onClick={() => window.location.href = `/erp/gastos/${savedExpenseId}`}
-                      className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-lilac-200 bg-white hover:bg-lilac-50 text-ink-600 text-xs font-semibold transition text-center"
+                      onClick={() => paymentFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-dashed border-lilac-300 bg-lilac-50/60 hover:bg-lilac-100 text-xs font-semibold text-lilac-800 transition"
                     >
-                      Omitir (Dejar por pagar) →
+                      <Paperclip size={14} className="text-lilac-600" />
+                      <span>Adjuntar Comprobante de Pago (PDF o Foto)</span>
                     </button>
-                    <button
-                      type="button"
-                      disabled={isSubmittingPayment}
-                      onClick={handleRecordPayment}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-xs transition"
-                    >
-                      {isSubmittingPayment ? (
-                        <>
-                          <Loader2 size={13} className="animate-spin" />
-                          <span>Cruzando con Banco...</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={14} />
-                          <span>Registrar Pago y Cruzar con Banco</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-lilac-50 border border-lilac-200 text-xs">
+                      <Paperclip size={13} className="text-lilac-600 shrink-0" />
+                      <span className="font-semibold text-ink-800 truncate max-w-[200px]">
+                        {paymentFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={removePaymentFile}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Quitar archivo de pago"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
 
-        {/* Input oculto para adjuntar archivo nativo */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          name="receipt_file"
-          accept=".pdf,image/*"
-          onChange={onFileInputChange}
-          className="hidden"
-        />
-
-        {/* ── 7. Franja Inferior: Respaldo + Total + Botón Guardar ── */}
-        <div className="pt-3 border-t border-lilac-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            {!receiptFile && !existingReceiptUrl ? (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-dashed border-lilac-300 bg-lilac-50/60 hover:bg-lilac-100 text-xs font-semibold text-lilac-800 transition"
-              >
-                <Paperclip size={15} className="text-lilac-600" />
-                <span>Adjuntar Respaldo (PDF o Foto)</span>
-              </button>
-            ) : (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-lilac-50 border border-lilac-200 text-xs">
-                <Paperclip size={13} className="text-lilac-600 shrink-0" />
-                <span className="font-semibold text-ink-800 truncate max-w-[170px] sm:max-w-[220px]">
-                  {receiptFile ? receiptFile.name : "Respaldo digital adjunto"}
-                </span>
-                {(filePreview || existingReceiptUrl) && (
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   <button
                     type="button"
-                    onClick={() => setPreviewModalOpen(true)}
-                    className="text-lilac-700 hover:text-lilac-900 p-1"
-                    title="Ver archivo"
+                    onClick={() => {
+                      const expId = savedExpenseId || (isEditing ? initialData?.id : null);
+                      if (expId) {
+                        window.location.href = `/erp/gastos/${expId}`;
+                      } else {
+                        window.location.href = "/erp/gastos";
+                      }
+                    }}
+                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl border border-lilac-200 bg-white hover:bg-lilac-50 text-ink-600 text-xs font-semibold transition text-center"
                   >
-                    <Eye size={14} />
+                    Omitir (Dejar pendiente en Ctas. por Pagar) →
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={removeReceipt}
-                  className="text-red-500 hover:text-red-700 p-1"
-                  title="Quitar archivo"
-                >
-                  <X size={14} />
-                </button>
+
+                  <button
+                    type="button"
+                    disabled={isSubmittingPayment}
+                    onClick={handleRecordPayment}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white text-xs font-bold shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
+                  >
+                    {isSubmittingPayment ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Cruzando con Banco...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={15} />
+                        <span>Registrar y Guardar Pago</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
-            <div className="text-left sm:text-right">
-              <span className="text-[11px] font-bold text-ink-500 uppercase tracking-wider block">
-                Total a Pagar
-              </span>
-              <span className="text-2xl font-black text-lilac-700 font-mono">
-                ${effectiveTotal.toFixed(2)}
-              </span>
             </div>
-
-            {!savedExpenseId || isEditing ? (
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center gap-2 bg-lilac-600 hover:bg-lilac-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-lilac-200 transition active:scale-[0.99] disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} />
-                    {isEditing ? "Guardar Cambios" : "Guardar Gasto"}
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  paymentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
-                className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-teal-200 transition active:scale-[0.99]"
-              >
-                <CheckCircle2 size={16} />
-                <span>Gasto Guardado · Continuar a Paso 2 (Forma de Pago) ↑</span>
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </form>
 
