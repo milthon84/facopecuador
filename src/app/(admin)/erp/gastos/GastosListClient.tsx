@@ -857,7 +857,7 @@ export default function GastosListClient({
                   </Link>
 
                   <div className="text-right shrink-0 flex items-center gap-2 sm:gap-2.5">
-                    {/* Botón de Comprobante digital adjunto (solo icono compacto) */}
+                    {/* Botón de Comprobante digital adjunto (solo icono de clip) */}
                     {receiptUrl && (
                       <button
                         type="button"
@@ -882,7 +882,7 @@ export default function GastosListClient({
                         className="inline-flex items-center justify-center w-7 h-7 text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 rounded-lg transition shadow-2xs cursor-pointer shrink-0"
                         title="Ver comprobante de respaldo (PDF o foto)"
                       >
-                        <Eye size={13} className="text-lilac-600" />
+                        <Paperclip size={13} className="text-lilac-600" />
                       </button>
                     )}
 

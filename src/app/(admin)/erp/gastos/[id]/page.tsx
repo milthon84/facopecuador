@@ -408,7 +408,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* Botones de Acción Superiores: Ver Asiento Contable y Ver Comprobantes con el Ojo */}
+        {/* Botón de Acción Superior: Ver Asiento Contable */}
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-center sm:ml-auto">
           {expense.status === "void" && (
             <span className="text-xs font-bold bg-red-100 text-red-700 border border-red-200 px-2.5 py-1 rounded-full">
@@ -420,13 +420,6 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             entries={journalEntries}
             expenseTotal={Number(expense.total)}
           />
-
-          {(receiptUrl || paymentReceiptUrl) && (
-            <ComprobanteModalButton
-              receiptUrl={receiptUrl}
-              paymentReceiptUrl={paymentReceiptUrl}
-            />
-          )}
         </div>
       </div>
 
@@ -491,8 +484,18 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
       ) : null}
 
       {/* Cabecera / Datos Generales */}
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm p-5 space-y-4 relative">
+        {/* Botón de Comprobante Adjunto (Solo el icono de Clip en la esquina superior derecha) */}
+        {(receiptUrl || paymentReceiptUrl) && (
+          <div className="absolute top-4 right-4 z-10">
+            <ComprobanteModalButton
+              receiptUrl={receiptUrl}
+              paymentReceiptUrl={paymentReceiptUrl}
+            />
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-12">
           <div>
             <span className="text-[11px] text-ink-400 uppercase tracking-wide">Proveedor / Beneficiario</span>
             <p className="text-sm font-bold text-ink-900 mt-0.5">{expense.supplier_name}</p>
@@ -707,49 +710,6 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Respaldos Digitales Adjuntos (Gasto y Pago) */}
-      <div className="space-y-3">
-        {/* Comprobante de Respaldo del Gasto */}
-        {receiptUrl ? (
-          <ComprobanteAdjuntoCard
-            receiptUrl={receiptUrl}
-            title="Respaldo Digital / Comprobante de Compra"
-            badgeLabel="COMPROBANTE GASTO"
-          />
-        ) : (
-          <div className="bg-white border border-dashed border-lilac-200 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-lilac-50 border border-lilac-200 flex items-center justify-center text-lilac-500 shrink-0">
-                <Paperclip size={18} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-ink-800">Sin Respaldo Digital de Compra</p>
-                <p className="text-[11px] text-ink-500">
-                  No se adjuntó factura ni nota de respaldo al registrar este comprobante.
-                </p>
-              </div>
-            </div>
-            {!isClosed && canEdit && expense.status !== "void" && (
-              <Link
-                href={`/erp/gastos/${expense.id}/editar`}
-                className="text-xs font-semibold text-lilac-700 hover:text-lilac-900 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-3 py-1.5 rounded-xl transition shadow-2xs"
-              >
-                + Adjuntar factura/recibo
-              </Link>
-            )}
-          </div>
-        )}
-
-        {/* Comprobante de Respaldo de Pago (si existe) */}
-        {paymentReceiptUrl && (
-          <ComprobanteAdjuntoCard
-            receiptUrl={paymentReceiptUrl}
-            title="Comprobante de Pago / Transferencia Bancaria"
-            badgeLabel="COMPROBANTE PAGO"
-          />
-        )}
       </div>
 
       {/* Totales */}

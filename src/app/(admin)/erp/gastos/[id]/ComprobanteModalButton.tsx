@@ -37,7 +37,7 @@ export default function ComprobanteModalButton({ receiptUrl, paymentReceiptUrl }
 
   return (
     <>
-      {/* Botón con el ojo para abrir el popup de comprobantes */}
+      {/* Botón: Solo el icono de Clip para abrir el popup de comprobantes */}
       <button
         type="button"
         onClick={() => {
@@ -45,14 +45,15 @@ export default function ComprobanteModalButton({ receiptUrl, paymentReceiptUrl }
           else if (!currentUrl && paymentReceiptUrl) setActiveTab("pago");
           setIsOpen(true);
         }}
-        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-teal-300 hover:bg-teal-50 text-teal-900 text-xs font-bold transition shadow-xs hover:border-teal-400 active:scale-[0.98]"
-        title="Ver Comprobantes Digitales (PDF o Fotos)"
+        className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white border border-lilac-200 text-lilac-700 hover:bg-lilac-50 hover:border-lilac-300 hover:text-lilac-900 flex items-center justify-center transition shadow-2xs active:scale-95"
+        title={count > 1 ? `Ver comprobantes adjuntos (${count} archivos)` : "Ver comprobante de respaldo (PDF o Foto)"}
       >
-        <Eye size={15} className="text-teal-600" />
-        <span>Ver Comprobantes</span>
-        <span className="text-[10px] bg-teal-100 text-teal-800 border border-teal-200 px-1.5 py-0.2 rounded-full font-bold font-mono">
-          {count}
-        </span>
+        <Paperclip size={17} className="text-lilac-600" />
+        {count > 1 && (
+          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-lilac-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+            {count}
+          </span>
+        )}
       </button>
 
       {/* Modal Popup para ver los comprobantes en tamaño completo */}
