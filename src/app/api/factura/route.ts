@@ -59,7 +59,20 @@ export async function POST(req: Request) {
       course_enrollment_id,
       full_course_payment,
       rental_id,
+      billing_area,
     } = body;
+
+    // Determinar origen / centro de ingreso para la imputación contable NIIF
+    let finalBillingArea = (billing_area || "").toLowerCase();
+    if (!finalBillingArea) {
+      if (module_enrollment_ids || course_enrollment_id) {
+        finalBillingArea = "cursos";
+      } else if (rental_id) {
+        finalBillingArea = "coworking";
+      } else {
+        finalBillingArea = "clinica";
+      }
+    }
 
     if (!client_name || !client_document || !items || items.length === 0) {
       return NextResponse.json({ error: "Faltan datos obligatorios: nombre, documento o ítems" }, { status: 400 });
@@ -482,7 +495,17 @@ export async function POST(req: Request) {
         }
       }
 
-      // 12. Generar asiento contable automático
+      // Actualizar origen / área en la factura
+      try {
+        await supabase
+          .from("invoices")
+          .update({ billing_area: finalBillingArea })
+          .eq("id", invoice.id);
+      } catch {
+        // En caso de que la columna aún no haya sido agregada
+      }
+
+      // 12. Generar asiento contable automático con imputación NIIF según origen
       try {
         await createInvoiceJournalEntry({
           invoice_id:   invoice.id,
@@ -492,6 +515,7 @@ export async function POST(req: Request) {
           subtotal_15:  subtotal15,
           iva_amount:   iva15,
           total:        importeTotal,
+          billing_area: finalBillingArea,
         });
       } catch (accErr) {
         console.error("Asiento contable no generado:", accErr);

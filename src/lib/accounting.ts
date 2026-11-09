@@ -122,9 +122,9 @@ async function insertJournalEntry(params: {
 // ── Asiento por Factura de Venta ───────────────────────────────────────────
 /**
  * Factura emitida al cliente:
- *   Dr. Cuentas por Cobrar Clientes   (total)
- *   Cr.   Servicios Odontológicos     (subtotal sin IVA)
- *   Cr.   IVA en Ventas por Pagar     (iva_amount)   ← solo si hay IVA
+ *   Dr. Cuentas por Cobrar (Clínica / Cursos / Coworking / Otros) (total)
+ *   Cr.   Ingreso correspondiente                                (subtotal sin IVA)
+ *   Cr.   IVA en Ventas por Pagar                                (iva_amount)   ← solo si hay IVA
  */
 export async function createInvoiceJournalEntry(params: {
   invoice_id:   string;
@@ -134,22 +134,62 @@ export async function createInvoiceJournalEntry(params: {
   subtotal_15:  number;
   iva_amount:   number;
   total:        number;
+  billing_area?: "clinica" | "cursos" | "coworking" | "otros" | string | null;
   user_id?:     string | null;
   user_email?:  string | null;
 }) {
   const subtotalTotal = r2(params.subtotal_0 + params.subtotal_15);
+  const area = (params.billing_area || "clinica").toLowerCase();
+
+  let cxcAccount = {
+    code: "1.1.02.01",
+    name: "Cuentas por Cobrar Pacientes (Clínica)",
+  };
+  let incomeAccount = {
+    code: "4.1.01.01",
+    name: "Servicios Odontológicos",
+  };
+
+  if (area === "cursos") {
+    cxcAccount = {
+      code: "1.1.02.02",
+      name: "Cuentas por Cobrar Alumnos (Cursos)",
+    };
+    incomeAccount = {
+      code: "4.2.01.01",
+      name: "Servicios de Capacitación y Cursos",
+    };
+  } else if (area === "coworking") {
+    cxcAccount = {
+      code: "1.1.02.03",
+      name: "Cuentas por Cobrar Inquilinos (Coworking)",
+    };
+    incomeAccount = {
+      code: "4.3.01.01",
+      name: "Alquiler de Espacios y Sillones Odontológicos",
+    };
+  } else if (area === "otros") {
+    cxcAccount = {
+      code: "1.1.02.04",
+      name: "Anticipos a Proveedores y Otras Ctas. por Cobrar",
+    };
+    incomeAccount = {
+      code: "4.4.01.01",
+      name: "Otros Ingresos No Operacionales",
+    };
+  }
+
   const lines: JournalLine[] = [
     {
-      account_code: "1.1.02.01",
-      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+      account_code: cxcAccount.code,
+      account_name: cxcAccount.name,
       debit:  r2(params.total),
       credit: 0,
       description: params.client_name,
     },
     {
-      // ⚠️ Cuenta de MOVIMIENTO: 4.1.01.01 (Servicios Odontológicos), no el grupo 4.1.01
-      account_code: "4.1.01.01",
-      account_name: "Servicios Odontológicos",
+      account_code: incomeAccount.code,
+      account_name: incomeAccount.name,
       debit:  0,
       credit: subtotalTotal,
     },
@@ -166,7 +206,7 @@ export async function createInvoiceJournalEntry(params: {
 
   return insertJournalEntry({
     entry_date:     params.invoice_date,
-    description:    `Factura de venta — ${params.client_name}`,
+    description:    `Factura de venta (${cxcAccount.name}) — ${params.client_name}`,
     reference_type: "invoice",
     reference_id:   params.invoice_id,
     lines,

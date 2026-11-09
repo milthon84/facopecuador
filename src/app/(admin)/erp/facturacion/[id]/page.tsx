@@ -228,18 +228,42 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     invoice.issue_date ||
     (invoice.created_at ? invoice.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
 
+  // Resolver cuentas contables NIIF según origen (Clínica, Cursos, Coworking u Otros)
+  const area = (invoice.billing_area || invoice.area || "").toLowerCase();
+  let cxcCode = "1.1.02.01";
+  let cxcName = "Cuentas por Cobrar Pacientes (Clínica)";
+  let incCode = "4.1.01.01";
+  let incName = "Servicios Odontológicos";
+
+  if (area === "cursos") {
+    cxcCode = "1.1.02.02";
+    cxcName = "Cuentas por Cobrar Alumnos (Cursos)";
+    incCode = "4.2.01.01";
+    incName = "Servicios de Capacitación y Cursos";
+  } else if (area === "coworking") {
+    cxcCode = "1.1.02.03";
+    cxcName = "Cuentas por Cobrar Inquilinos (Coworking)";
+    incCode = "4.3.01.01";
+    incName = "Alquiler de Espacios y Sillones Odontológicos";
+  } else if (area === "otros") {
+    cxcCode = "1.1.02.04";
+    cxcName = "Anticipos a Proveedores y Otras Ctas. por Cobrar";
+    incCode = "4.4.01.01";
+    incName = "Otros Ingresos No Operacionales";
+  }
+
   if (!hasSaleEntry) {
     const saleLines: JournalLineItem[] = [
       {
-        account_code: "1.1.02.01",
-        account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+        account_code: cxcCode,
+        account_name: cxcName,
         debit: tot,
         credit: 0,
         description: invoice.client_name,
       },
       {
-        account_code: "4.1.01.01",
-        account_name: "Servicios Odontológicos",
+        account_code: incCode,
+        account_name: incName,
         debit: 0,
         credit: subtotalTotal > 0 ? subtotalTotal : tot,
       },
@@ -257,7 +281,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     journalEntries.unshift({
       id: "proj-invoice-sale",
       entry_date: invDate,
-      description: `Factura de Venta ${invoice.invoice_number || "Borrador"} — ${invoice.client_name}`,
+      description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
       reference_type: "invoice",
       reference_id: invoice.id,
       journal_lines: saleLines,
@@ -292,8 +316,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               credit: 0,
             },
             {
-              account_code: "1.1.02.01",
-              account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+              account_code: cxcCode,
+              account_name: cxcName,
               debit: 0,
               credit: pAmt,
               description: `Liquidación cobro factura ${invoice.client_name}`,
@@ -316,8 +340,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             credit: 0,
           },
           {
-            account_code: "1.1.02.01",
-            account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+            account_code: cxcCode,
+            account_name: cxcName,
             debit: 0,
             credit: tot,
             description: `Cobro total paciente ${invoice.client_name}`,
@@ -340,8 +364,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
     const cnLines: JournalLineItem[] = [
       {
-        account_code: "4.1.01.01",
-        account_name: "Servicios Odontológicos (Reversión)",
+        account_code: incCode,
+        account_name: `${incName} (Reversión)`,
         debit: Math.round(cnSubtotal * 100) / 100,
         credit: 0,
       },
@@ -355,8 +379,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       });
     }
     cnLines.push({
-      account_code: "1.1.02.01",
-      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+      account_code: cxcCode,
+      account_name: cxcName,
       debit: 0,
       credit: cnTotal,
       description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""}`,

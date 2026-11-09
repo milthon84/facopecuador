@@ -43,18 +43,42 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
     invoice.issue_date ||
     (invoice.created_at ? String(invoice.created_at).split("T")[0] : new Date().toISOString().split("T")[0]);
 
+  // Resolver cuentas contables según origen (Clínica, Cursos, Coworking, Otros)
+  const area = (invoice.billing_area || invoice.area || "").toLowerCase();
+  let cxcCode = "1.1.02.01";
+  let cxcName = "Cuentas por Cobrar Pacientes (Clínica)";
+  let incCode = "4.1.01.01";
+  let incName = "Servicios Odontológicos";
+
+  if (area === "cursos" || invoice.course_enrollment_id || invoice.module_enrollment_ids) {
+    cxcCode = "1.1.02.02";
+    cxcName = "Cuentas por Cobrar Alumnos (Cursos)";
+    incCode = "4.2.01.01";
+    incName = "Servicios de Capacitación y Cursos";
+  } else if (area === "coworking" || invoice.rental_id) {
+    cxcCode = "1.1.02.03";
+    cxcName = "Cuentas por Cobrar Inquilinos (Coworking)";
+    incCode = "4.3.01.01";
+    incName = "Alquiler de Espacios y Sillones Odontológicos";
+  } else if (area === "otros") {
+    cxcCode = "1.1.02.04";
+    cxcName = "Anticipos a Proveedores y Otras Ctas. por Cobrar";
+    incCode = "4.4.01.01";
+    incName = "Otros Ingresos No Operacionales";
+  }
+
   // 1. Asiento de Venta / Devengo
   const saleLines: JournalLineItem[] = [
     {
-      account_code: "1.1.02.01",
-      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+      account_code: cxcCode,
+      account_name: cxcName,
       debit: tot,
       credit: 0,
       description: invoice.client_name,
     },
     {
-      account_code: "4.1.01.01",
-      account_name: "Servicios Odontológicos",
+      account_code: incCode,
+      account_name: incName,
       debit: 0,
       credit: subtotalTotal > 0 ? subtotalTotal : tot,
     },
@@ -72,7 +96,7 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
   entries.push({
     id: `inv-${invoice.id}-sale`,
     entry_date: invDate,
-    description: `Factura de Venta ${invoice.invoice_number || "Borrador"} — ${invoice.client_name}`,
+    description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
     reference_type: "invoice",
     reference_id: invoice.id,
     journal_lines: saleLines,
@@ -95,8 +119,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
           credit: 0,
         },
         {
-          account_code: "1.1.02.01",
-          account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+          account_code: cxcCode,
+          account_name: cxcName,
           debit: 0,
           credit: tot,
           description: `Cobro liquidado ${invoice.client_name}`,
@@ -114,8 +138,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
     const cnLines: JournalLineItem[] = [
       {
-        account_code: "4.1.01.01",
-        account_name: "Servicios Odontológicos (Reversión)",
+        account_code: incCode,
+        account_name: `${incName} (Reversión)`,
         debit: Math.round(cnSubtotal * 100) / 100,
         credit: 0,
       },
@@ -129,8 +153,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
       });
     }
     cnLines.push({
-      account_code: "1.1.02.01",
-      account_name: "Cuentas por Cobrar Pacientes (Clínica)",
+      account_code: cxcCode,
+      account_name: cxcName,
       debit: 0,
       credit: cnTotal,
       description: `Nota de Crédito ${linkedCn.credit_note_number || ""}`,
