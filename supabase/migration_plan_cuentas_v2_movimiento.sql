@@ -62,6 +62,7 @@ insert into public.accounts (code, name, type, subtype, is_movement) values
   -- 5.2.05 Suministros Oficina y Aseo → hijas
   ('5.2.05.01', 'Útiles de Oficina',                 'GASTO', 'administrativo', true),
   ('5.2.05.02', 'Útiles de Aseo',                    'GASTO', 'administrativo', true),
+  ('5.2.05.03', 'Suministros de Oficina',             'GASTO', 'administrativo', true),
 
   -- 5.2.07 Honorarios Externos → hijas
   ('5.2.07.01', 'Honorarios Externos (Contabilidad)','GASTO', 'administrativo', true),
@@ -142,6 +143,18 @@ where account_code = '5.2.04'
   and id in (
     'adbf153b-bc49-482b-b584-523852a96c8f'
   );
+
+-- ─── BLOQUE 5B: CORRECCIÓN — Suministros de Oficina 5.2.05.03 ───────────────────
+-- Esta cuenta faltó en la versión inicial porque el plan original tenía código duplicado
+-- (5.2.05.02 asignado tanto a "Útiles de Aseo" como a "Suministros de Oficina").
+-- El código correcto es 5.2.05.03.
+insert into public.accounts (code, name, type, subtype, is_movement) values
+  ('5.2.05.03', 'Suministros de Oficina', 'GASTO', 'administrativo', true)
+on conflict (code) do update set
+  name        = excluded.name,
+  type        = excluded.type,
+  subtype     = excluded.subtype,
+  is_movement = excluded.is_movement;
 
 -- ─── BLOQUE 6: VERIFICACIÓN FINAL ───────────────────────────────────────────────
 -- Ejecuta estas consultas después del script para confirmar que no quedan líneas en grupos.
