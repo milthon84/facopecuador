@@ -32,14 +32,17 @@ update public.accounts set name = 'Agua, Energía, Luz y Comunicaciones'
 update public.accounts set name = 'Honorarios Externos'
   where code = '5.2.07';
 
-update public.accounts set name = 'Impuestos, Tasas y Contribuciones'
+update public.accounts set name = 'Impuestos, Tasas, Contribuciones'
   where code = '5.2.09';
 
 -- ─── BLOQUE 3: DESACTIVAR CUENTAS INCORRECTAMENTE CREADAS BAJO 5.2.02 ───────────
 -- Estas cuentas fueron colocadas en el subgrupo de "Arriendo" por error.
--- Se desactivan para evitar nuevos asientos; los históricos nulos (debit=0, credit=0) no impactan.
+-- Se desactivan para evitar nuevos asientos; 5.2.02.02 se conserva y renombra a "Arriendo para Eventos".
 update public.accounts set active = false
-  where code in ('5.2.02.02','5.2.02.03','5.2.02.04','5.2.02.05','5.2.02.06','5.2.02.99');
+  where code in ('5.2.02.03','5.2.02.04','5.2.02.05','5.2.02.06','5.2.02.99');
+
+update public.accounts set name = 'Arriendo para Eventos', is_movement = true, active = true
+  where code = '5.2.02.02';
 
 -- ─── BLOQUE 4: INSERTAR NUEVAS CUENTAS DE MOVIMIENTO ────────────────────────────
 insert into public.accounts (code, name, type, subtype, is_movement) values
@@ -67,21 +70,21 @@ insert into public.accounts (code, name, type, subtype, is_movement) values
   -- 5.2.07 Honorarios Externos → hijas
   ('5.2.07.01', 'Honorarios Externos (Contabilidad)','GASTO', 'administrativo', true),
 
-  -- 5.2.09 Impuestos, Tasas y Contribuciones → hijas
-  ('5.2.09.01', 'Patente Municipal',                 'GASTO', 'administrativo', true),
+  -- 5.2.09 Impuestos, Tasas, Contribuciones → hijas
+  ('5.2.09.01', 'Patente',                           'GASTO', 'administrativo', true),
   ('5.2.09.02', '1.5 por Mil',                       'GASTO', 'administrativo', true),
-  ('5.2.09.03', 'Contribuciones Gremiales',          'GASTO', 'administrativo', true),
+  ('5.2.09.03', 'Contribuciones',                    'GASTO', 'administrativo', true),
   ('5.2.09.04', 'Permiso de Funcionamiento',         'GASTO', 'administrativo', true),
 
   -- 5.2.10 Seguros → nuevo grupo + hija
   ('5.2.10',    'Seguros',                            'GASTO', 'administrativo', false),
-  ('5.2.10.01', 'Póliza de Seguro',                  'GASTO', 'administrativo', true),
+  ('5.2.10.01', 'Seguro',                            'GASTO', 'administrativo', true),
 
   -- 5.2.11 Gastos de Viaje → nuevo grupo + hijas
   ('5.2.11',    'Gastos de Viaje',                   'GASTO', 'administrativo', false),
   ('5.2.11.01', 'Hospedaje',                         'GASTO', 'administrativo', true),
-  ('5.2.11.02', 'Alimentación en Viaje',             'GASTO', 'administrativo', true),
-  ('5.2.11.03', 'Movilización en Viaje',             'GASTO', 'administrativo', true),
+  ('5.2.11.02', 'Alimentación Viaje',                'GASTO', 'administrativo', true),
+  ('5.2.11.03', 'Movilización Viaje',                'GASTO', 'administrativo', true),
 
   -- 5.2.19 Otros Gastos → nuevo grupo + hija
   ('5.2.19',    'Otros Gastos',                      'GASTO', 'administrativo', false),
