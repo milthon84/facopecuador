@@ -35,7 +35,7 @@ update public.accounts set name = 'Honorarios Externos'
 update public.accounts set name = 'Impuestos, Tasas, Contribuciones'
   where code = '5.2.09';
 
--- ─── BLOQUE 3: DESACTIVAR CUENTAS INCORRECTAMENTE CREADAS BAJO 5.2.02 ───────────
+-- ─── BLOQUE 3: DESACTIVAR CUENTAS INCORRECTAMENTE CREADAS BAJO 5.2.02 Y ELIMINAR GRUPOS OBSOLETOS ───
 -- Estas cuentas fueron colocadas en el subgrupo de "Arriendo" por error.
 -- Se desactivan para evitar nuevos asientos; 5.2.02.02 se conserva y renombra a "Arriendo para Eventos".
 update public.accounts set active = false
@@ -43,6 +43,19 @@ update public.accounts set active = false
 
 update public.accounts set name = 'Arriendo para Eventos', is_movement = true, active = true
   where code = '5.2.02.02';
+
+-- Reclasificar líneas de diario históricas en 5.1.03 y 5.1.04 hacia sus cuentas hijas bajo 5.1.02
+update public.journal_lines
+set account_code = '5.1.02.02', account_name = 'Honorarios Odontólogos Asociados'
+where account_code = '5.1.03';
+
+update public.journal_lines
+set account_code = '5.1.02.03', account_name = 'Honorarios Profesores y Expositores'
+where account_code = '5.1.04';
+
+-- Eliminar los grupos redundantes 5.1.03 y 5.1.04 (ya existen como movimientos 5.1.02.02 y 5.1.02.03)
+delete from public.accounts
+  where code in ('5.1.03', '5.1.04');
 
 -- ─── BLOQUE 4: INSERTAR NUEVAS CUENTAS DE MOVIMIENTO ────────────────────────────
 insert into public.accounts (code, name, type, subtype, is_movement) values

@@ -28,7 +28,7 @@ export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: stri
   "Salarios":                  { code: "5.2.01.01", name: "Sueldos y Salarios" },
   "Suministros oficina":       { code: "5.2.05.01", name: "Útiles de Oficina" },
   "Mantenimiento":             { code: "5.2.04.01", name: "Mantenimiento Instalaciones/Adecuaciones" },
-  "Publicidad":                { code: "5.2.06",    name: "Publicidad, Marketing y Comisiones" },   // sin hijas creadas aún
+  "Publicidad":                { code: "5.2.06.01", name: "Publicidad y Marketing" },
   "Seguros y Suscripciones":   { code: "5.2.10.01", name: "Seguro" },
   "Otros":                     { code: "5.2.19.01", name: "Alimentación Cafetería" },
 };

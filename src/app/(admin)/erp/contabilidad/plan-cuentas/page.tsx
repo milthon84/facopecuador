@@ -11,6 +11,7 @@ export default async function PlanCuentasPage() {
   const { data: accounts, error } = await supabase
     .from("accounts")
     .select("*")
+    .eq("active", true)
     .order("code", { ascending: true });
 
   if (error) {

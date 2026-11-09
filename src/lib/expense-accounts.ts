@@ -28,6 +28,7 @@ export const FALLBACK_EXPENSE_GROUPS: ExpenseGroup[] = [
   { code: "5.2.03", name: "Agua, Energía, Luz y Comunicaciones", type: "GASTO" },
   { code: "5.2.04", name: "Mantenimiento Equipos e Instalaciones", type: "GASTO" },
   { code: "5.2.05", name: "Suministros Oficina y Aseo", type: "GASTO" },
+  { code: "5.2.06", name: "Publicidad, Marketing y Comisiones", type: "GASTO" },
   { code: "5.2.07", name: "Honorarios Externos", type: "GASTO" },
   { code: "5.2.09", name: "Impuestos, Tasas, Contribuciones", type: "GASTO" },
   { code: "5.2.10", name: "Seguros", type: "GASTO" },
@@ -69,6 +70,9 @@ export const FALLBACK_EXPENSE_MOVEMENTS: ExpenseMovementAccount[] = [
   { code: "5.2.05.01", name: "Útiles de Oficina", group_code: "5.2.05", type: "GASTO" },
   { code: "5.2.05.02", name: "Útiles de Aseo", group_code: "5.2.05", type: "GASTO" },
   { code: "5.2.05.03", name: "Suministros de Oficina", group_code: "5.2.05", type: "GASTO" },
+
+  // 5.2.06 Publicidad, Marketing y Comisiones
+  { code: "5.2.06.01", name: "Publicidad y Marketing", group_code: "5.2.06", type: "GASTO" },
 
   // 5.2.07 Honorarios Externos
   { code: "5.2.07.01", name: "Honorarios Externos (Contabilidad)", group_code: "5.2.07", type: "GASTO" },
