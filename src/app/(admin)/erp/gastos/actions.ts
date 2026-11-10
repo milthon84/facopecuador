@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, createExpensePaymentJournalEntry } from "@/lib/accounting";
-import { resolveFacturaSriClave, cleanDocNumberOnly } from "@/lib/expense-areas";
+import { resolveFacturaSriClave, cleanDocNumberOnly, cleanExpenseDescription } from "@/lib/expense-areas";
 import { revalidatePath } from "next/cache";
 
 export async function linkExpenseToFactura(expenseId: string, claveAcceso: string) {
@@ -62,15 +62,24 @@ export async function linkExpenseToFactura(expenseId: string, claveAcceso: strin
     };
 
     // Si la factura del SRI tiene valores monetarios, sincronizarlos para evitar discrepancias
+    let effectiveSubtotal = 0;
+    let effectiveIva = 0;
+    let effectiveTotal = 0;
+
     if (Number(factura.total) > 0) {
       const facSubtotal = Number(factura.subtotal) || 0;
       const facIva = Number(factura.iva) || 0;
       const facTotal = Number(factura.total) || 0;
+      effectiveSubtotal = facSubtotal > 0 ? facSubtotal : facTotal;
+      effectiveIva = facIva;
+      effectiveTotal = facTotal;
 
       if (facIva > 0) {
         expenseUpdate.subtotal_15 = facSubtotal;
+        expenseUpdate.subtotal_0 = 0;
         expenseUpdate.iva_amount = facIva;
       } else {
+        expenseUpdate.subtotal_15 = 0;
         expenseUpdate.subtotal_0 = facSubtotal || facTotal;
         expenseUpdate.iva_amount = 0;
       }
@@ -99,7 +108,39 @@ export async function linkExpenseToFactura(expenseId: string, claveAcceso: strin
       return { success: false, error: updateExpErr.message };
     }
 
-    // 4. Actualizar facturas_recibidas para marcarla como registrada
+    // 4. Sincronizar detalle de ítems (expense_items): reemplazar con el ítem de la factura SRI para evitar duplicaciones
+    try {
+      const cleanExpDesc = cleanExpenseDescription(expense.description);
+      const sriItemDesc = factura.razon_social
+        ? `${factura.razon_social} - Factura #${cleanNum || "SRI"}${cleanExpDesc ? ` (${cleanExpDesc})` : ""}`
+        : (cleanNum ? `Factura #${cleanNum}${cleanExpDesc ? ` (${cleanExpDesc})` : ""}` : "Compra según factura electrónica SRI");
+
+      const grpCode = expense.group_code || (expense.area === "clinica" ? "5.1.01" : "5.2.05");
+      const grpName = expense.group_name || (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos");
+      const accCode = expense.account_code || (expense.area === "clinica" ? "5.1.01.01" : "5.2.05.01");
+      const accName = expense.account_name || (expense.area === "clinica" ? "Insumos Dentales Utilizados" : "Útiles de Oficina");
+
+      await supabase.from("expense_items").delete().eq("expense_id", expenseId);
+      await supabase.from("expense_items").insert({
+        expense_id: expenseId,
+        description: sriItemDesc,
+        category: expense.category || accName,
+        group_code: grpCode,
+        group_name: grpName,
+        account_code: accCode,
+        account_name: accName,
+        quantity: 1,
+        unit_price: effectiveSubtotal || effectiveTotal,
+        iva_rate: effectiveIva > 0 ? 15 : 0,
+        subtotal: effectiveSubtotal || effectiveTotal,
+        iva_amount: effectiveIva,
+        total: effectiveTotal || effectiveSubtotal,
+      });
+    } catch (itErr) {
+      console.warn("No se pudo actualizar expense_items en linkExpenseToFactura:", itErr);
+    }
+
+    // 5. Actualizar facturas_recibidas para marcarla como registrada
     const { error: updateFacErr } = await supabase
       .from("facturas_recibidas")
       .update({

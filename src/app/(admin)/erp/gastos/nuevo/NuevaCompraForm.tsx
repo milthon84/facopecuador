@@ -149,7 +149,18 @@ export default function NuevaCompraForm({
   // Líneas de detalle del gasto (Cabecera y Detalle)
   const [items, setItems] = useState<ExpenseItemRow[]>(() => {
     if (initialItems && initialItems.length > 0) {
-      return initialItems.map((it) => {
+      let filteredInitial = initialItems;
+      if (filteredInitial.length > 1) {
+        const firstDesc = cleanExpenseDescription(filteredInitial[0].description).toLowerCase();
+        const allSameDesc = filteredInitial.every(
+          (it) => cleanExpenseDescription(it.description).toLowerCase() === firstDesc
+        );
+        if (allSameDesc) {
+          const item15 = filteredInitial.find((it) => it.iva_rate === 15);
+          filteredInitial = [item15 || filteredInitial[0]];
+        }
+      }
+      return filteredInitial.map((it) => {
         const accCode = it.account_code || defaultAccountCode;
         const mov = allMovements.find((m) => m.code === accCode);
         const grpCode = it.group_code || mov?.group_code || defaultGroupCode;
@@ -167,11 +178,38 @@ export default function NuevaCompraForm({
     if (initialData) {
       const sub0 = Number(initialData.subtotal_0) || 0;
       const sub15 = Number(initialData.subtotal_15) || 0;
+      const ivaAmt = Number(initialData.iva_amount) || 0;
       const accCode = initialData.account_code || defaultAccountCode;
       const mov = allMovements.find((m) => m.code === accCode);
       const grpCode = initialData.group_code || mov?.group_code || defaultGroupCode;
       const grp = groups.find((g) => g.code === grpCode);
       const cleanDesc = cleanExpenseDescription(initialData.description);
+      const hasSriLink = Boolean(
+        initialData.factura_recibida_clave_acceso ||
+        (initialAuth && initialAuth.length === 49) ||
+        (initialFacturaClave && initialFacturaClave.length === 49)
+      );
+
+      // Si viene vinculada a factura SRI o si sub0 coincide con sub15 + IVA (bug de duplicación previo),
+      // NO crear dos filas con la misma descripción: conservar únicamente el ítem correspondiente
+      if (hasSriLink || (sub15 > 0 && sub0 > 0 && Math.abs(sub0 - (sub15 + ivaAmt)) < 0.05)) {
+        const is15 = sub15 > 0 || ivaAmt > 0;
+        return [
+          {
+            id: is15 ? "init-15" : "init-0",
+            description: cleanDesc || "Compra según factura electrónica SRI",
+            group_code: grpCode,
+            group_name: grp?.name || "",
+            account_code: accCode,
+            account_name: mov?.name || "",
+            category: mov?.name || "Gasto Operativo",
+            quantity: 1,
+            unit_price: is15 ? sub15 : sub0,
+            iva_rate: is15 ? 15 : 0,
+          },
+        ];
+      }
+
       const result: ExpenseItemRow[] = [];
       if (sub15 > 0) {
         result.push({
@@ -803,7 +841,7 @@ export default function NuevaCompraForm({
         )}
 
         {/* ── PANEL DE VINCULACIÓN CON FACTURAS RECIBIDAS DEL SRI ── */}
-        {!isEditing && pendingFacturas.length > 0 && (
+        {(pendingFacturas.length > 0 || facturaVinculada) && (
           <div className="bg-gradient-to-r from-lilac-50/70 via-indigo-50/40 to-teal-50/50 border border-lilac-200/90 rounded-2xl p-3.5 space-y-2.5 transition">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -813,14 +851,18 @@ export default function NuevaCompraForm({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-ink-900 tracking-tight">
-                      Vincular Factura Electrónica Recibida (SRI)
+                      Factura Electrónica SRI Vinculada
                     </span>
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-lilac-200/70 text-lilac-900">
-                      {pendingFacturas.length} pendientes
-                    </span>
+                    {pendingFacturas.length > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-lilac-200/70 text-lilac-900">
+                        {pendingFacturas.length} disponibles
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-ink-500">
-                    Selecciona una factura descargada del SRI para autocompletar cabecera, montos y detalle
+                    {facturaVinculada
+                      ? "La compra está asociada a este comprobante del SRI; el detalle y montos corresponden a la factura."
+                      : "Selecciona una factura descargada del SRI para autocompletar cabecera, montos y detalle"}
                   </p>
                 </div>
               </div>
@@ -831,16 +873,14 @@ export default function NuevaCompraForm({
                   <span className="font-semibold text-teal-950 font-mono text-[11px]">
                     Factura SRI: {cleanDocNumberOnly(facturaVinculada.numero_comprobante) || facturaVinculada.numero_comprobante || "Vinculada"}
                   </span>
-                  {!isEditing && (
-                    <button
-                      type="button"
-                      onClick={desvincularFactura}
-                      className="text-ink-400 hover:text-red-600 p-0.5 rounded transition"
-                      title="Cambiar selección antes de guardar"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={desvincularFactura}
+                    className="text-ink-400 hover:text-red-600 p-0.5 rounded transition"
+                    title="Cambiar selección o desvincular"
+                  >
+                    <X size={13} />
+                  </button>
                 </div>
               ) : (
                 <button

@@ -7,7 +7,7 @@ import { assertPermission, assertWritePermission, getUserRole } from "@/lib/auth
 import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry, createExpensePaymentJournalEntry } from "@/lib/accounting";
 import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
-import { ExpenseItemRow, parseItemCategoryAndDesc } from "@/lib/expense-types";
+import { ExpenseItemRow, FacturaRecibida, parseItemCategoryAndDesc } from "@/lib/expense-types";
 import {
   cleanDocNumberOnly,
   cleanExpenseDescription,
@@ -386,6 +386,19 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
     // Si la tabla no está creada aún
   }
 
+  let pendingFacturas: FacturaRecibida[] = [];
+  try {
+    const { data: recData } = await supabase
+      .from("facturas_recibidas")
+      .select("*")
+      .or("estado_facop.eq.pendiente,estado_facop.is.null")
+      .order("fecha_emision", { ascending: false })
+      .limit(60);
+    if (recData) pendingFacturas = recData as FacturaRecibida[];
+  } catch {
+    // Si la tabla no está creada aún
+  }
+
   const [
     { data: rawExpense },
     { data: allAccounts },
@@ -410,21 +423,119 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
     description: cleanDesc,
   };
 
-  const initialItems: ExpenseItemRow[] = rawItems.map((it: any) => {
-    const parsed = parseItemCategoryAndDesc(it.description);
-    return {
-      id: it.id,
-      description: cleanExpenseDescription(parsed.description),
-      category: it.category || parsed.category,
-      group_code: it.group_code || null,
-      group_name: it.group_name || null,
-      account_code: it.account_code || null,
-      account_name: it.account_name || null,
-      quantity: Number(it.quantity) || 1,
-      unit_price: Number(it.unit_price) || 0,
-      iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,
-    };
-  });
+  const sriClave = resolveFacturaSriClave(expense);
+  let linkedFactura: FacturaRecibida | null = null;
+  if (sriClave) {
+    const existingInPending = pendingFacturas.find((f) => f.clave_acceso === sriClave);
+    if (existingInPending) {
+      linkedFactura = existingInPending;
+    } else {
+      try {
+        const { data: fac } = await supabase
+          .from("facturas_recibidas")
+          .select("*")
+          .eq("clave_acceso", sriClave)
+          .maybeSingle();
+        if (fac) {
+          linkedFactura = fac as FacturaRecibida;
+          pendingFacturas.unshift(linkedFactura);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // Si existe factura SRI vinculada, corregir subtotales/total si el registro previo quedó duplicado o corrupto
+  if (linkedFactura) {
+    const facSub = Number(linkedFactura.subtotal) || 0;
+    const facIva = Number(linkedFactura.iva) || 0;
+    const facTot = Number(linkedFactura.total) || Math.round((facSub + facIva) * 100) / 100;
+
+    if (facTot > 0 && (cleanExpense.total > facTot * 1.05 || (cleanExpense.subtotal_0 > 0 && cleanExpense.subtotal_15 > 0))) {
+      cleanExpense.total = facTot;
+      cleanExpense.iva_amount = facIva;
+      if (facIva > 0) {
+        cleanExpense.subtotal_15 = facSub || Math.round((facTot - facIva) * 100) / 100;
+        cleanExpense.subtotal_0 = 0;
+      } else {
+        cleanExpense.subtotal_15 = 0;
+        cleanExpense.subtotal_0 = facSub || facTot;
+      }
+    }
+  }
+
+  // Detección de duplicación de ítems (ej. 2 filas con la misma descripción o que superan el total de la factura)
+  const rawTotalAmount = rawItems.reduce((acc, it) => acc + (Number(it.total) || Number(it.subtotal) || 0), 0);
+  const hasDuplicateDesc =
+    rawItems.length > 1 &&
+    rawItems.every(
+      (it) => cleanExpenseDescription(it.description).toLowerCase() === cleanExpenseDescription(rawItems[0].description).toLowerCase()
+    );
+
+  let initialItems: ExpenseItemRow[] = [];
+
+  if (linkedFactura && (rawItems.length === 0 || hasDuplicateDesc || (linkedFactura.total && rawTotalAmount > Number(linkedFactura.total) * 1.05))) {
+    // Generar un único ítem limpio correspondiente a la factura SRI
+    const facSub = Number(linkedFactura.subtotal) || 0;
+    const facIva = Number(linkedFactura.iva) || 0;
+    const facTot = Number(linkedFactura.total) || Math.round((facSub + facIva) * 100) / 100;
+    const cleanNum = cleanDocNumberOnly(linkedFactura.numero_comprobante);
+    const sriDesc = linkedFactura.razon_social
+      ? `${linkedFactura.razon_social} - Factura #${cleanNum || "SRI"}`
+      : `Factura #${cleanNum || "SRI"}`;
+    const finalDesc = cleanDesc ? `${sriDesc} (${cleanDesc})` : sriDesc;
+
+    initialItems = [
+      {
+        id: rawItems[0]?.id || "sri-item-1",
+        description: finalDesc,
+        category: rawItems[0]?.category || expense.category || "Insumo y Material",
+        group_code: rawItems[0]?.group_code || expense.group_code || (expense.area === "clinica" ? "5.1.01" : "5.2.05"),
+        group_name: rawItems[0]?.group_name || expense.group_name || (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos"),
+        account_code: rawItems[0]?.account_code || expense.account_code || (expense.area === "clinica" ? "5.1.01.01" : "5.2.05.01"),
+        account_name: rawItems[0]?.account_name || expense.account_name || (expense.area === "clinica" ? "Insumos Dentales Utilizados" : "Útiles de Oficina"),
+        quantity: 1,
+        unit_price: facIva > 0 ? (facSub || Math.round((facTot - facIva) * 100) / 100) : (facSub || facTot),
+        iva_rate: facIva > 0 ? 15 : 0,
+      },
+    ];
+  } else if (!linkedFactura && hasDuplicateDesc) {
+    // Si no está la factura vinculada en DB pero hay filas duplicadas con igual descripción
+    const item15 = rawItems.find((it) => Number(it.iva_rate) === 15);
+    const chosen = item15 || rawItems[0];
+    const parsed = parseItemCategoryAndDesc(chosen.description);
+    initialItems = [
+      {
+        id: chosen.id,
+        description: cleanExpenseDescription(parsed.description),
+        category: chosen.category || parsed.category,
+        group_code: chosen.group_code || null,
+        group_name: chosen.group_name || null,
+        account_code: chosen.account_code || null,
+        account_name: chosen.account_name || null,
+        quantity: Number(chosen.quantity) || 1,
+        unit_price: Number(chosen.unit_price) || 0,
+        iva_rate: (Number(chosen.iva_rate) === 15 ? 15 : 0) as 0 | 15,
+      },
+    ];
+  } else {
+    initialItems = rawItems.map((it: any) => {
+      const parsed = parseItemCategoryAndDesc(it.description);
+      return {
+        id: it.id,
+        description: cleanExpenseDescription(parsed.description),
+        category: it.category || parsed.category,
+        group_code: it.group_code || null,
+        group_name: it.group_name || null,
+        account_code: it.account_code || null,
+        account_name: it.account_name || null,
+        quantity: Number(it.quantity) || 1,
+        unit_price: Number(it.unit_price) || 0,
+        iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,
+      };
+    });
+  }
 
   const isClosed = await isMonthClosed(expense.expense_date);
 
@@ -482,6 +593,8 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
           bankAccounts={bankAccounts}
           cajaAccounts={cajaAccounts}
           knownSuppliersList={knownSuppliersList}
+          pendingFacturas={pendingFacturas}
+          initialFacturaClave={sriClave || null}
           initialData={cleanExpense}
           initialItems={initialItems}
           accountsCatalog={accountsCatalog}
