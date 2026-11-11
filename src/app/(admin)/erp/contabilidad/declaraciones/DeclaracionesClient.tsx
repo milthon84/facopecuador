@@ -151,8 +151,14 @@ export default function DeclaracionesClient({
       }
 
       // Filtro por tipo/categoría
-      if (categoryFilter !== "todos" && doc.document_type !== categoryFilter) {
-        return false;
+      if (categoryFilter !== "todos") {
+        if (categoryFilter === "otro") {
+          if (doc.document_type !== "otro" && doc.document_type !== "retenciones_recibidas") {
+            return false;
+          }
+        } else if (doc.document_type !== categoryFilter) {
+          return false;
+        }
       }
 
       // Filtro de búsqueda
@@ -555,11 +561,11 @@ export default function DeclaracionesClient({
             const isSelected = !viewAllMonths && selectedMonth === m;
             const shortName = name.slice(0, 3);
 
-            // Indicadores de las 4 obligaciones obligatorias
+            // Indicadores de las 4 obligaciones obligatorias: 104, ATS, 103, Pago SRI (CEP)
             const has104 = monthDocs.some((d) => d.document_type === "iva_104");
+            const hasAts = monthDocs.some((d) => d.document_type === "ats");
             const has103 = monthDocs.some((d) => d.document_type === "retenciones_103");
             const hasCep = monthDocs.some((d) => d.document_type === "pago_sri");
-            const hasAts = monthDocs.some((d) => d.document_type === "ats");
 
             return (
               <button
@@ -588,7 +594,7 @@ export default function DeclaracionesClient({
                 {/* 4 Puntitos indicadores con colores correspondientes a cada filtro */}
                 <div
                   className="flex items-center justify-center gap-1 my-0.5"
-                  title={`Obligaciones: 104 IVA (${has104 ? "Listo" : "Falta"}), 103 Ret (${has103 ? "Listo" : "Falta"}), CEP (${hasCep ? "Listo" : "Falta"}), ATS (${hasAts ? "Listo" : "Falta"})`}
+                  title={`Obligaciones: 104 IVA (${has104 ? "Listo" : "Falta"}), ATS (${hasAts ? "Listo" : "Falta"}), 103 Ret (${has103 ? "Listo" : "Falta"}), CEP Pago (${hasCep ? "Listo" : "Falta"})`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full transition ${
@@ -597,6 +603,14 @@ export default function DeclaracionesClient({
                         : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
                     }`}
                     title="104: Declaración IVA (Verde)"
+                  />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasAts
+                        ? isSelected ? "bg-purple-300 ring-1 ring-white" : "bg-purple-500 ring-1 ring-purple-300"
+                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
+                    }`}
+                    title="ATS: Anexo Transaccional SRI (Púrpura)"
                   />
                   <span
                     className={`w-1.5 h-1.5 rounded-full transition ${
@@ -614,14 +628,7 @@ export default function DeclaracionesClient({
                     }`}
                     title="CEP: Comprobante de Pago SRI (Ámbar)"
                   />
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full transition ${
-                      hasAts
-                        ? isSelected ? "bg-purple-300 ring-1 ring-white" : "bg-purple-500 ring-1 ring-purple-300"
-                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
-                    }`}
-                    title="ATS: Anexo Transaccional SRI (Púrpura)"
-                  />                </div>
+                </div>
 
                 <span
                   className={`text-[9px] leading-none ${
@@ -781,13 +788,13 @@ export default function DeclaracionesClient({
 
               // Filtrar categorías contextuales según si ve mes o cierre anual
               const categoriesToShow = TAX_DOC_CATEGORIES.filter((cat) => {
-                if (viewAllMonths) return true;
+                if (viewAllMonths) return cat.id !== "retenciones_recibidas";
                 if (selectedMonth === 0) {
                   // En Cierre Anual SuperCías: mostrar Renta 101, Balances, Actas, Nómina Socios y Otro
                   return ["renta_101", "supercias_balances", "supercias_actas", "supercias_socios", "otro"].includes(cat.id);
                 } else {
-                  // En Meses SRI: mostrar IVA 104, Ret 103, CEP, ATS, Retenciones Clientes y Otro
-                  return ["iva_104", "retenciones_103", "pago_sri", "ats", "retenciones_recibidas", "otro"].includes(cat.id);
+                  // En Meses SRI: Formulario 104, ATS, Formulario 103, Pago SRI y Otros (incluye retenciones)
+                  return ["iva_104", "ats", "retenciones_103", "pago_sri", "otro"].includes(cat.id);
                 }
               });
 
@@ -795,6 +802,9 @@ export default function DeclaracionesClient({
                 const count = documents.filter((d) => {
                   if (!viewAllMonths && d.period !== selectedPeriod) return false;
                   if (viewAllMonths && d.year !== selectedYear) return false;
+                  if (cat.id === "otro") {
+                    return d.document_type === "otro" || d.document_type === "retenciones_recibidas";
+                  }
                   return d.document_type === cat.id;
                 }).length;
 
@@ -1145,11 +1155,11 @@ export default function DeclaracionesClient({
                             Corresponde a:
                           </label>
                           <select
-                            value={item.document_type}
+                            value={item.document_type === "retenciones_recibidas" ? "otro" : item.document_type}
                             onChange={(e) => updateQueueItemType(item.id, e.target.value as TaxDocType)}
                             className="w-full text-xs font-medium rounded-lg border border-gray-200 bg-gray-50/60 hover:bg-white py-1.5 px-2 text-ink-900 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                           >
-                            {TAX_DOC_CATEGORIES.map((cat) => (
+                            {TAX_DOC_CATEGORIES.filter((c) => c.id !== "retenciones_recibidas").map((cat) => (
                               <option key={cat.id} value={cat.id}>
                                 {cat.label}
                               </option>

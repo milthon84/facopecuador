@@ -52,6 +52,16 @@ export const TAX_DOC_CATEGORIES: TaxDocCategoryDef[] = [
     defaultTitleTemplate: (m, y) => `Declaración IVA Form. 104 - ${m} ${y}`,
   },
   {
+    id: "ats",
+    label: "ATS — Talón Resumen / Anexo Transaccional",
+    shortLabel: "ATS / Anexo",
+    code: "ATS",
+    color: "purple",
+    badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
+    description: "Talón resumen generado por el SRI o archivo XML/ZIP del Anexo Transaccional",
+    defaultTitleTemplate: (m, y) => `Talón Resumen ATS - ${m} ${y}`,
+  },
+  {
     id: "retenciones_103",
     label: "Formulario 103 — Retenciones en la Fuente",
     shortLabel: "Form. 103 (Retenciones)",
@@ -66,20 +76,10 @@ export const TAX_DOC_CATEGORIES: TaxDocCategoryDef[] = [
     label: "Comprobante de Pago SRI / Débito (CEP)",
     shortLabel: "Pago SRI / CEP",
     code: "CEP",
-    color: "indigo",
-    badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    color: "amber",
+    badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
     description: "Comprobante Electrónico de Pago (CEP), convenio de débito o papeleta bancaria",
     defaultTitleTemplate: (m, y) => `Comprobante de Pago SRI - ${m} ${y}`,
-  },
-  {
-    id: "ats",
-    label: "ATS — Talón Resumen / Anexo Transaccional",
-    shortLabel: "ATS / Anexo",
-    code: "ATS",
-    color: "purple",
-    badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
-    description: "Talón resumen generado por el SRI o archivo XML/ZIP del Anexo Transaccional",
-    defaultTitleTemplate: (m, y) => `Talón Resumen ATS - ${m} ${y}`,
   },
   {
     id: "renta_101",
@@ -122,24 +122,24 @@ export const TAX_DOC_CATEGORIES: TaxDocCategoryDef[] = [
     defaultTitleTemplate: (m, y) => `Nómina de Socios SuperCias - Ejercicio ${y}`,
   },
   {
-    id: "retenciones_recibidas",
-    label: "Retenciones Recibidas / Comprobantes",
-    shortLabel: "Retenciones Clientes",
-    code: "RET",
-    color: "cyan",
-    badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200",
-    description: "Comprobantes de retención emitidos por clientes a favor de la empresa",
-    defaultTitleTemplate: (m, y) => `Retenciones Recibidas de Clientes - ${m} ${y}`,
-  },
-  {
     id: "otro",
-    label: "Otros Respaldos / Justificativos SRI",
-    shortLabel: "Otro Respaldo",
+    label: "Otros Respaldos / Retenciones / Justificativos SRI",
+    shortLabel: "Otros / Retenciones",
     code: "DOC",
     color: "slate",
     badgeColor: "bg-slate-100 text-slate-700 border-slate-300",
-    description: "Sustitutivas, convenios de pago, resoluciones o anexos adicionales",
-    defaultTitleTemplate: (m, y) => `Respaldo Tributario Adicional - ${m} ${y}`,
+    description: "Retenciones de clientes, resoluciones, convenios de pago o justificativos adicionales",
+    defaultTitleTemplate: (m, y) => `Respaldo / Retención Adicional - ${m} ${y}`,
+  },
+  {
+    id: "retenciones_recibidas",
+    label: "Retenciones Recibidas (Clientes)",
+    shortLabel: "Retenciones",
+    code: "RET",
+    color: "slate",
+    badgeColor: "bg-slate-100 text-slate-700 border-slate-300",
+    description: "Comprobantes de retención emitidos por clientes",
+    defaultTitleTemplate: (m, y) => `Retención de Cliente - ${m} ${y}`,
   },
 ];
 
@@ -173,13 +173,13 @@ export function formatFileSize(bytes?: number | null): string {
 export function detectTaxDocType(filename: string): TaxDocType {
   const lower = (filename || "").toLowerCase();
   if (lower.includes("104") || lower.includes("iva")) return "iva_104";
-  if (lower.includes("103") || lower.includes("retenci") || lower.includes("ret_fuente") || lower.includes("fuente")) return "retenciones_103";
-  if (lower.includes("cep") || lower.includes("ceep") || lower.includes("pago") || lower.includes("debito") || lower.includes("banco") || lower.includes("comprobante_pago") || lower.includes("comprobante-pago") || lower.includes("pago_sri")) return "pago_sri";
   if (lower.includes("ats") || lower.includes("anexo") || lower.endsWith(".xml")) return "ats";
+  if (lower.includes("103") || lower.includes("ret_fuente") || lower.includes("fuente")) return "retenciones_103";
+  if (lower.includes("cep") || lower.includes("ceep") || lower.includes("pago") || lower.includes("debito") || lower.includes("banco") || lower.includes("comprobante_pago") || lower.includes("comprobante-pago") || lower.includes("pago_sri")) return "pago_sri";
   if (lower.includes("101") || lower.includes("renta_sociedad") || lower.includes("renta")) return "renta_101";
   if (lower.includes("supercia") || lower.includes("balance") || lower.includes("eeff") || lower.includes("financiero")) return "supercias_balances";
   if (lower.includes("acta") || lower.includes("informe_gerente") || lower.includes("informe_comisario") || lower.includes("junta")) return "supercias_actas";
   if (lower.includes("socio") || lower.includes("accionista") || lower.includes("nomina")) return "supercias_socios";
-  if (lower.includes("retencion_recibida") || lower.includes("cliente")) return "retenciones_recibidas";
+  // "y otros retenciones que se carge en otros" -> retenciones se cargan en otros
   return "otro";
 }
