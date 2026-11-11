@@ -29,8 +29,12 @@ import {
   Receipt,
   Lock,
   Layers,
+  Building2,
   Sparkles,
   Info,
+  X,
+  UploadCloud,
+  ChevronDown,
 } from "lucide-react";
 import StandardModal from "@/components/StandardModal";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
@@ -41,6 +45,7 @@ import {
   MONTH_NAMES_ES,
   getCategoryDef,
   formatFileSize,
+  detectTaxDocType,
 } from "@/lib/tax-declarations";
 
 interface DeclaracionesClientProps {
@@ -48,6 +53,14 @@ interface DeclaracionesClientProps {
   initialPeriod: string; // "YYYY-MM"
   closedPeriods: string[];
   tableMissing?: boolean;
+}
+
+interface UploadQueueItem {
+  id: string;
+  file: File;
+  document_type: TaxDocType;
+  title: string;
+  notes: string;
 }
 
 export default function DeclaracionesClient({
@@ -62,13 +75,17 @@ export default function DeclaracionesClient({
 
   // Período activo
   const initialYear = Number(initialPeriod.split("-")[0]) || new Date().getFullYear();
-  const initialMonth = Number(initialPeriod.split("-")[1]) || (new Date().getMonth() + 1);
+  const initialMonth = initialPeriod.includes("anual")
+    ? 0
+    : (Number(initialPeriod.split("-")[1]) || (new Date().getMonth() + 1));
 
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
-  const [selectedMonth, setSelectedMonth] = useState<number>(initialMonth);
+  const [selectedMonth, setSelectedMonth] = useState<number>(initialMonth); // 0 = Cierre Anual SuperCías, 1..12 = Meses
   const [viewAllMonths, setViewAllMonths] = useState(false);
 
-  const selectedPeriod = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
+  const selectedPeriod = selectedMonth === 0
+    ? `${selectedYear}-anual`
+    : `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
 
   // Filtros de documentos
   const [categoryFilter, setCategoryFilter] = useState<string>("todos");
@@ -80,12 +97,10 @@ export default function DeclaracionesClient({
   const [docToDelete, setDocToDelete] = useState<TaxDeclarationDocument | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Formulario de subida
+  // Formulario de subida multi-archivo
   const [uploadPeriod, setUploadPeriod] = useState<string>(selectedPeriod);
-  const [uploadDocType, setUploadDocType] = useState<TaxDocType>("iva_104");
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadNotes, setUploadNotes] = useState("");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [defaultSuggestedType, setDefaultSuggestedType] = useState<TaxDocType | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState("");
@@ -104,15 +119,17 @@ export default function DeclaracionesClient({
   // Conjunto de períodos cerrados
   const closedSet = useMemo(() => new Set(closedPeriods), [closedPeriods]);
 
-  // Agrupar conteo de documentos por mes en el año seleccionado
+  // Agrupar conteo de documentos por mes y anual (0) en el año seleccionado
   const docsByMonth = useMemo(() => {
     const map: Record<number, TaxDeclarationDocument[]> = {};
-    for (let m = 1; m <= 12; m++) map[m] = [];
+    for (let m = 0; m <= 12; m++) map[m] = [];
 
     for (const doc of documents) {
       if (doc.year === selectedYear) {
-        if (!map[doc.month]) map[doc.month] = [];
-        map[doc.month].push(doc);
+        const isAnnual = doc.period?.includes("anual") || doc.month === 0;
+        const m = isAnnual ? 0 : Number(doc.month || 0);
+        if (!map[m]) map[m] = [];
+        map[m].push(doc);
       }
     }
     return map;
@@ -123,7 +140,12 @@ export default function DeclaracionesClient({
     return documents.filter((doc) => {
       // Filtro de período
       if (!viewAllMonths) {
-        if (doc.period !== selectedPeriod) return false;
+        if (selectedMonth === 0) {
+          const isDocAnnual = doc.period === `${selectedYear}-anual` || doc.period === `${selectedYear}-00` || (doc.year === selectedYear && doc.month === 0);
+          if (!isDocAnnual) return false;
+        } else {
+          if (doc.period !== selectedPeriod) return false;
+        }
       } else {
         if (doc.year !== selectedYear) return false;
       }
@@ -153,51 +175,114 @@ export default function DeclaracionesClient({
   const hasPagoSri = activeMonthDocs.some((d) => d.document_type === "pago_sri");
   const hasAts = activeMonthDocs.some((d) => d.document_type === "ats");
 
-  // Abrir modal con categoría preseleccionada
-  const openUploadModal = (docType?: TaxDocType) => {
-    const targetType = docType || "iva_104";
-    const [y, m] = selectedPeriod.split("-").map(Number);
-    const monthName = MONTH_NAMES_ES[m - 1];
-    const catDef = getCategoryDef(targetType);
-
+  // Abrir modal de subida
+  const openUploadModal = (preferredType?: TaxDocType) => {
     setUploadPeriod(selectedPeriod);
-    setUploadDocType(targetType);
-    setUploadTitle(catDef.defaultTitleTemplate(monthName, y));
-    setUploadNotes("");
-    setUploadFile(null);
+    setUploadQueue([]);
+    setDefaultSuggestedType(preferredType || null);
     setUploadError("");
     setUploadSuccess("");
     setIsUploadOpen(true);
   };
 
-  // Al cambiar la categoría en el modal, actualizar el título sugerido
-  const handleDocTypeChange = (type: TaxDocType) => {
-    setUploadDocType(type);
+  // Procesar archivos agregados a la cola (arrastrados o seleccionados)
+  const addFilesToQueue = (files: FileList | File[]) => {
     const [y, m] = uploadPeriod.split("-").map(Number);
     const monthName = MONTH_NAMES_ES[m - 1] || "";
-    const catDef = getCategoryDef(type);
-    setUploadTitle(catDef.defaultTitleTemplate(monthName, y));
+
+    const newItems: UploadQueueItem[] = Array.from(files).map((f) => {
+      // Si el usuario presionó el botón específico de una obligación (ej: Form. 104) y subió 1 archivo, preferir ese tipo
+      let targetType: TaxDocType = defaultSuggestedType || detectTaxDocType(f.name);
+      // Si subió múltiples, detectar inteligentemente cada uno por su nombre
+      if (files.length > 1 || !defaultSuggestedType) {
+        targetType = detectTaxDocType(f.name);
+      }
+
+      const catDef = getCategoryDef(targetType);
+      return {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        file: f,
+        document_type: targetType,
+        title: catDef.defaultTitleTemplate(monthName, y),
+        notes: "",
+      };
+    });
+
+    setUploadQueue((prev) => [...prev, ...newItems]);
+    setUploadError("");
   };
 
-  // Al cambiar el mes en el modal, actualizar el título sugerido
+  // Cambiar período en el modal y actualizar títulos que no hayan sido personalizados
   const handleUploadPeriodChange = (newPeriod: string) => {
     setUploadPeriod(newPeriod);
-    const [y, m] = newPeriod.split("-").map(Number);
-    const monthName = MONTH_NAMES_ES[m - 1] || "";
-    const catDef = getCategoryDef(uploadDocType);
-    setUploadTitle(catDef.defaultTitleTemplate(monthName, y));
+    const isAnnual = newPeriod.endsWith("-anual");
+    const y = Number(newPeriod.split("-")[0]);
+    const m = isAnnual ? 0 : Number(newPeriod.split("-")[1]);
+    const periodLabel = isAnnual ? `Cierre Anual ${y}` : (MONTH_NAMES_ES[m - 1] || "");
+
+    setUploadQueue((prev) =>
+      prev.map((item) => {
+        const catDef = getCategoryDef(item.document_type);
+        return {
+          ...item,
+          title: catDef.defaultTitleTemplate(periodLabel, y),
+        };
+      })
+    );
   };
 
-  // Manejador de subida
-  const handleUploadSubmit = async (e: React.FormEvent) => {
+  // Cambiar el tipo de documento para un archivo en la cola
+  const updateQueueItemType = (itemId: string, newType: TaxDocType) => {
+    const [y, m] = uploadPeriod.split("-").map(Number);
+    const monthName = MONTH_NAMES_ES[m - 1] || "";
+    const catDef = getCategoryDef(newType);
+
+    setUploadQueue((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              document_type: newType,
+              title: catDef.defaultTitleTemplate(monthName, y),
+            }
+          : item
+      )
+    );
+  };
+
+  // Actualizar título de un archivo en la cola
+  const updateQueueItemTitle = (itemId: string, newTitle: string) => {
+    setUploadQueue((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, title: newTitle } : item))
+    );
+  };
+
+  // Actualizar notas de un archivo en la cola
+  const updateQueueItemNotes = (itemId: string, newNotes: string) => {
+    setUploadQueue((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, notes: newNotes } : item))
+    );
+  };
+
+  // Eliminar un archivo de la cola de subida
+  const removeQueueItem = (itemId: string) => {
+    setUploadQueue((prev) => prev.filter((item) => item.id !== itemId));
+  };
+
+  // Manejador de subida masiva o individual
+  const handleBatchUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadTitle.trim()) {
-      setUploadError("Por favor ingresa un título o descripción para el respaldo.");
+    if (uploadQueue.length === 0) {
+      setUploadError("Por favor selecciona o arrastra al menos un archivo.");
       return;
     }
-    if (!uploadFile) {
-      setUploadError("Debes seleccionar o arrastrar un archivo para subir.");
-      return;
+
+    // Validar que todos tengan título
+    for (const item of uploadQueue) {
+      if (!item.title.trim()) {
+        setUploadError(`El archivo "${item.file.name}" debe tener un título.`);
+        return;
+      }
     }
 
     try {
@@ -205,11 +290,19 @@ export default function DeclaracionesClient({
       setUploadError("");
 
       const formData = new FormData();
-      formData.append("period", uploadPeriod);
-      formData.append("document_type", uploadDocType);
-      formData.append("title", uploadTitle.trim());
-      if (uploadNotes.trim()) formData.append("notes", uploadNotes.trim());
-      formData.append("documentFile", uploadFile);
+      formData.append("isBatch", "true");
+
+      const meta = uploadQueue.map((item) => ({
+        period: uploadPeriod,
+        document_type: item.document_type,
+        title: item.title.trim(),
+        notes: item.notes.trim() || null,
+      }));
+
+      formData.append("batchMeta", JSON.stringify(meta));
+      uploadQueue.forEach((item) => {
+        formData.append("files", item.file);
+      });
 
       const res = await fetch("/api/admin/contabilidad/declaraciones", {
         method: "POST",
@@ -222,35 +315,43 @@ export default function DeclaracionesClient({
         if (data.tableMissing) {
           setTableMissing(true);
         }
-        setUploadError(data.error || "Ocurrió un error al subir el documento.");
+        setUploadError(data.error || "Ocurrió un error al subir los archivos.");
         return;
       }
 
-      setUploadSuccess("¡Respaldo subido y archivado correctamente!");
-      if (data.document) {
-        setDocuments((prev) => [data.document, ...prev]);
+      setUploadSuccess(`¡${uploadQueue.length} archivo(s) guardado(s) exitosamente!`);
+
+      if (data.documents && Array.isArray(data.documents)) {
+        setDocuments((prev) => [...data.documents, ...prev]);
         setTableMissing(false);
       }
 
-      // Si subió para otro período, sincronizar selección
+      // Sincronizar el mes activo si subió a un período diferente
       if (uploadPeriod !== selectedPeriod && !viewAllMonths) {
-        const [upY, upM] = uploadPeriod.split("-").map(Number);
-        setSelectedYear(upY);
-        setSelectedMonth(upM);
+        if (uploadPeriod.endsWith("-anual")) {
+          const upY = Number(uploadPeriod.split("-")[0]);
+          setSelectedYear(upY);
+          setSelectedMonth(0);
+        } else {
+          const [upY, upM] = uploadPeriod.split("-").map(Number);
+          setSelectedYear(upY);
+          setSelectedMonth(upM);
+        }
       }
 
       setTimeout(() => {
         setIsUploadOpen(false);
         setUploadSuccess("");
-      }, 1100);
+        setUploadQueue([]);
+      }, 1000);
     } catch (err: any) {
-      setUploadError(err.message || "Error al procesar el archivo.");
+      setUploadError(err.message || "Error al procesar la subida.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Manejador de eliminación
+  // Manejador de eliminación permanente
   const handleDeleteDoc = async () => {
     if (!docToDelete) return;
     try {
@@ -281,21 +382,21 @@ export default function DeclaracionesClient({
   const getFileIcon = (fileName: string, mimeType?: string | null) => {
     const ext = fileName.split(".").pop()?.toLowerCase();
     if (ext === "pdf" || mimeType?.includes("pdf")) {
-      return <FileText className="text-red-500" size={24} />;
+      return <FileText className="text-red-500" size={22} />;
     }
     if (["xml", "json"].includes(ext || "") || mimeType?.includes("xml")) {
-      return <FileCode className="text-cyan-600" size={24} />;
+      return <FileCode className="text-cyan-600" size={22} />;
     }
     if (["zip", "rar", "7z", "tar", "gz"].includes(ext || "")) {
-      return <FileArchive className="text-amber-600" size={24} />;
+      return <FileArchive className="text-amber-600" size={22} />;
     }
     if (["xls", "xlsx", "csv"].includes(ext || "")) {
-      return <FileSpreadsheet className="text-emerald-600" size={24} />;
+      return <FileSpreadsheet className="text-emerald-600" size={22} />;
     }
     if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext || "") || mimeType?.startsWith("image/")) {
-      return <FileImage className="text-blue-500" size={24} />;
+      return <FileImage className="text-blue-500" size={22} />;
     }
-    return <FileIcon className="text-slate-500" size={24} />;
+    return <FileIcon className="text-slate-500" size={22} />;
   };
 
   // Helper para saber si se puede previsualizar en modal
@@ -308,21 +409,26 @@ export default function DeclaracionesClient({
     return isPdf || isImg;
   };
 
+  // Cálculo de tamaño total de archivos en cola
+  const totalQueueSize = useMemo(() => {
+    return uploadQueue.reduce((acc, item) => acc + item.file.size, 0);
+  }, [uploadQueue]);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-4">
       {/* Alerta de migración de base de datos si la tabla no existe */}
       {tableMissing && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 shadow-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 shadow-2xs">
           <div className="flex items-start gap-3">
-            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={20} />
-            <div className="flex-1 text-sm">
+            <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+            <div className="flex-1 text-xs">
               <h3 className="font-bold text-amber-900">
                 La tabla de respaldos tributarios aún no está creada en Supabase
               </h3>
-              <p className="text-amber-800 text-xs mt-1">
-                Para comenzar a guardar los archivos, ejecuta el script de migración SQL en tu panel de Supabase (SQL Editor).
+              <p className="text-amber-800 text-[11px] mt-0.5">
+                Para comenzar a guardar los archivos, ejecuta el script de migración SQL en tu panel de Supabase.
               </p>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-2.5 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -332,13 +438,13 @@ export default function DeclaracionesClient({
                     setCopiedSql(true);
                     setTimeout(() => setCopiedSql(false), 2000);
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-sm transition"
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-2xs transition"
                 >
-                  {copiedSql ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedSql ? "¡Copiado!" : "Copiar instrucción SQL"}
+                  {copiedSql ? <Check size={13} /> : <Copy size={13} />}
+                  {copiedSql ? "¡Copiado!" : "Copiar SQL"}
                 </button>
-                <span className="text-xs text-amber-700">
-                  Archivo local: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-[11px]">supabase/migration_tax_declarations.sql</code>
+                <span className="text-[11px] text-amber-700 font-mono">
+                  supabase/migration_tax_declarations.sql
                 </span>
               </div>
             </div>
@@ -346,63 +452,57 @@ export default function DeclaracionesClient({
         </div>
       )}
 
-      {/* Header superior con enlaces de navegación */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white rounded-2xl p-4 md:p-5 border border-lilac-100 shadow-sm">
-        <div className="flex items-start gap-3">
+      {/* Header Minimalista */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-gray-100">
+        <div className="flex items-center gap-3">
           <Link
             href="/erp/contabilidad"
-            className="p-2 rounded-xl bg-lilac-50 text-lilac-700 hover:bg-lilac-100 transition shrink-0"
+            className="p-2 rounded-xl text-ink-500 hover:text-ink-900 hover:bg-gray-100 transition"
             title="Volver a Contabilidad"
           >
             <ArrowLeft size={18} />
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                SRI & Tributación
-              </span>
-              <h1 className="text-xl font-bold text-ink-900">
-                Respaldos de Declaraciones Tributarias
+              <h1 className="text-lg font-bold text-ink-900 tracking-tight">
+                Respaldos Tributarios y Societarios
               </h1>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                SRI & SuperCías
+              </span>
             </div>
-            <p className="text-xs text-ink-500 mt-1">
-              Expediente digital mensual de declaraciones SRI: Formulario 104 (IVA), 103 (Retenciones), Comprobantes de Pago CEEP, ATS y justificativos.
+            <p className="text-xs text-ink-400 mt-0.5">
+              Expediente mensual SRI (IVA 104, Ret 103, CEP, ATS) y societario anual SuperCías (Balances NIIF, Form. 101, Informes y Actas).
             </p>
           </div>
         </div>
 
-        {/* Acciones principales */}
-        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => openUploadModal()}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-2 shadow-sm transition"
-          >
-            <PlusCircle size={15} />
-            <span>Subir Respaldo</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => openUploadModal()}
+          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-2 shadow-2xs transition self-start sm:self-auto"
+        >
+          <UploadCloud size={15} />
+          <span>Subir Archivos</span>
+        </button>
       </div>
 
-      {/* Selector de Año y Cuadrícula de 12 Meses */}
-      <div className="bg-white rounded-2xl p-4 md:p-5 border border-lilac-100 shadow-sm space-y-4">
-        {/* Barra superior de año */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-lilac-50">
-          <div className="flex items-center gap-2">
-            <Calendar className="text-lilac-600" size={18} />
-            <span className="text-xs font-bold text-ink-700 uppercase tracking-wide">
-              Ejercicio Fiscal:
-            </span>
-            <div className="flex items-center gap-1 bg-lilac-50/60 p-1 rounded-xl">
+{/* Selector de Período Minimalista con Indicadores de Obligaciones (Puntitos) */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 p-3 shadow-2xs space-y-2.5">
+        {/* Barra superior de años y accesos */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-ink-400 uppercase tracking-wider">Ejercicio:</span>
+            <div className="flex items-center gap-1 bg-gray-100/80 p-0.5 rounded-xl">
               {availableYears.map((y) => (
                 <button
                   key={y}
                   type="button"
                   onClick={() => setSelectedYear(y)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                     selectedYear === y
-                      ? "bg-lilac-600 text-white shadow-xs"
-                      : "text-ink-600 hover:bg-white hover:text-lilac-700"
+                      ? "bg-white text-ink-900 shadow-2xs font-bold"
+                      : "text-ink-500 hover:text-ink-900"
                   }`}
                 >
                   {y}
@@ -411,23 +511,41 @@ export default function DeclaracionesClient({
             </div>
           </div>
 
-          {/* Alternar vista de todo el año */}
-          <button
-            type="button"
-            onClick={() => setViewAllMonths(!viewAllMonths)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
-              viewAllMonths
-                ? "bg-lilac-100 text-lilac-800 border border-lilac-300"
-                : "bg-white border border-gray-200 text-ink-600 hover:bg-gray-50"
-            }`}
-          >
-            <Layers size={13} />
-            <span>{viewAllMonths ? "Viendo todo el año" : "Ver todo el año completo"}</span>
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {!viewAllMonths && (
+              <div className="hidden lg:flex items-center gap-1 text-[11px] text-ink-500 mr-1">
+                <span className="text-ink-400 text-[10px]">Accesos:</span>
+                <Link href={`/erp/contabilidad/iva?period=${selectedPeriod}`} className="px-1.5 py-0.5 rounded hover:bg-gray-100 text-ink-600 font-medium">
+                  IVA
+                </Link>
+                <span>·</span>
+                <Link href={`/erp/contabilidad/ats?period=${selectedPeriod}`} className="px-1.5 py-0.5 rounded hover:bg-gray-100 text-ink-600 font-medium">
+                  ATS
+                </Link>
+                <span>·</span>
+                <Link href={`/erp/contabilidad/cierre?period=${selectedPeriod}`} className="px-1.5 py-0.5 rounded hover:bg-gray-100 text-ink-600 font-medium">
+                  Cierre
+                </Link>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setViewAllMonths(!viewAllMonths)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                viewAllMonths
+                  ? "bg-ink-900 text-white font-semibold"
+                  : "text-ink-500 hover:text-ink-900 hover:bg-gray-100"
+              }`}
+            >
+              <Layers size={13} />
+              <span>{viewAllMonths ? "Viendo todo el año" : "Ver todo el año"}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Cuadrícula organizada de los 12 meses */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+        {/* 12 Meses en barra horizontal con puntitos indicadores de las 4 obligaciones */}
+        <div className="grid grid-cols-4 sm:grid-cols-7 lg:grid-cols-[repeat(13,minmax(0,1fr))] gap-1 pt-1.5 border-t border-gray-100">
           {MONTH_NAMES_ES.map((name, idx) => {
             const m = idx + 1;
             const periodKey = `${selectedYear}-${String(m).padStart(2, "0")}`;
@@ -435,12 +553,13 @@ export default function DeclaracionesClient({
             const docCount = monthDocs.length;
             const isClosed = closedSet.has(periodKey);
             const isSelected = !viewAllMonths && selectedMonth === m;
+            const shortName = name.slice(0, 3);
 
-            // Flags de documentos claves
+            // Indicadores de las 4 obligaciones obligatorias
             const has104 = monthDocs.some((d) => d.document_type === "iva_104");
             const has103 = monthDocs.some((d) => d.document_type === "retenciones_103");
-            const hasCeep = monthDocs.some((d) => d.document_type === "pago_sri");
-            const hasAtsDoc = monthDocs.some((d) => d.document_type === "ats");
+            const hasCep = monthDocs.some((d) => d.document_type === "pago_sri");
+            const hasAts = monthDocs.some((d) => d.document_type === "ats");
 
             return (
               <button
@@ -450,316 +569,308 @@ export default function DeclaracionesClient({
                   setSelectedMonth(m);
                   setViewAllMonths(false);
                 }}
-                className={`relative p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-24 ${
+                className={`relative py-2 px-1 rounded-xl text-center transition flex flex-col items-center justify-center gap-0.5 ${
                   isSelected
-                    ? "bg-emerald-50/50 border-emerald-500 ring-2 ring-emerald-400 shadow-xs"
-                    : "bg-white border-lilac-100 hover:border-lilac-300 hover:bg-lilac-50/30"
+                    ? "bg-emerald-600 text-white shadow-2xs font-bold"
+                    : "hover:bg-gray-50 text-ink-700 bg-white border border-gray-100/70"
                 }`}
               >
-                {/* Header de la tarjeta del mes */}
-                <div className="flex items-center justify-between gap-1">
-                  <span className={`text-xs font-bold leading-tight ${isSelected ? "text-emerald-900" : "text-ink-800"}`}>
-                    {name}
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">
+                    <span className="hidden lg:inline">{name}</span>
+                    <span className="lg:hidden">{shortName}</span>
                   </span>
                   {isClosed && (
-                    <span
-                      title="Período con Cierre Mensual Contable"
-                      className="text-[10px] text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200"
-                    >
-                      <Lock size={10} className="inline mr-0.5" />
-                    </span>
+                    <Lock size={10} className={isSelected ? "text-emerald-200" : "text-amber-500"} />
                   )}
                 </div>
 
-                {/* Indicadores de comprobantes subidos */}
-                <div className="flex items-center gap-1 my-1">
+                {/* 4 Puntitos indicadores con colores correspondientes a cada filtro */}
+                <div
+                  className="flex items-center justify-center gap-1 my-0.5"
+                  title={`Obligaciones: 104 IVA (${has104 ? "Listo" : "Falta"}), 103 Ret (${has103 ? "Listo" : "Falta"}), CEP (${hasCep ? "Listo" : "Falta"}), ATS (${hasAts ? "Listo" : "Falta"})`}
+                >
                   <span
-                    title={has104 ? "Formulario 104 (IVA) cargado" : "Pendiente Form. 104"}
-                    className={`w-2 h-2 rounded-full ${has104 ? "bg-emerald-500 ring-1 ring-emerald-300" : "bg-gray-200"}`}
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      has104
+                        ? isSelected ? "bg-emerald-300 ring-1 ring-white" : "bg-emerald-500 ring-1 ring-emerald-300"
+                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
+                    }`}
+                    title="104: Declaración IVA (Verde)"
                   />
                   <span
-                    title={has103 ? "Formulario 103 (Retenciones) cargado" : "Pendiente Form. 103"}
-                    className={`w-2 h-2 rounded-full ${has103 ? "bg-blue-500 ring-1 ring-blue-300" : "bg-gray-200"}`}
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      has103
+                        ? isSelected ? "bg-sky-300 ring-1 ring-white" : "bg-blue-500 ring-1 ring-blue-300"
+                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
+                    }`}
+                    title="103: Retenciones en la Fuente (Azul)"
                   />
                   <span
-                    title={hasCeep ? "Comprobante de Pago SRI cargado" : "Pendiente Pago SRI"}
-                    className={`w-2 h-2 rounded-full ${hasCeep ? "bg-indigo-500 ring-1 ring-indigo-300" : "bg-gray-200"}`}
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasCep
+                        ? isSelected ? "bg-amber-300 ring-1 ring-white" : "bg-amber-500 ring-1 ring-amber-300"
+                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
+                    }`}
+                    title="CEP: Comprobante de Pago SRI (Ámbar)"
                   />
                   <span
-                    title={hasAtsDoc ? "Talón ATS cargado" : "Pendiente ATS"}
-                    className={`w-2 h-2 rounded-full ${hasAtsDoc ? "bg-purple-500 ring-1 ring-purple-300" : "bg-gray-200"}`}
-                  />
-                </div>
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasAts
+                        ? isSelected ? "bg-purple-300 ring-1 ring-white" : "bg-purple-500 ring-1 ring-purple-300"
+                        : isSelected ? "bg-emerald-900/60" : "bg-gray-200"
+                    }`}
+                    title="ATS: Anexo Transaccional SRI (Púrpura)"
+                  />                </div>
 
-                {/* Badge de cantidad */}
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className={`font-semibold ${docCount > 0 ? "text-emerald-700" : "text-ink-400"}`}>
-                    {docCount} {docCount === 1 ? "archivo" : "archivos"}
-                  </span>
-                </div>
+                <span
+                  className={`text-[9px] leading-none ${
+                    docCount > 0
+                      ? isSelected ? "text-emerald-100 font-semibold" : "text-emerald-700 font-medium"
+                      : isSelected ? "text-emerald-200/80" : "text-gray-300"
+                  }`}
+                >
+                  {docCount > 0 ? `${docCount} arch.` : "—"}
+                </span>
               </button>
             );
           })}
+
+          {/* 13ª Casilla: Cierre Anual y Obligaciones SuperCías */}
+          {(() => {
+            const annualDocs = docsByMonth[0] || [];
+            const annualDocCount = annualDocs.length;
+            const isSelected = !viewAllMonths && selectedMonth === 0;
+
+            // 4 Obligaciones obligatorias de fin de año (SRI & SuperCías)
+            const has101 = annualDocs.some((d) => d.document_type === "renta_101");
+            const hasBalances = annualDocs.some((d) => d.document_type === "supercias_balances");
+            const hasActas = annualDocs.some((d) => d.document_type === "supercias_actas");
+            const hasSocios = annualDocs.some((d) => d.document_type === "supercias_socios");
+
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMonth(0);
+                  setViewAllMonths(false);
+                }}
+                className={`relative py-2 px-1 rounded-xl text-center transition flex flex-col items-center justify-center gap-0.5 border ${
+                  isSelected
+                    ? "bg-indigo-600 text-white shadow-2xs font-bold border-indigo-600"
+                    : "hover:bg-indigo-50/60 text-indigo-900 bg-indigo-50/25 border-indigo-200/80"
+                }`}
+                title="Cierre Anual y Respaldos SuperCías"
+              >
+                <div className="flex items-center gap-1">
+                  <Building2 size={11} className={isSelected ? "text-indigo-200" : "text-indigo-600"} />
+                  <span className="text-xs font-bold">
+                    Anual
+                  </span>
+                </div>
+
+                {/* 4 Puntitos indicadores anuales con colores distintivos */}
+                <div
+                  className="flex items-center justify-center gap-1 my-0.5"
+                  title={`Obligaciones Anuales: Form. 101 (${has101 ? "Listo" : "Falta"}), Balances (${hasBalances ? "Listo" : "Falta"}), Informes/Actas (${hasActas ? "Listo" : "Falta"}), Nómina Socios (${hasSocios ? "Listo" : "Falta"})`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      has101
+                        ? isSelected ? "bg-rose-300 ring-1 ring-white" : "bg-rose-500 ring-1 ring-rose-300"
+                        : isSelected ? "bg-indigo-900/60" : "bg-gray-200"
+                    }`}
+                    title="Form. 101: Impuesto a la Renta SRI (Rosa)"
+                  />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasBalances
+                        ? isSelected ? "bg-indigo-300 ring-1 ring-white" : "bg-indigo-500 ring-1 ring-indigo-300"
+                        : isSelected ? "bg-indigo-900/60" : "bg-gray-200"
+                    }`}
+                    title="SuperCias: Balances NIIF (Índigo)"
+                  />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasActas
+                        ? isSelected ? "bg-amber-300 ring-1 ring-white" : "bg-orange-500 ring-1 ring-orange-300"
+                        : isSelected ? "bg-indigo-900/60" : "bg-gray-200"
+                    }`}
+                    title="SuperCias: Informes y Acta de Junta (Naranja)"
+                  />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full transition ${
+                      hasSocios
+                        ? isSelected ? "bg-teal-300 ring-1 ring-white" : "bg-teal-500 ring-1 ring-teal-300"
+                        : isSelected ? "bg-indigo-900/60" : "bg-gray-200"
+                    }`}
+                    title="SuperCias: Nómina de Socios (Teal)"
+                  />
+                </div>
+
+                <span
+                  className={`text-[9px] leading-none ${
+                    annualDocCount > 0
+                      ? isSelected ? "text-indigo-100 font-semibold" : "text-indigo-700 font-bold"
+                      : isSelected ? "text-indigo-200/80" : "text-gray-300"
+                  }`}
+                >
+                  {annualDocCount > 0 ? `${annualDocCount} arch.` : "—"}
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
-      {/* Panel del Mes Activo: Resumen de Obligaciones y Accesos Rápidos */}
-      {!viewAllMonths && (
-        <div className="bg-gradient-to-r from-emerald-50/60 via-lilac-50/40 to-white rounded-2xl p-4 md:p-5 border border-emerald-200 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <FileCheck2 className="text-emerald-600" size={20} />
-              <h2 className="text-base font-bold text-ink-900">
-                Obligaciones Tributarias — {MONTH_NAMES_ES[selectedMonth - 1]} {selectedYear}
-              </h2>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-ink-600">
-              <span className="text-[11px] font-semibold text-ink-400">Accesos directos del mes:</span>
-              <Link
-                href={`/erp/contabilidad/iva?period=${selectedPeriod}`}
-                className="px-2 py-1 rounded-lg bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 font-medium transition"
-              >
-                Cálculo IVA
-              </Link>
-              <Link
-                href={`/erp/contabilidad/ats?period=${selectedPeriod}`}
-                className="px-2 py-1 rounded-lg bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 font-medium transition"
-              >
-                Generar ATS
-              </Link>
-              <Link
-                href={`/erp/contabilidad/cierre?period=${selectedPeriod}`}
-                className="px-2 py-1 rounded-lg bg-white border border-lilac-200 hover:bg-lilac-50 text-ink-700 font-medium transition"
-              >
-                Cierre Contable
-              </Link>
-            </div>
-          </div>
-
-          {/* 4 Cards de estado de obligaciones */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* 1. Formulario 104 (IVA) */}
-            <div className={`p-3 rounded-xl border transition-all ${
-              hasIva104 ? "bg-white border-emerald-300 shadow-xs" : "bg-white/80 border-dashed border-gray-300"
-            }`}>
-              <div className="flex items-start justify-between gap-1">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                    Form. 104
-                  </span>
-                  <p className="text-xs font-bold text-ink-900 leading-tight mt-0.5">
-                    Declaración IVA
-                  </p>
-                </div>
-                {hasIva104 ? (
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                    <CheckCircle2 size={13} />
-                  </span>
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center">
-                    <Clock size={12} />
-                  </span>
-                )}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-xs">
-                <span className={hasIva104 ? "text-emerald-700 font-semibold" : "text-gray-500 italic"}>
-                  {hasIva104 ? "Cargado al archivo" : "Pendiente"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => openUploadModal("iva_104")}
-                  className="text-xs text-emerald-700 hover:text-emerald-900 font-bold underline decoration-dotted"
-                >
-                  {hasIva104 ? "+ Subir otro" : "+ Subir"}
-                </button>
-              </div>
-            </div>
-
-            {/* 2. Formulario 103 (Retenciones) */}
-            <div className={`p-3 rounded-xl border transition-all ${
-              hasRet103 ? "bg-white border-blue-300 shadow-xs" : "bg-white/80 border-dashed border-gray-300"
-            }`}>
-              <div className="flex items-start justify-between gap-1">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800">
-                    Form. 103
-                  </span>
-                  <p className="text-xs font-bold text-ink-900 leading-tight mt-0.5">
-                    Retenciones Fuente
-                  </p>
-                </div>
-                {hasRet103 ? (
-                  <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-                    <CheckCircle2 size={13} />
-                  </span>
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center">
-                    <Clock size={12} />
-                  </span>
-                )}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-xs">
-                <span className={hasRet103 ? "text-blue-700 font-semibold" : "text-gray-500 italic"}>
-                  {hasRet103 ? "Cargado al archivo" : "Pendiente"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => openUploadModal("retenciones_103")}
-                  className="text-xs text-blue-700 hover:text-blue-900 font-bold underline decoration-dotted"
-                >
-                  {hasRet103 ? "+ Subir otro" : "+ Subir"}
-                </button>
-              </div>
-            </div>
-
-            {/* 3. Comprobante de Pago SRI (CEEP) */}
-            <div className={`p-3 rounded-xl border transition-all ${
-              hasPagoSri ? "bg-white border-indigo-300 shadow-xs" : "bg-white/80 border-dashed border-gray-300"
-            }`}>
-              <div className="flex items-start justify-between gap-1">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800">
-                    CEEP / Débito
-                  </span>
-                  <p className="text-xs font-bold text-ink-900 leading-tight mt-0.5">
-                    Comprobante de Pago
-                  </p>
-                </div>
-                {hasPagoSri ? (
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                    <CheckCircle2 size={13} />
-                  </span>
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center">
-                    <Clock size={12} />
-                  </span>
-                )}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-xs">
-                <span className={hasPagoSri ? "text-indigo-700 font-semibold" : "text-gray-500 italic"}>
-                  {hasPagoSri ? "Cargado al archivo" : "Pendiente"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => openUploadModal("pago_sri")}
-                  className="text-xs text-indigo-700 hover:text-indigo-900 font-bold underline decoration-dotted"
-                >
-                  {hasPagoSri ? "+ Subir otro" : "+ Subir"}
-                </button>
-              </div>
-            </div>
-
-            {/* 4. ATS / Talón Resumen */}
-            <div className={`p-3 rounded-xl border transition-all ${
-              hasAts ? "bg-white border-purple-300 shadow-xs" : "bg-white/80 border-dashed border-gray-300"
-            }`}>
-              <div className="flex items-start justify-between gap-1">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800">
-                    ATS SRI
-                  </span>
-                  <p className="text-xs font-bold text-ink-900 leading-tight mt-0.5">
-                    Talón Anexo Transacc.
-                  </p>
-                </div>
-                {hasAts ? (
-                  <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center">
-                    <CheckCircle2 size={13} />
-                  </span>
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center">
-                    <Clock size={12} />
-                  </span>
-                )}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between text-xs">
-                <span className={hasAts ? "text-purple-700 font-semibold" : "text-gray-500 italic"}>
-                  {hasAts ? "Cargado al archivo" : "Pendiente"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => openUploadModal("ats")}
-                  className="text-xs text-purple-700 hover:text-purple-900 font-bold underline decoration-dotted"
-                >
-                  {hasAts ? "+ Subir otro" : "+ Subir"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lista de Documentos con Filtros y Buscador */}
-      <div className="bg-white rounded-2xl border border-lilac-100 shadow-sm overflow-hidden">
+            {/* Listado de Documentos con Filtros y Buscador */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-2xs overflow-hidden">
         {/* Barra de Filtros y Búsqueda */}
-        <div className="p-4 border-b border-lilac-50 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-lilac-50/20">
-          {/* Filtros por Categoría */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+        <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-gray-50/40">
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
             <button
               type="button"
               onClick={() => setCategoryFilter("todos")}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
                 categoryFilter === "todos"
-                  ? "bg-lilac-600 text-white shadow-xs"
-                  : "bg-white border border-gray-200 text-ink-600 hover:bg-gray-50"
+                  ? "bg-ink-900 text-white font-semibold"
+                  : "text-ink-600 hover:bg-gray-100"
               }`}
             >
               Todos ({filteredDocuments.length})
             </button>
-            {TAX_DOC_CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setCategoryFilter(cat.id)}
-                className={`shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                  categoryFilter === cat.id
-                    ? "bg-lilac-600 text-white shadow-xs"
-                    : "bg-white border border-gray-200 text-ink-600 hover:bg-gray-50"
-                }`}
-              >
-                {cat.shortLabel}
-              </button>
-            ))}
+            {/* Categorías con colores distintivos que coinciden con los puntitos de cada mes */}
+            {(() => {
+              const CATEGORY_THEMES: Record<string, { dot: string; active: string; inactive: string }> = {
+                iva_104: {
+                  dot: "bg-emerald-500",
+                  active: "bg-emerald-600 text-white border-emerald-600 shadow-2xs font-bold",
+                  inactive: "bg-emerald-50/80 border-emerald-200 text-emerald-800 hover:bg-emerald-100",
+                },
+                retenciones_103: {
+                  dot: "bg-blue-500",
+                  active: "bg-blue-600 text-white border-blue-600 shadow-2xs font-bold",
+                  inactive: "bg-blue-50/80 border-blue-200 text-blue-800 hover:bg-blue-100",
+                },
+                pago_sri: {
+                  dot: "bg-amber-500",
+                  active: "bg-amber-500 text-white border-amber-500 shadow-2xs font-bold",
+                  inactive: "bg-amber-50/80 border-amber-200 text-amber-900 hover:bg-amber-100",
+                },
+                ats: {
+                  dot: "bg-purple-500",
+                  active: "bg-purple-600 text-white border-purple-600 shadow-2xs font-bold",
+                  inactive: "bg-purple-50/80 border-purple-200 text-purple-800 hover:bg-purple-100",
+                },
+                renta_101: {
+                  dot: "bg-rose-500",
+                  active: "bg-rose-600 text-white border-rose-600 shadow-2xs font-bold",
+                  inactive: "bg-rose-50/80 border-rose-200 text-rose-800 hover:bg-rose-100",
+                },
+                retenciones_recibidas: {
+                  dot: "bg-cyan-500",
+                  active: "bg-cyan-600 text-white border-cyan-600 shadow-2xs font-bold",
+                  inactive: "bg-cyan-50/80 border-cyan-200 text-cyan-800 hover:bg-cyan-100",
+                },
+                otro: {
+                  dot: "bg-slate-500",
+                  active: "bg-slate-700 text-white border-slate-700 shadow-2xs font-bold",
+                  inactive: "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200",
+                },
+              };
+
+              // Filtrar categorías contextuales según si ve mes o cierre anual
+              const categoriesToShow = TAX_DOC_CATEGORIES.filter((cat) => {
+                if (viewAllMonths) return true;
+                if (selectedMonth === 0) {
+                  // En Cierre Anual SuperCías: mostrar Renta 101, Balances, Actas, Nómina Socios y Otro
+                  return ["renta_101", "supercias_balances", "supercias_actas", "supercias_socios", "otro"].includes(cat.id);
+                } else {
+                  // En Meses SRI: mostrar IVA 104, Ret 103, CEP, ATS, Retenciones Clientes y Otro
+                  return ["iva_104", "retenciones_103", "pago_sri", "ats", "retenciones_recibidas", "otro"].includes(cat.id);
+                }
+              });
+
+              return categoriesToShow.map((cat) => {
+                const count = documents.filter((d) => {
+                  if (!viewAllMonths && d.period !== selectedPeriod) return false;
+                  if (viewAllMonths && d.year !== selectedYear) return false;
+                  return d.document_type === cat.id;
+                }).length;
+
+                const theme = CATEGORY_THEMES[cat.id] || {
+                  dot: "bg-gray-400",
+                  active: "bg-ink-900 text-white border-ink-900 font-bold",
+                  inactive: "bg-gray-50 border-gray-200 text-ink-700 hover:bg-gray-100",
+                };
+
+                const isSelected = categoryFilter === cat.id;
+
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat.id)}
+                    className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center gap-1.5 ${
+                      isSelected ? theme.active : theme.inactive
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? "bg-white ring-1 ring-white/50" : theme.dot}`} />
+                    <span>{cat.shortLabel}</span>
+                    {count > 0 && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          isSelected
+                            ? "bg-white/20 text-white"
+                            : "bg-white/90 text-ink-800 border border-black/5"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              });
+            })()}
           </div>
 
-          {/* Buscador */}
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
+          <div className="relative w-full sm:w-60 shrink-0">
+            <Search className="absolute left-2.5 top-2.5 text-gray-400" size={13} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar título, archivo o nota..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white"
+              placeholder="Buscar archivo o nota..."
+              className="w-full pl-7 pr-3 py-1.5 text-xs rounded-xl border border-gray-200 focus:outline-none focus:ring-1 focus:ring-ink-400 bg-white"
             />
           </div>
         </div>
 
-        {/* Tabla / Listado de Archivos */}
+        {/* Lista de Documentos o Estado Vacío */}
         {filteredDocuments.length === 0 ? (
-          <div className="py-14 px-4 text-center">
-            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-3">
-              <FileCheck2 size={24} />
+          <div className="py-10 px-4 text-center">
+            <div className="w-10 h-10 rounded-full bg-gray-50 border border-gray-200 text-gray-400 mx-auto flex items-center justify-center mb-2">
+              <FileText size={18} />
             </div>
-            <h3 className="text-sm font-bold text-ink-800">
-              No hay documentos de respaldo para este criterio
-            </h3>
-            <p className="text-xs text-ink-500 max-w-md mx-auto mt-1">
+            <p className="text-xs font-semibold text-ink-700">
+              No hay respaldos guardados para este período
+            </p>
+            <p className="text-[11px] text-ink-400 max-w-sm mx-auto mt-0.5">
               {!viewAllMonths
-                ? `Aún no se han cargado declaraciones ni comprobantes para ${MONTH_NAMES_ES[selectedMonth - 1]} ${selectedYear}.`
-                : `No se encontraron documentos en el ejercicio fiscal ${selectedYear}.`}
+                ? `Aún no has cargado declaraciones de ${MONTH_NAMES_ES[selectedMonth - 1]} ${selectedYear}.`
+                : `No se encontraron documentos en el año ${selectedYear}.`}
             </p>
             <button
               type="button"
               onClick={() => openUploadModal()}
-              className="mt-4 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition"
+              className="mt-3 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-ink-800 text-xs font-semibold inline-flex items-center gap-1.5 transition"
             >
-              <Upload size={14} />
-              <span>Subir primer respaldo</span>
+              <UploadCloud size={13} />
+              <span>Cargar archivos</span>
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-lilac-50">
+          <div className="divide-y divide-gray-100">
             {filteredDocuments.map((doc) => {
               const catDef = getCategoryDef(doc.document_type);
               const previewable = canPreviewInline(doc);
@@ -768,85 +879,80 @@ export default function DeclaracionesClient({
               return (
                 <div
                   key={doc.id}
-                  className="p-4 hover:bg-lilac-50/30 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  className="p-3 hover:bg-gray-50/60 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 shrink-0">
+                    <div className="p-2 rounded-xl bg-gray-50 border border-gray-100 shrink-0 mt-0.5">
                       {getFileIcon(doc.file_name, doc.file_type)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${catDef.badgeColor}`}>
+                        <span className={`px-2 py-0.2 rounded-md text-[10px] font-bold border ${catDef.badgeColor}`}>
                           {catDef.shortLabel}
                         </span>
                         {viewAllMonths && (
-                          <span className="text-[10px] font-semibold text-ink-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-semibold text-ink-500 bg-gray-100 px-1.5 py-0.2 rounded">
                             {MONTH_NAMES_ES[doc.month - 1]} {doc.year}
                           </span>
                         )}
-                        <h4 className="text-sm font-bold text-ink-900 truncate">
+                        <h4 className="text-xs font-bold text-ink-900 truncate">
                           {doc.title}
                         </h4>
                       </div>
 
                       {doc.notes && (
-                        <p className="text-xs text-ink-600 mt-1 italic line-clamp-2">
-                          “{doc.notes}”
+                        <p className="text-[11px] text-ink-500 mt-0.5 italic line-clamp-1">
+                          {doc.notes}
                         </p>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-400 mt-1.5">
-                        <span className="font-mono text-ink-500">{doc.file_name}</span>
-                        {doc.file_size && <span>• {formatFileSize(doc.file_size)}</span>}
-                        <span>• Subido el {new Date(doc.created_at).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                        {doc.uploaded_by_email && (
-                          <span className="text-ink-400">por {doc.uploaded_by_email.split("@")[0]}</span>
-                        )}
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-400 mt-1 font-mono">
+                        <span className="truncate max-w-[200px]">{doc.file_name}</span>
+                        {doc.file_size && <span>· {formatFileSize(doc.file_size)}</span>}
+                        <span>· {new Date(doc.created_at).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Acciones del archivo */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                  {/* Acciones */}
+                  <div className="flex items-center gap-1 self-end sm:self-center shrink-0">
                     {previewable ? (
                       <button
                         type="button"
                         onClick={() => setPreviewDoc(doc)}
-                        className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-700 text-xs font-semibold flex items-center gap-1 transition"
-                        title="Ver vista previa"
+                        className="px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-700 text-xs font-medium flex items-center gap-1 transition"
                       >
-                        <Eye size={13} />
-                        <span className="hidden sm:inline">Ver</span>
+                        <Eye size={12} />
+                        <span>Ver</span>
                       </button>
                     ) : (
                       <a
                         href={proxiedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-700 text-xs font-semibold flex items-center gap-1 transition"
-                        title="Abrir archivo"
+                        className="px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-700 text-xs font-medium flex items-center gap-1 transition"
                       >
-                        <ExternalLink size={13} />
-                        <span className="hidden sm:inline">Abrir</span>
+                        <ExternalLink size={12} />
+                        <span>Abrir</span>
                       </a>
                     )}
 
                     <a
                       href={proxiedUrl}
                       download={doc.file_name}
-                      className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-700 transition"
-                      title="Descargar archivo"
+                      className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-ink-600 transition"
+                      title="Descargar"
                     >
-                      <Download size={14} />
+                      <Download size={13} />
                     </a>
 
                     <button
                       type="button"
                       onClick={() => setDocToDelete(doc)}
-                      className="p-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition"
-                      title="Eliminar respaldo"
+                      className="p-1.5 rounded-lg border border-gray-200 hover:border-red-200 hover:bg-red-50 text-ink-400 hover:text-red-600 transition"
+                      title="Eliminar"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
@@ -856,106 +962,56 @@ export default function DeclaracionesClient({
         )}
       </div>
 
-      {/* MODAL: SUBIR RESPALDO */}
+      {/* MODAL: SUBIR RESPALDOS (COMPACTO, ESPACIO OPTIMIZADO, SIN NOTAS) */}
       <StandardModal
         isOpen={isUploadOpen}
         onClose={() => !isUploading && setIsUploadOpen(false)}
-        title="Subir Respaldo de Declaración Tributaria"
-        subtitle="Archiva formularios SRI, comprobantes de pago o anexos organizados por mes"
-        icon={<Upload size={20} className="text-emerald-600" />}
-        maxWidth="max-w-xl"
+        title="Cargar Respaldos del Mes"
+        subtitle="Arrastra o selecciona tus archivos. Asigna a qué corresponde y su descripción."
+        icon={<UploadCloud size={20} className="text-emerald-600" />}
+        maxWidth="max-w-2xl"
       >
-        <form onSubmit={handleUploadSubmit} className="space-y-4">
+        <form onSubmit={handleBatchUploadSubmit} className="space-y-3">
           {uploadError && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
-              <AlertCircle size={15} className="shrink-0" />
+            <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+              <AlertCircle size={14} className="shrink-0" />
               <span>{uploadError}</span>
             </div>
           )}
 
           {uploadSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-semibold">
-              <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-semibold">
+              <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
               <span>{uploadSuccess}</span>
             </div>
           )}
 
-          {/* Selector de Período y Categoría */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">
-                Período Fiscal (Mes / Año) *
-              </label>
-              <select
-                value={uploadPeriod}
-                onChange={(e) => handleUploadPeriodChange(e.target.value)}
-                className="w-full text-xs rounded-xl border border-gray-300 p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white font-medium"
-              >
-                {availableYears.map((y) =>
-                  MONTH_NAMES_ES.map((name, idx) => {
-                    const p = `${y}-${String(idx + 1).padStart(2, "0")}`;
-                    return (
-                      <option key={p} value={p}>
-                        {name} {y}
-                      </option>
-                    );
-                  })
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">
-                Tipo de Declaración / Documento *
-              </label>
-              <select
-                value={uploadDocType}
-                onChange={(e) => handleDocTypeChange(e.target.value as TaxDocType)}
-                className="w-full text-xs rounded-xl border border-gray-300 p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white font-medium"
-              >
-                {TAX_DOC_CATEGORIES.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* 1. Selector de Período Compacto */}
+          <div className="flex items-center justify-between gap-2 p-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-xs">
+            <span className="font-semibold text-ink-700">Mes al que corresponden los respaldos:</span>
+            <select
+              value={uploadPeriod}
+              onChange={(e) => handleUploadPeriodChange(e.target.value)}
+              className="text-xs font-bold rounded-lg border border-gray-300 py-1 px-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none bg-white text-ink-900"
+            >
+              {availableYears.map((y) => [
+                <option key={`${y}-anual`} value={`${y}-anual`}>
+                  🏢 Cierre Anual {y} (SuperCías / Form. 101)
+                </option>,
+                ...MONTH_NAMES_ES.map((name, idx) => {
+                  const p = `${y}-${String(idx + 1).padStart(2, "0")}`;
+                  return (
+                    <option key={p} value={p}>
+                      {name} {y}
+                    </option>
+                  );
+                }),
+              ])}
+            </select>
           </div>
 
-          {/* Título o Asunto */}
-          <div>
-            <label className="block text-xs font-bold text-ink-700 mb-1">
-              Título / Descripción del Respaldo *
-            </label>
-            <input
-              type="text"
-              value={uploadTitle}
-              onChange={(e) => setUploadTitle(e.target.value)}
-              placeholder="Ej: Declaración IVA Form. 104 - Noviembre 2026"
-              className="w-full text-xs rounded-xl border border-gray-300 p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium"
-              required
-            />
-          </div>
-
-          {/* Notas / Observaciones */}
-          <div>
-            <label className="block text-xs font-bold text-ink-700 mb-1">
-              Notas u Observaciones del Contador (Opcional)
-            </label>
-            <textarea
-              rows={2}
-              value={uploadNotes}
-              onChange={(e) => setUploadNotes(e.target.value)}
-              placeholder="Ej: Declaración original con número de adhesión 123456789. Sin valores a pagar."
-              className="w-full text-xs rounded-xl border border-gray-300 p-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          {/* Zona de Arrastrar y Soltar Archivo */}
-          <div>
-            <label className="block text-xs font-bold text-ink-700 mb-1">
-              Archivo Digital * (PDF, XML, ZIP, Imagen o Excel - Máx. 25 MB)
-            </label>
+          {/* 2. Zona de Arrastrar y Soltar (Optimizado según si hay archivos o no) */}
+          {uploadQueue.length === 0 ? (
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -965,86 +1021,204 @@ export default function DeclaracionesClient({
               onDrop={(e) => {
                 e.preventDefault();
                 setIsDragging(false);
-                if (e.dataTransfer.files?.[0]) {
-                  setUploadFile(e.dataTransfer.files[0]);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  addFilesToQueue(e.dataTransfer.files);
                 }
               }}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+              className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
                 isDragging
                   ? "border-emerald-500 bg-emerald-50"
-                  : uploadFile
-                  ? "border-emerald-400 bg-emerald-50/40"
-                  : "border-gray-300 hover:border-emerald-400 hover:bg-gray-50"
+                  : "border-gray-300 hover:border-emerald-500 hover:bg-emerald-50/20 bg-gray-50/50"
               }`}
             >
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 accept=".pdf,.xml,.zip,.rar,.7z,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp"
                 onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    setUploadFile(e.target.files[0]);
+                  if (e.target.files && e.target.files.length > 0) {
+                    addFilesToQueue(e.target.files);
+                    e.target.value = "";
                   }
                 }}
               />
-
-              {uploadFile ? (
-                <div className="flex flex-col items-center justify-center">
-                  <div className="p-2.5 rounded-full bg-emerald-100 text-emerald-700 mb-2">
-                    <CheckCircle2 size={24} />
-                  </div>
-                  <span className="text-xs font-bold text-ink-900 max-w-xs truncate">
-                    {uploadFile.name}
-                  </span>
-                  <span className="text-[11px] text-ink-500 mt-0.5">
-                    {formatFileSize(uploadFile.size)} • Clic para cambiar archivo
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center">
-                  <div className="p-2.5 rounded-full bg-lilac-50 text-lilac-600 mb-2">
-                    <Upload size={22} />
-                  </div>
-                  <span className="text-xs font-bold text-ink-800">
-                    Arrastra aquí tu archivo o haz clic para explorar
-                  </span>
-                  <span className="text-[11px] text-ink-400 mt-1">
-                    Formatos soportados: PDF, XML de ATS, ZIP, JPG, PNG, Excel
-                  </span>
-                </div>
-              )}
+              <div className="flex flex-col items-center justify-center">
+                <UploadCloud size={24} className="text-emerald-600 mb-1" />
+                <span className="text-xs font-bold text-ink-800">
+                  Arrastra aquí tus archivos o haz clic para explorar
+                </span>
+                <span className="text-[11px] text-ink-400 mt-0.5">
+                  PDF, XML, ZIP, imágenes o Excel (hasta 25 MB)
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  addFilesToQueue(e.dataTransfer.files);
+                }
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`py-2 px-3 border border-dashed rounded-xl text-center cursor-pointer transition flex items-center justify-center gap-2 text-xs font-semibold ${
+                isDragging
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                  : "border-gray-300 hover:border-emerald-500 hover:bg-emerald-50/20 text-ink-600 bg-gray-50/40"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.xml,.zip,.rar,.7z,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    addFilesToQueue(e.target.files);
+                    e.target.value = "";
+                  }
+                }}
+              />
+              <UploadCloud size={15} className="text-emerald-600" />
+              <span>+ Arrastra o haz clic para añadir más archivos</span>
+            </div>
+          )}
 
-          {/* Botones de acción */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
-            <button
-              type="button"
-              disabled={isUploading}
-              onClick={() => setIsUploadOpen(false)}
-              className="px-4 py-2 rounded-xl border border-gray-200 text-ink-600 hover:bg-gray-50 text-xs font-semibold transition"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isUploading}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm transition disabled:opacity-50"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span>Subiendo y archivando...</span>
-                </>
-              ) : (
-                <>
-                  <Check size={14} />
-                  <span>Guardar Respaldo</span>
-                </>
-              )}
-            </button>
+          {/* 3. Lista de Archivos (Nombre de archivo 100% visible, espacio optimizado, sin notas) */}
+          {uploadQueue.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-ink-800 px-1">
+                <span>Archivos listos para subir ({uploadQueue.length}):</span>
+                <span className="text-[11px] text-ink-500 font-normal">
+                  Total: {formatFileSize(totalQueueSize)}
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-[48vh] overflow-y-auto pr-1">
+                {uploadQueue.map((item, idx) => {
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-2.5 rounded-xl bg-white border border-gray-200 hover:border-emerald-300 shadow-2xs transition space-y-2"
+                    >
+                      {/* Fila 1: Número, Nombre completo legible al 100% sin puntos suspensivos, Peso y Botón Eliminar */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <span className="text-[10px] font-bold text-ink-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0 mt-0.5">
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            {/* Nombre del archivo 100% visible completo */}
+                            <p className="text-xs font-bold text-ink-900 break-words leading-snug">
+                              {item.file.name}
+                            </p>
+                            <span className="text-[10px] text-ink-400 font-mono">
+                              {formatFileSize(item.file.size)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeQueueItem(item.id)}
+                          className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition shrink-0"
+                          title="Quitar este archivo"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+
+                      {/* Fila 2: Corresponde a (50%) + Descripción (50%) con espacio amplio */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-gray-100 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-bold text-ink-500 mb-0.5">
+                            Corresponde a:
+                          </label>
+                          <select
+                            value={item.document_type}
+                            onChange={(e) => updateQueueItemType(item.id, e.target.value as TaxDocType)}
+                            className="w-full text-xs font-medium rounded-lg border border-gray-200 bg-gray-50/60 hover:bg-white py-1.5 px-2 text-ink-900 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                          >
+                            {TAX_DOC_CATEGORIES.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-ink-500 mb-0.5">
+                            Descripción / Título:
+                          </label>
+                          <input
+                            type="text"
+                            value={item.title}
+                            onChange={(e) => updateQueueItemTitle(item.id, e.target.value)}
+                            placeholder="Descripción / Título"
+                            className="w-full text-xs rounded-lg border border-gray-200 bg-gray-50/60 hover:bg-white py-1.5 px-2 text-ink-900 focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder:text-gray-400"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Botones de acción del Modal */}
+          <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-gray-100">
+            <span className="text-xs text-ink-500">
+              {uploadQueue.length > 0
+                ? `${uploadQueue.length} archivo(s) para ${MONTH_NAMES_ES[Number(uploadPeriod.split("-")[1]) - 1]} ${uploadPeriod.split("-")[0]}`
+                : "Selecciona archivos para continuar"}
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={() => setIsUploadOpen(false)}
+                className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-ink-600 hover:bg-gray-50 text-xs font-semibold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isUploading || uploadQueue.length === 0}
+                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-2xs transition disabled:opacity-50"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Guardando {uploadQueue.length} archivo(s)...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={13} />
+                    <span>
+                      {uploadQueue.length > 1
+                        ? `Subir ${uploadQueue.length} Respaldos`
+                        : uploadQueue.length === 1
+                        ? "Guardar Respaldo"
+                        : "Subir Documentos"}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </StandardModal>

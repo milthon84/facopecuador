@@ -23,6 +23,9 @@ export type TaxDocType =
   | "pago_sri"
   | "ats"
   | "renta_101"
+  | "supercias_balances"
+  | "supercias_actas"
+  | "supercias_socios"
   | "retenciones_recibidas"
   | "otro";
 
@@ -60,12 +63,12 @@ export const TAX_DOC_CATEGORIES: TaxDocCategoryDef[] = [
   },
   {
     id: "pago_sri",
-    label: "Comprobante de Pago SRI / Débito (CEEP)",
-    shortLabel: "Pago SRI / CEEP",
-    code: "CEEP",
+    label: "Comprobante de Pago SRI / Débito (CEP)",
+    shortLabel: "Pago SRI / CEP",
+    code: "CEP",
     color: "indigo",
     badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    description: "Comprobante Electrónico de Pago (CEEP), convenio de débito o papeleta bancaria",
+    description: "Comprobante Electrónico de Pago (CEP), convenio de débito o papeleta bancaria",
     defaultTitleTemplate: (m, y) => `Comprobante de Pago SRI - ${m} ${y}`,
   },
   {
@@ -80,13 +83,43 @@ export const TAX_DOC_CATEGORIES: TaxDocCategoryDef[] = [
   },
   {
     id: "renta_101",
-    label: "Formulario 101/102 — Impuesto a la Renta",
+    label: "Formulario 101 — Impuesto a la Renta Sociedades (SRI)",
     shortLabel: "Form. 101 (Renta)",
     code: "101",
-    color: "amber",
-    badgeColor: "bg-amber-50 text-amber-800 border-amber-200",
-    description: "Declaración del Impuesto a la Renta anual de sociedades o personas naturales",
-    defaultTitleTemplate: (m, y) => `Declaración Impuesto a la Renta - Ejercicio ${y}`,
+    color: "rose",
+    badgeColor: "bg-rose-50 text-rose-800 border-rose-200",
+    description: "Declaración anual del Impuesto a la Renta de Sociedades (SRI)",
+    defaultTitleTemplate: (m, y) => `Declaración Renta Form. 101 - Ejercicio ${y}`,
+  },
+  {
+    id: "supercias_balances",
+    label: "SuperCias — Balances y Estados Financieros NIIF",
+    shortLabel: "Balances SuperCias",
+    code: "BAL",
+    color: "indigo",
+    badgeColor: "bg-indigo-50 text-indigo-800 border-indigo-200",
+    description: "Juegos completos de Estados Financieros NIIF presentados a la SuperCias",
+    defaultTitleTemplate: (m, y) => `Estados Financieros SuperCias - Ejercicio ${y}`,
+  },
+  {
+    id: "supercias_actas",
+    label: "SuperCias — Informes y Acta de Junta General",
+    shortLabel: "Informes y Actas",
+    code: "ACTA",
+    color: "orange",
+    badgeColor: "bg-orange-50 text-orange-800 border-orange-200",
+    description: "Informe de Gerente, Comisario y Acta de Junta de Aprobación de Balances",
+    defaultTitleTemplate: (m, y) => `Informes y Acta de Junta - Ejercicio ${y}`,
+  },
+  {
+    id: "supercias_socios",
+    label: "SuperCias — Nómina de Socios y Accionistas",
+    shortLabel: "Nómina de Socios",
+    code: "SOC",
+    color: "teal",
+    badgeColor: "bg-teal-50 text-teal-800 border-teal-200",
+    description: "Nómina de socios / accionistas y beneficiarios finales reportados a la SuperCias",
+    defaultTitleTemplate: (m, y) => `Nómina de Socios SuperCias - Ejercicio ${y}`,
   },
   {
     id: "retenciones_recibidas",
@@ -135,4 +168,18 @@ export function formatFileSize(bytes?: number | null): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function detectTaxDocType(filename: string): TaxDocType {
+  const lower = (filename || "").toLowerCase();
+  if (lower.includes("104") || lower.includes("iva")) return "iva_104";
+  if (lower.includes("103") || lower.includes("retenci") || lower.includes("ret_fuente") || lower.includes("fuente")) return "retenciones_103";
+  if (lower.includes("cep") || lower.includes("ceep") || lower.includes("pago") || lower.includes("debito") || lower.includes("banco") || lower.includes("comprobante_pago") || lower.includes("comprobante-pago") || lower.includes("pago_sri")) return "pago_sri";
+  if (lower.includes("ats") || lower.includes("anexo") || lower.endsWith(".xml")) return "ats";
+  if (lower.includes("101") || lower.includes("renta_sociedad") || lower.includes("renta")) return "renta_101";
+  if (lower.includes("supercia") || lower.includes("balance") || lower.includes("eeff") || lower.includes("financiero")) return "supercias_balances";
+  if (lower.includes("acta") || lower.includes("informe_gerente") || lower.includes("informe_comisario") || lower.includes("junta")) return "supercias_actas";
+  if (lower.includes("socio") || lower.includes("accionista") || lower.includes("nomina")) return "supercias_socios";
+  if (lower.includes("retencion_recibida") || lower.includes("cliente")) return "retenciones_recibidas";
+  return "otro";
 }

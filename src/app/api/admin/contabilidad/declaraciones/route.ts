@@ -44,6 +44,138 @@ export async function GET(req: Request) {
   }
 }
 
+async function uploadAndInsertDoc(
+  supabase: any,
+  user: any,
+  params: {
+    period: string;
+    documentType: string;
+    title: string;
+    notes?: string | null;
+    file: File;
+  }
+) {
+  const { period, documentType, title, notes, file } = params;
+
+  const [yearStr, monthStr] = period.split("-");
+  const year = Number(yearStr) || new Date().getFullYear();
+  const month = isNaN(Number(monthStr)) ? 0 : Number(monthStr);
+
+  const originalName = file.name || "documento.pdf";
+  const cleanExt = originalName.split(".").pop()?.toLowerCase() || "pdf";
+  const baseCleanName = originalName
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_\-]/g, "_")
+    .substring(0, 50);
+
+  const arrayBuffer = await file.arrayBuffer();
+  const uploadBuffer = Buffer.from(arrayBuffer);
+  const contentType = file.type || "application/octet-stream";
+
+  const storagePath = `${period}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${baseCleanName}.${cleanExt}`;
+
+  // Intentar subir a 'tax-declarations', o fallback a 'payment-proofs'
+  let targetBucket = "tax-declarations";
+  let uploadRes = await supabase.storage
+    .from(targetBucket)
+    .upload(storagePath, uploadBuffer, {
+      contentType,
+      cacheControl: "31536000",
+      upsert: true,
+    });
+
+  if (uploadRes.error) {
+    if (
+      uploadRes.error.message.includes("Bucket not found") ||
+      uploadRes.error.message.includes("not found")
+    ) {
+      try {
+        await supabase.storage.createBucket("tax-declarations", {
+          public: true,
+          fileSizeLimit: 26214400,
+        });
+        uploadRes = await supabase.storage
+          .from("tax-declarations")
+          .upload(storagePath, uploadBuffer, {
+            contentType,
+            cacheControl: "31536000",
+            upsert: true,
+          });
+      } catch {
+        targetBucket = "payment-proofs";
+        uploadRes = await supabase.storage
+          .from(targetBucket)
+          .upload(`declaraciones/${storagePath}`, uploadBuffer, {
+            contentType,
+            cacheControl: "31536000",
+            upsert: true,
+          });
+      }
+    } else {
+      targetBucket = "payment-proofs";
+      uploadRes = await supabase.storage
+        .from(targetBucket)
+        .upload(`declaraciones/${storagePath}`, uploadBuffer, {
+          contentType,
+          cacheControl: "31536000",
+          upsert: true,
+        });
+    }
+  }
+
+  if (uploadRes.error) {
+    throw new Error(`Error al almacenar archivo (${originalName}): ${uploadRes.error.message}`);
+  }
+
+  const actualStoragePath = uploadRes.data?.path || storagePath;
+
+  // Cache local proactivo
+  try {
+    await warmLocalStorageCache(targetBucket, actualStoragePath, uploadBuffer);
+  } catch {
+    // Cache local opcional
+  }
+
+  const { data: urlData } = supabase.storage.from(targetBucket).getPublicUrl(actualStoragePath);
+  const fileUrl = urlData.publicUrl;
+
+  const { data: insertedDoc, error: insertError } = await supabase
+    .from("tax_declaration_documents")
+    .insert({
+      period,
+      year,
+      month,
+      document_type: documentType,
+      title,
+      notes: notes || null,
+      file_url: fileUrl,
+      storage_path: `${targetBucket}/${actualStoragePath}`,
+      file_name: originalName,
+      file_type: contentType,
+      file_size: file.size,
+      uploaded_by_id: user.id,
+      uploaded_by_email: user.email,
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    if (
+      insertError.code === "42P01" ||
+      insertError.message.includes('relation "public.tax_declaration_documents" does not exist')
+    ) {
+      const err: any = new Error(
+        "La tabla en la base de datos aún no ha sido creada. Por favor ejecuta el script 'supabase/migration_tax_declarations.sql' en el SQL Editor de Supabase."
+      );
+      err.tableMissing = true;
+      throw err;
+    }
+    throw new Error(`Error en base de datos al guardar ${originalName}: ${insertError.message}`);
+  }
+
+  return insertedDoc;
+}
+
 export async function POST(req: Request) {
   try {
     const user = await getSessionUser(req);
@@ -55,6 +187,65 @@ export async function POST(req: Request) {
     }
 
     const formData = await req.formData();
+    const supabase = createAdminClient();
+
+    // 1. Verificar si es una subida por lotes (Batch)
+    const isBatch = formData.get("isBatch") === "true" || formData.has("batchMeta");
+    if (isBatch) {
+      const metaRaw = formData.get("batchMeta") as string;
+      if (!metaRaw) {
+        return NextResponse.json({ success: false, error: "Metadatos de lote no proporcionados." }, { status: 400 });
+      }
+
+      let batchItems: Array<{
+        period: string;
+        document_type: string;
+        title: string;
+        notes?: string;
+      }> = [];
+
+      try {
+        batchItems = JSON.parse(metaRaw);
+      } catch {
+        return NextResponse.json({ success: false, error: "Metadatos de lote inválidos." }, { status: 400 });
+      }
+
+      const files = formData.getAll("files") as File[];
+      if (files.length === 0 || files.length !== batchItems.length) {
+        return NextResponse.json(
+          { success: false, error: "La cantidad de archivos no coincide con la lista de documentos." },
+          { status: 400 }
+        );
+      }
+
+      const createdDocs: any[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const meta = batchItems[i];
+
+        if (!file || file.size === 0) continue;
+        if (file.size > 25 * 1024 * 1024) {
+          return NextResponse.json(
+            { success: false, error: `El archivo ${file.name} supera el límite de 25 MB.` },
+            { status: 400 }
+          );
+        }
+
+        const doc = await uploadAndInsertDoc(supabase, user, {
+          period: meta.period,
+          documentType: meta.document_type || "otro",
+          title: meta.title?.trim() || file.name,
+          notes: meta.notes?.trim() || null,
+          file,
+        });
+
+        createdDocs.push(doc);
+      }
+
+      return NextResponse.json({ success: true, documents: createdDocs });
+    }
+
+    // 2. Modo tradicional individual
     const period = (formData.get("period") as string)?.trim();
     const documentType = (formData.get("document_type") as string)?.trim() || "iva_104";
     const title = (formData.get("title") as string)?.trim();
@@ -82,7 +273,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Límite de tamaño: 25MB
     if (file.size > 25 * 1024 * 1024) {
       return NextResponse.json(
         { success: false, error: "El archivo es demasiado grande. El límite máximo es de 25 MB." },
@@ -90,139 +280,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const [yearStr, monthStr] = period.split("-");
-    const year = Number(yearStr);
-    const month = Number(monthStr);
+    const insertedDoc = await uploadAndInsertDoc(supabase, user, {
+      period,
+      documentType,
+      title,
+      notes,
+      file,
+    });
 
-    const originalName = file.name || "documento.pdf";
-    const cleanExt = originalName.split(".").pop()?.toLowerCase() || "pdf";
-    const baseCleanName = originalName
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^a-zA-Z0-9_\-]/g, "_")
-      .substring(0, 50);
-
-    const arrayBuffer = await file.arrayBuffer();
-    const uploadBuffer = Buffer.from(arrayBuffer);
-    const contentType = file.type || "application/octet-stream";
-
-    const storagePath = `${period}/${Date.now()}_${baseCleanName}.${cleanExt}`;
-
-    const supabase = createAdminClient();
-
-    // Intentar subir a 'tax-declarations', o fallback a 'payment-proofs'
-    let targetBucket = "tax-declarations";
-    let uploadRes = await supabase.storage
-      .from(targetBucket)
-      .upload(storagePath, uploadBuffer, {
-        contentType,
-        cacheControl: "31536000",
-        upsert: true,
-      });
-
-    if (uploadRes.error) {
-      // Si el bucket no existe en storage, intentamos crearlo
-      if (
-        uploadRes.error.message.includes("Bucket not found") ||
-        uploadRes.error.message.includes("not found")
-      ) {
-        try {
-          await supabase.storage.createBucket("tax-declarations", {
-            public: true,
-            fileSizeLimit: 26214400,
-          });
-          uploadRes = await supabase.storage
-            .from("tax-declarations")
-            .upload(storagePath, uploadBuffer, {
-              contentType,
-              cacheControl: "31536000",
-              upsert: true,
-            });
-        } catch {
-          // Fallback a payment-proofs
-          targetBucket = "payment-proofs";
-          uploadRes = await supabase.storage
-            .from(targetBucket)
-            .upload(`declaraciones/${storagePath}`, uploadBuffer, {
-              contentType,
-              cacheControl: "31536000",
-              upsert: true,
-            });
-        }
-      } else {
-        // Fallback inmediato a payment-proofs
-        targetBucket = "payment-proofs";
-        uploadRes = await supabase.storage
-          .from(targetBucket)
-          .upload(`declaraciones/${storagePath}`, uploadBuffer, {
-            contentType,
-            cacheControl: "31536000",
-            upsert: true,
-          });
-      }
-    }
-
-    if (uploadRes.error) {
-      console.error("Error al subir documento de declaración:", uploadRes.error);
-      return NextResponse.json(
-        { success: false, error: `Error al almacenar el archivo: ${uploadRes.error.message}` },
-        { status: 500 }
-      );
-    }
-
-    const actualStoragePath = uploadRes.data?.path || storagePath;
-
-    // Cache local proactivo
-    await warmLocalStorageCache(targetBucket, actualStoragePath, uploadBuffer);
-
-    const { data: urlData } = supabase.storage.from(targetBucket).getPublicUrl(actualStoragePath);
-    const fileUrl = urlData.publicUrl;
-
-    const { data: insertedDoc, error: insertError } = await supabase
-      .from("tax_declaration_documents")
-      .insert({
-        period,
-        year,
-        month,
-        document_type: documentType,
-        title,
-        notes,
-        file_url: fileUrl,
-        storage_path: `${targetBucket}/${actualStoragePath}`,
-        file_name: originalName,
-        file_type: contentType,
-        file_size: file.size,
-        uploaded_by_id: user.id,
-        uploaded_by_email: user.email,
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("Error insertando en tax_declaration_documents:", insertError);
-      if (
-        insertError.code === "42P01" ||
-        insertError.message.includes('relation "public.tax_declaration_documents" does not exist')
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            tableMissing: true,
-            error:
-              "La tabla en la base de datos aún no ha sido creada. Por favor ejecuta el script 'supabase/migration_tax_declarations.sql' en el SQL Editor de Supabase.",
-          },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json(
-        { success: false, error: `Error guardando registro en base de datos: ${insertError.message}` },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ success: true, document: insertedDoc });
+    return NextResponse.json({ success: true, document: insertedDoc, documents: [insertedDoc] });
   } catch (err: any) {
     console.error("Error in POST declarations:", err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    if (err.tableMissing) {
+      return NextResponse.json(
+        {
+          success: false,
+          tableMissing: true,
+          error: err.message,
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ success: false, error: err.message || "Error al procesar la subida" }, { status: 500 });
   }
 }
 

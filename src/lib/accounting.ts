@@ -19,6 +19,44 @@ export const EXPENSE_CATEGORY_ACCOUNT: Record<string, { code: string; name: stri
   "Software y Licencias":      { code: "1.2.01.03", name: "Equipos de Computación y Software" },
   "Otros Gastos":              { code: "5.2.19.01", name: "Alimentación Cafetería" },
 
+  // ── Honorarios Externos y Profesionales ────────────────────────────────
+  "Honorarios Externos (Contabilidad)": { code: "5.2.07.01", name: "Honorarios Externos (Contabilidad)" },
+  "Honorarios Externos":                { code: "5.2.07.01", name: "Honorarios Externos (Contabilidad)" },
+  "Honorarios Profesionales":           { code: "5.1.02.04", name: "Honorarios Otros Profesionales" },
+  "Honorarios Odontólogos Asociados":   { code: "5.1.02.02", name: "Honorarios Odontólogos Asociados" },
+  "Honorarios Laboratorios Dentales":   { code: "5.1.02.01", name: "Honorarios Laboratorios Dentales" },
+  "Honorarios Profesores y Expositores":{ code: "5.1.02.03", name: "Honorarios Profesores y Expositores" },
+  "Honorarios Otros Profesionales":     { code: "5.1.02.04", name: "Honorarios Otros Profesionales" },
+
+  // ── Suministros y Útiles ───────────────────────────────────────────────
+  "Útiles de Oficina":         { code: "5.2.05.01", name: "Útiles de Oficina" },
+  "Útiles de Aseo":            { code: "5.2.05.02", name: "Útiles de Aseo" },
+  "Suministros de Oficina":    { code: "5.2.05.03", name: "Suministros de Oficina" },
+
+  // ── Gastos de Viaje y Cafetería ────────────────────────────────────────
+  "Hospedaje":                 { code: "5.2.11.01", name: "Hospedaje" },
+  "Alimentación Viaje":        { code: "5.2.11.02", name: "Alimentación Viaje" },
+  "Movilización Viaje":        { code: "5.2.11.03", name: "Movilización Viaje" },
+  "Alimentación Cafetería":    { code: "5.2.19.01", name: "Alimentación Cafetería" },
+
+  // ── Servicios Básicos y Mantenimientos ─────────────────────────────────
+  "Energía Eléctrica":         { code: "5.2.03.01", name: "Energía Eléctrica" },
+  "Agua Potable":              { code: "5.2.03.02", name: "Agua Potable" },
+  "Internet":                  { code: "5.2.03.03", name: "Internet" },
+  "Datafast":                  { code: "5.2.03.04", name: "Datafast" },
+  "Mantenimiento de Equipos":  { code: "5.1.01.02", name: "Mantenimiento de Equipos" },
+  "Mantenimiento Instalaciones/Adecuaciones": { code: "5.2.04.01", name: "Mantenimiento Instalaciones/Adecuaciones" },
+  "Publicidad y Marketing":    { code: "5.2.06.01", name: "Publicidad y Marketing" },
+  "Arriendo de Local":         { code: "5.2.02.01", name: "Arriendo de Local" },
+  "Arriendo para Eventos":     { code: "5.2.02.02", name: "Arriendo para Eventos" },
+
+  // ── Impuestos y Gastos Bancarios ───────────────────────────────────────
+  "Patente":                   { code: "5.2.09.01", name: "Patente" },
+  "1.5 por Mil":               { code: "5.2.09.02", name: "1.5 por Mil" },
+  "Contribuciones":            { code: "5.2.09.03", name: "Contribuciones" },
+  "Permiso de Funcionamiento": { code: "5.2.09.04", name: "Permiso de Funcionamiento" },
+  "Comisiones Bancarias":      { code: "5.4.01.01", name: "Comisiones Bancarias" },
+
   // ── Alias / compatibilidad con categorías anteriores ───────────────────
   "Materiales e Instrumental": { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
   "Insumos dentales":          { code: "5.1.01.01", name: "Insumos Dentales Utilizados" },
@@ -209,6 +247,83 @@ export async function createInvoiceJournalEntry(params: {
   return insertJournalEntry({
     entry_date:     params.invoice_date,
     description:    `Factura de venta (${cxcAccount.name}) — ${params.client_name}`,
+    reference_type: "invoice",
+    reference_id:   params.invoice_id,
+    lines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
+  });
+}
+
+// ── Asiento por Cobro / Recaudación de Factura de Venta ────────────────────
+/**
+ * Cobro de factura emitida (ingreso en Bancos / Caja y cancelación de CxC):
+ *   Dr. Bancos / Caja General         (total cobrado)
+ *   Cr.   Cuentas por Cobrar Clientes (total cobrado)
+ */
+export async function createInvoicePaymentJournalEntry(params: {
+  invoice_id:         string;
+  payment_date:       string;
+  client_name:        string;
+  invoice_number?:    string | null;
+  payment_method?:    string | null;
+  amount:             number;
+  billing_area?:      string | null;
+  bank_account_name?: string | null;
+  payment_reference?: string | null;
+  user_id?:           string | null;
+  user_email?:        string | null;
+}) {
+  const area = (params.billing_area || "clinica").toLowerCase();
+
+  let cxcAccount = {
+    code: "1.1.02.01",
+    name: "Cuentas por Cobrar Pacientes (Clínica)",
+  };
+
+  if (area === "cursos") {
+    cxcAccount = {
+      code: "1.1.02.02",
+      name: "Cuentas por Cobrar Alumnos (Cursos)",
+    };
+  } else if (area === "coworking") {
+    cxcAccount = {
+      code: "1.1.02.03",
+      name: "Cuentas por Cobrar Inquilinos (Coworking)",
+    };
+  } else if (area === "otros") {
+    cxcAccount = {
+      code: "1.1.02.04",
+      name: "Anticipos a Proveedores y Otras Ctas. por Cobrar",
+    };
+  }
+
+  const isEfectivo = (params.payment_method || "").toLowerCase() === "efectivo";
+  const moneyAccount = isEfectivo
+    ? { code: "1.1.01.02", name: "Caja General" }
+    : { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+
+  const lines: JournalLine[] = [
+    {
+      account_code: moneyAccount.code,
+      account_name: moneyAccount.name,
+      debit:  r2(params.amount),
+      credit: 0,
+      description: params.bank_account_name || params.payment_reference || (isEfectivo ? "Ingreso en Efectivo" : "Depósito / Transferencia Bancaria"),
+    },
+    {
+      account_code: cxcAccount.code,
+      account_name: cxcAccount.name,
+      debit:  0,
+      credit: r2(params.amount),
+      description: `Cobro liquidado ${params.client_name}`,
+    },
+  ];
+
+  const invNum = params.invoice_number ? ` ${params.invoice_number}` : "";
+  return insertJournalEntry({
+    entry_date:     params.payment_date,
+    description:    `Cobro Total Factura${invNum} — ${params.client_name}`,
     reference_type: "invoice",
     reference_id:   params.invoice_id,
     lines,
@@ -679,6 +794,123 @@ export async function syncPeriodExpensesJournalEntries(period: string) {
   }
 
   return { count: expenses.length };
+}
+
+// ── Sincronizador de Asientos de Facturas de Venta (Devengo + Cobro) ────────
+/**
+ * Regenera fielmente los asientos de una factura de venta (Venta + Cobro si está pagada)
+ */
+export async function syncInvoiceJournalEntries(
+  invoiceId: string,
+  options?: { user_id?: string | null; user_email?: string | null }
+) {
+  const supabase = createAdminClient();
+
+  const { data: inv, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .single();
+
+  if (error || !inv) {
+    console.warn("syncInvoiceJournalEntries: Factura no encontrada", invoiceId);
+    return;
+  }
+
+  // 1. Eliminar asientos antiguos vinculados a esta factura
+  const { data: existingEntries } = await supabase
+    .from("journal_entries")
+    .select("id")
+    .eq("reference_type", "invoice")
+    .eq("reference_id", invoiceId);
+
+  if (existingEntries && existingEntries.length > 0) {
+    const ids = existingEntries.map((e) => e.id);
+    await supabase.from("journal_lines").delete().in("journal_entry_id", ids);
+    await supabase.from("journal_entries").delete().in("id", ids);
+  }
+
+  // 2. Si la factura está anulada, terminamos
+  if (inv.sri_status === "cancelled" || inv.payment_status === "cancelled") {
+    return;
+  }
+
+  const subtotal0 = Number(inv.subtotal_0 || 0);
+  const subtotal15 = Number(inv.subtotal_15 || 0);
+  const ivaAmount = Number(inv.iva_amount || 0);
+  const total = Number(inv.total || 0);
+  const issueDate = inv.issue_date || (inv.created_at ? String(inv.created_at).split("T")[0] : new Date().toISOString().split("T")[0]);
+
+  // Asiento 1: Devengo / Factura de Venta
+  await createInvoiceJournalEntry({
+    invoice_id:   inv.id,
+    invoice_date: issueDate,
+    client_name:  inv.client_name,
+    subtotal_0:   subtotal0,
+    subtotal_15:  subtotal15,
+    iva_amount:   ivaAmount,
+    total,
+    billing_area: inv.billing_area,
+    user_id:      options?.user_id,
+    user_email:   options?.user_email,
+  });
+
+  // Asiento 2: Cobro / Recaudación (si la factura está pagada)
+  if (inv.payment_status === "paid" && total > 0) {
+    let bankName = null;
+    if (inv.bank_account_id) {
+      const { data: bAcc } = await supabase
+        .from("bank_accounts")
+        .select("bank_name, account_number")
+        .eq("id", inv.bank_account_id)
+        .maybeSingle();
+      if (bAcc) bankName = `${bAcc.bank_name} (${bAcc.account_number})`;
+    }
+
+    await createInvoicePaymentJournalEntry({
+      invoice_id:         inv.id,
+      payment_date:       issueDate,
+      client_name:        inv.client_name,
+      invoice_number:     inv.invoice_number,
+      payment_method:     inv.payment_method,
+      amount:             total,
+      billing_area:       inv.billing_area,
+      bank_account_name:  bankName,
+      payment_reference:  inv.payment_reference,
+      user_id:            options?.user_id,
+      user_email:         options?.user_email,
+    });
+  }
+}
+
+/**
+ * Sincroniza todos los asientos de facturas de un período
+ */
+export async function syncPeriodInvoicesJournalEntries(period: string) {
+  const supabase = createAdminClient();
+  let query = supabase.from("invoices").select("id, issue_date, created_at");
+
+  if (period !== "all") {
+    const [year, month] = period.split("-").map(Number);
+    const from = new Date(year, month - 1, 1).toISOString().split("T")[0];
+    const to = new Date(year, month, 0).toISOString().split("T")[0];
+    query = query.gte("issue_date", from).lte("issue_date", to);
+  }
+
+  const { data: invoices, error } = await query;
+  if (error || !invoices || invoices.length === 0) return { count: 0 };
+
+  let count = 0;
+  for (const inv of invoices) {
+    try {
+      await syncInvoiceJournalEntries(inv.id);
+      count++;
+    } catch (err) {
+      console.warn(`Error sincronizando asiento de factura ${inv.id}:`, err);
+    }
+  }
+
+  return { count };
 }
 
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BookOpen, CheckCircle2, ChevronDown, ChevronUp, Scale, Clock, ArrowRight } from "lucide-react";
+import { formatAsientoCode, formatEgresoCode } from "@/lib/accounting-codes";
 
 export interface JournalLineItem {
   id?: string;
@@ -15,6 +16,7 @@ export interface JournalLineItem {
 export interface JournalEntryItem {
   id: string;
   entry_number?: string | number | null;
+  egreso_number?: string | number | null;
   entry_date: string;
   description: string;
   reference_type?: string | null;
@@ -111,12 +113,18 @@ export default function AsientoContableGastoCard({ entries, expenseTotal, paymen
               >
                 {/* Cabecera del Asiento Individual */}
                 <div className="px-4 py-2.5 bg-lilac-50/60 border-b border-lilac-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-md bg-lilac-700 text-white flex items-center justify-center font-bold text-[10px]">
-                      {entryIdx + 1}
-                    </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isPaymentEntry ? (
+                      <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white font-mono text-xs font-bold tracking-tight shadow-2xs">
+                        {entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entry.entry_number || (entryIdx + 1), entry.entry_date)}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-lilac-800 text-white font-mono text-xs font-bold tracking-tight shadow-2xs">
+                        {formatAsientoCode(entry.entry_number || (entryIdx + 1), entry.entry_date, "diario")}
+                      </span>
+                    )}
                     <strong className="font-bold text-ink-900">
-                      {isPaymentEntry ? "Asiento 2: Cruce y Pago de Proveedores" : "Asiento 1: Causación del Gasto (Devengo)"}
+                      {isPaymentEntry ? "Pago / Cruce con Banco" : "Causación del Gasto (Devengo)"}
                     </strong>
                     <span className="text-ink-400">·</span>
                     <span className="text-ink-600 font-medium">

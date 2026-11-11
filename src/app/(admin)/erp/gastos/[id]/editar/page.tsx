@@ -7,7 +7,7 @@ import { assertPermission, assertWritePermission, getUserRole } from "@/lib/auth
 import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry, createExpensePaymentJournalEntry, syncExpenseJournalEntries } from "@/lib/accounting";
 import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
-import { ExpenseItemRow, FacturaRecibida, parseItemCategoryAndDesc } from "@/lib/expense-types";
+import { ExpenseItemRow, FacturaRecibida, parseItemCategoryAndDesc, resolveExpenseItemCategoryDetail } from "@/lib/expense-types";
 import {
   cleanDocNumberOnly,
   cleanExpenseDescription,
@@ -452,17 +452,24 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
     const sriDesc = linkedFactura.razon_social
       ? `${linkedFactura.razon_social} - Factura #${cleanNum || "SRI"}`
       : `Factura #${cleanNum || "SRI"}`;
-    const finalDesc = cleanDesc ? `${sriDesc} (${cleanDesc})` : sriDesc;
+    const finalDesc = cleanDesc || sriDesc;
+
+    const resolvedCat = rawItems[0]?.category || expense.category || "";
+    const detail = resolveExpenseItemCategoryDetail(
+      resolvedCat,
+      rawItems[0]?.account_code || expense.account_code,
+      rawItems[0]?.account_name || expense.account_name
+    );
 
     initialItems = [
       {
         id: rawItems[0]?.id || "sri-item-1",
         description: finalDesc,
-        category: rawItems[0]?.category || expense.category || "Insumo y Material",
-        group_code: rawItems[0]?.group_code || expense.group_code || (expense.area === "clinica" ? "5.1.01" : "5.2.05"),
-        group_name: rawItems[0]?.group_name || expense.group_name || (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos"),
-        account_code: rawItems[0]?.account_code || expense.account_code || (expense.area === "clinica" ? "5.1.01.01" : "5.2.05.01"),
-        account_name: rawItems[0]?.account_name || expense.account_name || (expense.area === "clinica" ? "Insumos Dentales Utilizados" : "Útiles de Oficina"),
+        category: resolvedCat || detail.name,
+        group_code: rawItems[0]?.group_code || expense.group_code || (detail.accountCode.startsWith("5.2.07") ? "5.2.07" : (expense.area === "clinica" ? "5.1.01" : "5.2.05")),
+        group_name: rawItems[0]?.group_name || expense.group_name || (detail.accountCode.startsWith("5.2.07") ? "Honorarios Externos" : (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos")),
+        account_code: rawItems[0]?.account_code || expense.account_code || detail.accountCode,
+        account_name: rawItems[0]?.account_name || expense.account_name || detail.name,
         quantity: 1,
         unit_price: facIva > 0 ? (facSub || Math.round((facTot - facIva) * 100) / 100) : (facSub || facTot),
         iva_rate: facIva > 0 ? 15 : 0,
@@ -473,15 +480,21 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
     const item15 = rawItems.find((it) => Number(it.iva_rate) === 15);
     const chosen = item15 || rawItems[0];
     const parsed = parseItemCategoryAndDesc(chosen.description);
+    const resolvedCat = chosen.category || parsed.category || expense.category || "";
+    const detail = resolveExpenseItemCategoryDetail(
+      resolvedCat,
+      chosen.account_code || expense.account_code,
+      chosen.account_name || expense.account_name
+    );
     initialItems = [
       {
         id: chosen.id,
-        description: cleanExpenseDescription(parsed.description),
-        category: chosen.category || parsed.category,
-        group_code: chosen.group_code || null,
-        group_name: chosen.group_name || null,
-        account_code: chosen.account_code || null,
-        account_name: chosen.account_name || null,
+        description: cleanDesc || cleanExpenseDescription(parsed.description) || "Gasto registrado",
+        category: resolvedCat || detail.name,
+        group_code: chosen.group_code || expense.group_code || null,
+        group_name: chosen.group_name || expense.group_name || null,
+        account_code: chosen.account_code || expense.account_code || detail.accountCode,
+        account_name: chosen.account_name || expense.account_name || detail.name,
         quantity: Number(chosen.quantity) || 1,
         unit_price: Number(chosen.unit_price) || 0,
         iva_rate: (Number(chosen.iva_rate) === 15 ? 15 : 0) as 0 | 15,
@@ -490,14 +503,21 @@ export default async function EditarGastoPage({ params }: { params: Promise<{ id
   } else {
     initialItems = rawItems.map((it: any) => {
       const parsed = parseItemCategoryAndDesc(it.description);
+      const resolvedCat = it.category || parsed.category || expense.category || "";
+      const detail = resolveExpenseItemCategoryDetail(
+        resolvedCat,
+        it.account_code || expense.account_code,
+        it.account_name || expense.account_name
+      );
+      const itDesc = cleanExpenseDescription(parsed.description);
       return {
         id: it.id,
-        description: cleanExpenseDescription(parsed.description),
-        category: it.category || parsed.category,
-        group_code: it.group_code || null,
-        group_name: it.group_name || null,
-        account_code: it.account_code || null,
-        account_name: it.account_name || null,
+        description: (rawItems.length === 1 && cleanDesc) ? cleanDesc : (itDesc || cleanDesc || "Gasto registrado"),
+        category: resolvedCat || detail.name,
+        group_code: it.group_code || expense.group_code || null,
+        group_name: it.group_name || expense.group_name || null,
+        account_code: it.account_code || expense.account_code || detail.accountCode,
+        account_name: it.account_name || expense.account_name || detail.name,
         quantity: Number(it.quantity) || 1,
         unit_price: Number(it.unit_price) || 0,
         iva_rate: (Number(it.iva_rate) === 15 ? 15 : 0) as 0 | 15,

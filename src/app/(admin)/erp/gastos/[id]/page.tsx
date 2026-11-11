@@ -47,6 +47,7 @@ import {
   parseItemCategoryAndDesc,
   EXPENSE_CATEGORY_DETAILS,
   normalizeCategoryName,
+  resolveExpenseItemCategoryDetail,
 } from "@/lib/expense-types";
 import { deleteOrVoidExpense } from "../actions";
 
@@ -307,21 +308,31 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
     const projectedLines: any[] = [];
     if (items.length > 0) {
       for (const it of items) {
+        const itDetail = resolveExpenseItemCategoryDetail(
+          it.category || expense.category,
+          it.account_code || expense.account_code,
+          it.account_name || expense.account_name
+        );
         projectedLines.push({
-          account_code: it.account_code || expense.account_code || "5.2.05.01",
-          account_name: it.account_name || expense.account_name || "Gasto Operacional",
+          account_code: it.account_code || itDetail.accountCode || expense.account_code || "5.2.05.01",
+          account_name: it.account_name || itDetail.name || expense.account_name || "Gasto Operacional",
           debit: Number(it.subtotal || 0),
           credit: 0,
-          description: it.description,
+          description: it.description || cleanExpenseDescription(expense.description) || expense.supplier_name,
         });
       }
     } else {
+      const expDetail = resolveExpenseItemCategoryDetail(
+        expense.category,
+        expense.account_code,
+        expense.account_name
+      );
       projectedLines.push({
-        account_code: expense.account_code || "5.2.05.01",
-        account_name: expense.account_name || "Gasto Operacional",
+        account_code: expense.account_code || expDetail.accountCode || "5.2.05.01",
+        account_name: expense.account_name || expDetail.name || "Gasto Operacional",
         debit: subtotalTotal > 0 ? subtotalTotal : tot,
         credit: 0,
-        description: expense.description || expense.supplier_name,
+        description: cleanExpenseDescription(expense.description) || expense.supplier_name,
       });
     }
 
@@ -658,21 +669,46 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             <tbody className="divide-y divide-lilac-50">
               {displayItems.map((it, idx) => {
                 const parsed = parseItemCategoryAndDesc(it.description);
-                const itemCat = normalizeCategoryName(it.category || parsed.category || expense.category);
-                const catDetail = EXPENSE_CATEGORY_DETAILS[itemCat];
-                const rawDesc = parsed.description || expense.description || "Gasto registrado";
+                // Categoría contable y cuenta contable efectiva
+                const rawCategory = it.category || parsed.category || expense.category || it.account_name || expense.account_name || "";
+                const catDetail = resolveExpenseItemCategoryDetail(
+                  rawCategory,
+                  it.account_code || expense.account_code,
+                  it.account_name || expense.account_name
+                );
+                const itemCat = catDetail.name || normalizeCategoryName(rawCategory) || "Gasto Operacional";
+
+                // Resolución de descripción del concepto
+                const cleanExpDesc = cleanExpenseDescription(expense.description);
+                const itDesc = parsed.description?.trim();
+                const isGenericItemDesc =
+                  !itDesc ||
+                  itDesc.toLowerCase().includes("compra según") ||
+                  itDesc.toLowerCase().includes("factura electrónica") ||
+                  itDesc.toLowerCase() === "item de gasto" ||
+                  itDesc.toLowerCase().startsWith("concepto principal") ||
+                  Boolean(expense.supplier_name && itDesc.toLowerCase().includes(expense.supplier_name.toLowerCase().slice(0, 8)));
+
+                const mainDesc = (cleanExpDesc && (isGenericItemDesc || displayItems.length === 1))
+                  ? cleanExpDesc
+                  : (itDesc || cleanExpDesc || "Gasto registrado");
+
+                const secondaryDesc = (itDesc && itDesc !== mainDesc && !isGenericItemDesc)
+                  ? itDesc
+                  : (cleanExpDesc && cleanExpDesc !== mainDesc ? cleanExpDesc : null);
+
                 return (
                   <tr key={it.id || idx} className="hover:bg-lilac-50/30">
                     <td className="py-2.5 pr-2">
-                      <div className="font-semibold text-ink-900">{rawDesc}</div>
-                      {expense.description && rawDesc !== expense.description && (
-                        <div className="text-[11px] text-ink-500 mt-0.5">{expense.description}</div>
+                      <div className="font-semibold text-ink-900">{mainDesc}</div>
+                      {secondaryDesc && (
+                        <div className="text-[11px] text-ink-500 mt-0.5">{secondaryDesc}</div>
                       )}
                     </td>
                     <td className="py-2.5 px-2 text-center">
                       <span
                         className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-lilac-50 text-lilac-800 border-lilac-200 cursor-help"
-                        title={`${catDetail?.description || itemCat} — Contempla: ${catDetail?.examples || ""}`}
+                        title={`${catDetail?.description || itemCat}`}
                       >
                         {itemCat}
                       </span>

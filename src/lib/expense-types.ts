@@ -10,20 +10,41 @@ export const EXPENSE_ITEM_CATEGORIES = [
 export type ExpenseItemCategory = (typeof EXPENSE_ITEM_CATEGORIES)[number];
 
 export interface CategoryDetail {
-  name: ExpenseItemCategory;
+  name: string;
   accountCode: string;
   accountName: string;
   description: string;
   examples: string;
 }
 
-export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetail> = {
+export const EXPENSE_CATEGORY_DETAILS: Record<string, CategoryDetail> = {
   "Insumo y Material": {
     name: "Insumo y Material",
     accountCode: "5.1.01.01",
     accountName: "Insumos Dentales Utilizados",
     description: "Insumos clínicos, odontológicos y materiales de atención",
     examples: "Guantes, gasas, anestesias, resinas, suturas, jeringas, instrumental descartable o menor, biomateriales, brackets y fármacos.",
+  },
+  "Honorarios Externos (Contabilidad)": {
+    name: "Honorarios Externos (Contabilidad)",
+    accountCode: "5.2.07.01",
+    accountName: "Honorarios Externos (Contabilidad)",
+    description: "Servicios contables, tributarios, auditoría y conformación societaria",
+    examples: "Asesoría contable mensual, declaraciones SRI, balances SuperCías, conformación de sociedad y asesoría legal/financiera.",
+  },
+  "Honorarios Externos": {
+    name: "Honorarios Externos",
+    accountCode: "5.2.07.01",
+    accountName: "Honorarios Externos (Contabilidad)",
+    description: "Honorarios por servicios profesionales externos",
+    examples: "Contabilidad, asesoría jurídica, auditoría externa, consultoría administrativa.",
+  },
+  "Honorarios Profesionales": {
+    name: "Honorarios Profesionales",
+    accountCode: "5.1.02.04",
+    accountName: "Honorarios Otros Profesionales",
+    description: "Honorarios médicos, odontológicos y docentes",
+    examples: "Odontólogos especialistas asociados, docentes de cursos, laboratoristas dentales.",
   },
   "Suministro": {
     name: "Suministro",
@@ -64,19 +85,102 @@ export const EXPENSE_CATEGORY_DETAILS: Record<ExpenseItemCategory, CategoryDetai
 
 /**
  * Normaliza categorías previas o alias (ej. "Materiales e Instrumental" -> "Insumo y Material")
+ * pero PRESERVA categorías válidas como "Honorarios Externos (Contabilidad)", "Útiles de Aseo", etc.
  */
-export function normalizeCategoryName(cat: string | null | undefined): ExpenseItemCategory {
-  if (!cat) return "Insumo y Material";
+export function normalizeCategoryName(cat: string | null | undefined): string {
+  if (!cat) return "";
   const trimmed = cat.trim();
+  if (!trimmed) return "";
   if (trimmed === "Materiales e Instrumental" || trimmed === "Insumos dentales") return "Insumo y Material";
   if (trimmed === "Seguros y Suscripciones" || trimmed === "Otros") return "Otros Gastos";
   if (trimmed === "Equipos") return "Activo fijo";
   if (trimmed === "Servicios básicos") return "Servicio";
   if (trimmed === "Suministros oficina") return "Suministro";
-  if (EXPENSE_ITEM_CATEGORIES.includes(trimmed as any)) {
-    return trimmed as ExpenseItemCategory;
+  return trimmed;
+}
+
+/**
+ * Resuelve la información contable (nombre y código de cuenta) para un ítem o categoría de gasto.
+ */
+export function resolveExpenseItemCategoryDetail(
+  catName?: string | null,
+  accountCode?: string | null,
+  accountName?: string | null
+): { name: string; accountCode: string; description?: string } {
+  // 1. Por código de cuenta conocido
+  if (accountCode) {
+    const code = accountCode.trim();
+    if (code === "5.2.07.01" || code === "5.2.07") {
+      return { name: "Honorarios Externos (Contabilidad)", accountCode: "5.2.07.01", description: "Servicios contables y asesoría externa" };
+    }
+    if (code === "5.1.01.01" || code === "5.1.01") {
+      return { name: "Insumo y Material", accountCode: "5.1.01.01", description: "Insumos Dentales Utilizados" };
+    }
+    if (code === "5.2.05.01" || code === "5.2.05") {
+      return { name: "Útiles de Oficina", accountCode: "5.2.05.01", description: "Suministros y Útiles de Oficina" };
+    }
+    if (code === "5.2.05.02") {
+      return { name: "Útiles de Aseo", accountCode: "5.2.05.02", description: "Artículos de Aseo y Limpieza" };
+    }
+    if (code === "1.2.01.01") {
+      return { name: "Activo fijo", accountCode: "1.2.01.01", description: "Equipos Médicos y Odontológicos" };
+    }
+    if (code === "5.2.03.01") {
+      return { name: "Servicio", accountCode: "5.2.03.01", description: "Energía Eléctrica y Servicios Básicos" };
+    }
+    if (code === "1.2.01.03") {
+      return { name: "Software y Licencias", accountCode: "1.2.01.03", description: "Equipos de Computación y Software" };
+    }
+    if (code === "5.2.19.01") {
+      return { name: "Otros Gastos", accountCode: "5.2.19.01", description: "Alimentación Cafetería / Misceláneos" };
+    }
+    if (code.startsWith("5.1.02")) {
+      return { name: accountName || "Honorarios Profesionales", accountCode: code, description: "Honorarios Profesionales" };
+    }
   }
-  return "Insumo y Material";
+
+  // 2. Por coincidencia en EXPENSE_CATEGORY_DETAILS
+  const normalized = normalizeCategoryName(catName || accountName);
+  if (normalized && EXPENSE_CATEGORY_DETAILS[normalized]) {
+    const d = EXPENSE_CATEGORY_DETAILS[normalized];
+    return { name: d.name, accountCode: d.accountCode, description: d.description };
+  }
+
+  // 3. Chequeos de palabras clave en la categoría / cuenta
+  const searchStr = `${catName || ""} ${accountName || ""}`.toLowerCase();
+  if (searchStr.includes("honorario") || searchStr.includes("contab") || searchStr.includes("asesor")) {
+    return {
+      name: "Honorarios Externos (Contabilidad)",
+      accountCode: "5.2.07.01",
+      description: "Servicios contables, tributarios y asesoría externa",
+    };
+  }
+  if (searchStr.includes("insumo") || searchStr.includes("dental") || searchStr.includes("material")) {
+    return {
+      name: "Insumo y Material",
+      accountCode: "5.1.01.01",
+      description: "Insumos Dentales Utilizados",
+    };
+  }
+  if (searchStr.includes("suministro") || searchStr.includes("oficina") || searchStr.includes("utiles")) {
+    return {
+      name: "Suministro",
+      accountCode: "5.2.05.01",
+      description: "Útiles de Oficina",
+    };
+  }
+  if (searchStr.includes("activo") || searchStr.includes("equipo")) {
+    return {
+      name: "Activo fijo",
+      accountCode: "1.2.01.01",
+      description: "Equipos Médicos y Odontológicos",
+    };
+  }
+
+  // 4. Fallback con el nombre y código que tenga
+  const finalName = normalized || accountName || catName || "Gasto Operacional";
+  const finalCode = accountCode || "5.2.05.01";
+  return { name: finalName, accountCode: finalCode };
 }
 
 export interface FacturaRecibida {
@@ -128,7 +232,7 @@ export interface ExpenseItemRow {
  * Parsea el prefijo [Categoría] en la descripción si la columna category no existe en BD
  */
 export function parseItemCategoryAndDesc(rawDesc: string | null | undefined): { category: string; description: string } {
-  if (!rawDesc) return { category: "Insumo y Material", description: "" };
+  if (!rawDesc) return { category: "", description: "" };
   const match = rawDesc.match(/^\[(.*?)\]\s*(.*)$/);
   if (match) {
     const cat = match[1].trim();
@@ -136,7 +240,7 @@ export function parseItemCategoryAndDesc(rawDesc: string | null | undefined): { 
     const normalized = normalizeCategoryName(cat);
     return { category: normalized, description: desc };
   }
-  return { category: "Insumo y Material", description: rawDesc };
+  return { category: "", description: rawDesc };
 }
 
 export function formatItemDescription(category: string | undefined | null, desc: string): string {

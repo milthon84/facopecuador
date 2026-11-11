@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, Scale, CheckCircle2, X } from "lucide-react";
+import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 
 export interface JournalLineItem {
   id?: string;
@@ -15,6 +16,7 @@ export interface JournalLineItem {
 export interface JournalEntryItem {
   id: string;
   entry_number?: string | number | null;
+  egreso_number?: string | number | null;
   entry_date: string;
   description: string;
   reference_type?: string | null;
@@ -173,31 +175,61 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
   return entries;
 }
 
-function getEntryTitle(entry: JournalEntryItem): string {
+export function getEntryKind(entry: JournalEntryItem) {
   const desc = (entry.description || "").toLowerCase();
   const ref = (entry.reference_type || "").toLowerCase();
 
   if (ref === "credit_note" || desc.includes("nota de crédito") || desc.includes("credito")) {
-    return "Nota de Crédito (Reversión Contable)";
+    return {
+      title: "Nota de Crédito (Reversión Contable)",
+      voucherType: "diario" as const,
+      voucherLabel: "Nota de Crédito",
+      voucherColor: "bg-amber-100 text-amber-900 border-amber-300",
+    };
   }
   if (
     desc.includes("cobro") ||
     desc.includes("recaudaci") ||
     (ref === "invoice" && entry.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("1.1.02")))
   ) {
-    return "Cobro / Recaudación Bancaria";
+    return {
+      title: "Cobro / Recaudación Bancaria",
+      voucherType: "ingreso" as const,
+      voucherLabel: "Comprobante de Ingreso",
+      voucherColor: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    };
   }
   if (
     desc.includes("pago") ||
     desc.includes("cruce") ||
-    entry.journal_lines.some((l) => l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02")
+    desc.includes("egreso") ||
+    entry.journal_lines.some((l) => l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02" || l.account_code === "2.1.05.01")
   ) {
-    return "Pago / Cruce con Banco";
+    return {
+      title: "Pago / Cruce con Banco",
+      voucherType: "egreso" as const,
+      voucherLabel: "Comprobante de Egreso",
+      voucherColor: "bg-blue-100 text-blue-900 border-blue-300",
+    };
   }
   if (ref === "invoice" || desc.includes("factura") || desc.includes("venta")) {
-    return "Emisión y Venta (Devengo)";
+    return {
+      title: "Emisión y Venta (Devengo)",
+      voucherType: "diario" as const,
+      voucherLabel: "Comprobante de Diario",
+      voucherColor: "bg-purple-100 text-purple-900 border-purple-300",
+    };
   }
-  return "Causación del Gasto (Devengo)";
+  return {
+    title: "Causación del Gasto (Devengo)",
+    voucherType: "diario" as const,
+    voucherLabel: "Comprobante de Diario",
+    voucherColor: "bg-purple-100 text-purple-900 border-purple-300",
+  };
+}
+
+function getEntryTitle(entry: JournalEntryItem): string {
+  return getEntryKind(entry).title;
 }
 
 export default function AsientoContableModal({
@@ -306,20 +338,42 @@ export default function AsientoContableModal({
                     key={entry.id || entryIdx}
                     className="border border-lilac-200 rounded-xl overflow-hidden shadow-2xs"
                   >
-                    {/* Barra de título de asiento */}
-                    <div className="px-3 py-1 bg-lilac-50/80 border-b border-lilac-200 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-1.5 font-bold text-ink-900">
-                        <span className="w-4 h-4 rounded bg-lilac-700 text-white flex items-center justify-center text-[9px] font-bold">
-                          {entryIdx + 1}
-                        </span>
-                        <span>{getEntryTitle(entry)}</span>
-                      </div>
-                      <span className="text-[10px] text-ink-500 font-mono">
-                        {entry.entry_date
-                          ? new Date(entry.entry_date + "T12:00:00").toLocaleDateString("es-EC")
-                          : ""}
-                      </span>
-                    </div>
+                    {/* Barra de título con Código Identificador Único */}
+                    {(() => {
+                      const kind = getEntryKind(entry);
+                      const entryNum = entry.entry_number || (entryIdx + 1);
+                      const asientoCode = formatAsientoCode(entryNum, entry.entry_date, "diario");
+                      const egresoCode = entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entryNum, entry.entry_date);
+                      const ingresoCode = formatIngresoCode(entryNum, entry.entry_date);
+
+                      const codeBadge =
+                        kind.voucherType === "egreso"
+                          ? { code: egresoCode, cls: "bg-blue-600 text-white" }
+                          : kind.voucherType === "ingreso"
+                          ? { code: ingresoCode, cls: "bg-emerald-600 text-white" }
+                          : { code: asientoCode, cls: "bg-lilac-800 text-white" };
+
+                      return (
+                        <div className="px-3 py-1.5 bg-lilac-50/80 border-b border-lilac-200 flex items-center justify-between text-[11px] gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* Único Código Identificador: EG para egresos, ING para cobros, AS para diario */}
+                            <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold tracking-tight shadow-2xs ${codeBadge.cls}`}>
+                              {codeBadge.code}
+                            </span>
+
+                            <span className="font-bold text-ink-900">
+                              {kind.title}
+                            </span>
+                          </div>
+
+                          <span className="text-[10px] text-ink-500 font-mono font-medium">
+                            {entry.entry_date
+                              ? new Date(entry.entry_date + "T12:00:00").toLocaleDateString("es-EC")
+                              : ""}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* Tabla de Cuentas: Código, Cuenta, Debe, Haber */}
                     <table className="w-full text-[11px]">

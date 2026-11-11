@@ -111,14 +111,17 @@ export async function linkExpenseToFactura(expenseId: string, claveAcceso: strin
     // 4. Sincronizar detalle de ítems (expense_items): reemplazar con el ítem de la factura SRI para evitar duplicaciones
     try {
       const cleanExpDesc = cleanExpenseDescription(expense.description);
-      const sriItemDesc = factura.razon_social
-        ? `${factura.razon_social} - Factura #${cleanNum || "SRI"}${cleanExpDesc ? ` (${cleanExpDesc})` : ""}`
-        : (cleanNum ? `Factura #${cleanNum}${cleanExpDesc ? ` (${cleanExpDesc})` : ""}` : "Compra según factura electrónica SRI");
+      const sriItemDesc = cleanExpDesc || (factura.razon_social
+        ? `${factura.razon_social} - Factura #${cleanNum || "SRI"}`
+        : (cleanNum ? `Factura #${cleanNum}` : "Compra según factura electrónica SRI"));
 
-      const grpCode = expense.group_code || (expense.area === "clinica" ? "5.1.01" : "5.2.05");
-      const grpName = expense.group_name || (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos");
-      const accCode = expense.account_code || (expense.area === "clinica" ? "5.1.01.01" : "5.2.05.01");
-      const accName = expense.account_name || (expense.area === "clinica" ? "Insumos Dentales Utilizados" : "Útiles de Oficina");
+      const { resolveExpenseItemCategoryDetail } = await import("@/lib/expense-types");
+      const detail = resolveExpenseItemCategoryDetail(expense.category, expense.account_code, expense.account_name);
+      const isHonorarios = detail.accountCode.startsWith("5.2.07");
+      const grpCode = expense.group_code || (isHonorarios ? "5.2.07" : (expense.area === "clinica" ? "5.1.01" : "5.2.05"));
+      const grpName = expense.group_name || (isHonorarios ? "Honorarios Externos" : (expense.area === "clinica" ? "Insumos y Materiales" : "Gastos Administrativos"));
+      const accCode = expense.account_code || detail.accountCode;
+      const accName = expense.account_name || detail.name;
 
       await supabase.from("expense_items").delete().eq("expense_id", expenseId);
       await supabase.from("expense_items").insert({

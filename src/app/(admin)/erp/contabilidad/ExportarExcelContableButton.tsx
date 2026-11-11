@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Download, Loader2, FileSpreadsheet } from "lucide-react";
+import { formatAsientoCode } from "@/lib/accounting-codes";
 
 interface Props {
   tab: string;
@@ -63,8 +64,12 @@ export default function ExportarExcelContableButton({
             totalDebe += deb;
             totalHaber += cred;
 
+            const isPago = (entry.description || "").toLowerCase().includes("pago") || (entry.description || "").toLowerCase().includes("cruce");
+            const entryCode = formatAsientoCode(entryNum, entry.entry_date, isPago ? "egreso" : "diario");
+
             rows.push({
               "Fecha": entry.entry_date,
+              "Código Asiento": entryCode,
               "Asiento N°": entryNum,
               "Tipo": refType,
               "Glosa / Descripción General": entry.description || "",
