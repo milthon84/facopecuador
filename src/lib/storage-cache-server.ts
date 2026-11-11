@@ -9,6 +9,7 @@ export const ALLOWED_STORAGE_BUCKETS = new Set([
   "invoice-photos",
   "patient-photos",
   "patient-documents",
+  "tax-declarations",
 ]);
 
 function getBaseCacheDir(): string {

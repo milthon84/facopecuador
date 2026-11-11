@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { ArrowLeft, Download, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Download, FileSpreadsheet, FileCheck2 } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 
 export const dynamic = "force-dynamic";
@@ -80,12 +80,21 @@ export default async function ATSPage({
           <h1 className="text-xl font-bold text-ink-900">ATS — Anexo Transaccional Simplificado</h1>
           <p className="text-xs text-ink-500">Formulario mensual para el SRI — {periodLabel}</p>
         </div>
-        <a
-          href={`/api/admin/contabilidad/ats-csv?period=${period}`}
-          className="flex items-center gap-1.5 text-sm bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-xl transition-colors font-medium shadow-sm"
-        >
-          <Download size={15} /> Exportar CSV
-        </a>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/erp/contabilidad/declaraciones?period=${period}`}
+            className="flex items-center gap-1.5 text-sm border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-colors font-medium shadow-xs"
+            title="Ver o subir respaldos de declaraciones y talón ATS de este mes"
+          >
+            <FileCheck2 size={15} className="text-emerald-600" /> Respaldos del Mes
+          </Link>
+          <a
+            href={`/api/admin/contabilidad/ats-csv?period=${period}`}
+            className="flex items-center gap-1.5 text-sm bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-xl transition-colors font-medium shadow-sm"
+          >
+            <Download size={15} /> Exportar CSV
+          </a>
+        </div>
       </div>
 
       {/* Selector período */}

@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Receipt, ArrowLeft, Download } from "lucide-react";
+import { Receipt, ArrowLeft, Download, FileCheck2 } from "lucide-react";
 import Link from "next/link";
 import { assertPermission } from "@/lib/auth-action";
 
@@ -78,20 +78,30 @@ export default async function ResumenIvaPage({
           </h1>
           <p className="text-sm text-ink-500">{periodLabel(period)} · Régimen General</p>
         </div>
-        <form method="get">
-          <select name="period" defaultValue={period}
-            className="border border-lilac-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
-            {months.map(mo => {
-              const isClosed = closedSet.has(mo);
-              return (
-                <option key={mo} value={mo}>
-                  {periodLabel(mo)}{isClosed ? " 🔒 (Cerrado)" : ""}
-                </option>
-              );
-            })}
-          </select>
-          <button type="submit" className="ml-2 bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">Ver</button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/erp/contabilidad/declaraciones?period=${period}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold transition-colors"
+            title="Ver o subir respaldos de declaraciones de este mes"
+          >
+            <FileCheck2 size={14} className="text-emerald-600" />
+            <span>Respaldos del Mes</span>
+          </Link>
+          <form method="get" className="flex items-center">
+            <select name="period" defaultValue={period}
+              className="border border-lilac-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-lilac-400 bg-white">
+              {months.map(mo => {
+                const isClosed = closedSet.has(mo);
+                return (
+                  <option key={mo} value={mo}>
+                    {periodLabel(mo)}{isClosed ? " 🔒 (Cerrado)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+            <button type="submit" className="ml-2 bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">Ver</button>
+          </form>
+        </div>
       </div>
 
       {/* Resultado IVA */}
