@@ -150,7 +150,7 @@ export default async function CajaChicaPage() {
 
                 {/* Botones de acción modal */}
                 {canEdit && (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                     <GastoCajaChicaModal cajaId={caja.id} />
                     <ReponerCajaChicaModal
                       cajaId={caja.id}

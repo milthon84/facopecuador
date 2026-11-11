@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TrendingUp, AlertCircle, Building2 } from "lucide-react";
+import { Building2, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import StandardModal from "@/components/StandardModal";
 import { transferFromCajaAction } from "@/app/(admin)/erp/bancos/actions";
 
@@ -72,7 +72,7 @@ export default function DepositarCajaModal({ cajaId, bankAccounts }: Props) {
         onClick={handleOpen}
         className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-200 transition-colors shrink-0 cursor-pointer"
       >
-        <TrendingUp size={16} />
+        <Building2 size={16} />
         <span>Depositar en banco</span>
       </button>
 
@@ -80,8 +80,8 @@ export default function DepositarCajaModal({ cajaId, bankAccounts }: Props) {
         isOpen={isOpen}
         onClose={handleClose}
         title="Depositar efectivo en banco"
-        subtitle="Mueve dinero de Caja General hacia una cuenta bancaria institucional"
-        icon={<Building2 size={20} />}
+        subtitle="Mueve dinero de Caja General hacia una cuenta bancaria y genera automáticamente su asiento contable NIIF"
+        icon={<Building2 size={20} className="text-green-600" />}
         loading={loading}
         maxWidth="max-w-md"
       >
@@ -166,12 +166,23 @@ export default function DepositarCajaModal({ cajaId, bankAccounts }: Props) {
             />
           </div>
 
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
+              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+              <span>Asiento Contable NIIF Automático</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-emerald-700">
+              Genera automáticamente el asiento: 
+              <strong> Débito</strong> a Bancos (1.1.01.03) y <strong>Crédito</strong> a Caja General (1.1.01.01).
+            </p>
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
@@ -180,8 +191,17 @@ export default function DepositarCajaModal({ cajaId, bankAccounts }: Props) {
               disabled={loading}
               className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
             >
-              <TrendingUp size={15} />
-              <span>{loading ? "Procesando..." : "Confirmar Depósito"}</span>
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Procesando depósito...</span>
+                </>
+              ) : (
+                <>
+                  <Building2 size={14} />
+                  <span>Confirmar Depósito</span>
+                </>
+              )}
             </button>
           </div>
         </form>

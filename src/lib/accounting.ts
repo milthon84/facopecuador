@@ -357,10 +357,16 @@ export async function createInvoicePaymentJournalEntry(params: {
     };
   }
 
-  const isEfectivo = (params.payment_method || "").toLowerCase() === "efectivo";
-  const moneyAccount = isEfectivo
-    ? { code: "1.1.01.01", name: "Caja General" }
-    : { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+  const pMethod = (params.payment_method || "").toLowerCase();
+  const isEfectivo = pMethod === "efectivo";
+  const isPrestamoAccionista = pMethod.includes("prestamo") || pMethod.includes("accionista");
+
+  let moneyAccount = { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
+  if (isEfectivo) {
+    moneyAccount = { code: "1.1.01.01", name: "Caja General" };
+  } else if (isPrestamoAccionista) {
+    moneyAccount = { code: "2.1.05.01", name: "Préstamos Accionistas por Pagar" };
+  }
 
   const lines: JournalLine[] = [
     {
@@ -380,7 +386,7 @@ export async function createInvoicePaymentJournalEntry(params: {
   ];
 
   const invNum = params.invoice_number ? ` ${params.invoice_number}` : "";
-  const payChannel = isEfectivo ? "Caja General" : "Bancos";
+  const payChannel = isEfectivo ? "Caja General" : isPrestamoAccionista ? "Préstamos Accionistas" : "Bancos";
   return insertJournalEntry({
     entry_date:     params.payment_date,
     description:    `Cobro Total Factura${invNum} (${payChannel}) — ${params.client_name}`,
@@ -995,6 +1001,58 @@ export async function syncPeriodInvoicesJournalEntries(period: string) {
   }
 
   return { count };
+}
+
+// ── Asiento: Depósito Bancario desde Caja General ──────────────────────────
+/**
+ * Depósito en banco del efectivo recaudado en Caja General:
+ *   Dr. Bancos Cuentas Corrientes y Ahorros  (1.1.01.03)  (monto)
+ *   Cr. Caja General                         (1.1.01.01)  (monto)
+ */
+export async function createCajaGeneralDepositJournalEntry(params: {
+  amount: number;
+  date: string;
+  bank_name: string;
+  account_number?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  transaction_id?: string | null;
+  user_id?: string | null;
+  user_email?: string | null;
+}): Promise<string> {
+  await assertMonthOpen(params.date);
+
+  const bankDesc = `${params.bank_name}${params.account_number ? ` · ${params.account_number}` : ""}`;
+  const refText = params.reference?.trim() ? ` [Ref: ${params.reference.trim()}]` : "";
+  const notesText = params.notes?.trim() ? ` — ${params.notes.trim()}` : "";
+  const description = `Depósito en ${bankDesc} desde Caja General${refText}${notesText}`;
+
+  const lines: JournalLine[] = [
+    {
+      account_code: "1.1.01.03",
+      account_name: "Bancos Cuentas Corrientes y Ahorros",
+      debit: r2(params.amount),
+      credit: 0,
+      description: `Depósito en ${bankDesc}${refText}`,
+    },
+    {
+      account_code: "1.1.01.01",
+      account_name: "Caja General",
+      debit: 0,
+      credit: r2(params.amount),
+      description: `Egreso de efectivo de Caja General${refText}`,
+    },
+  ];
+
+  return await insertJournalEntry({
+    entry_date: params.date,
+    description,
+    reference_type: "manual",
+    reference_id: params.transaction_id ?? null,
+    lines,
+    user_id: params.user_id,
+    user_email: params.user_email,
+  });
 }
 
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────

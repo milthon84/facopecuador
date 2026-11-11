@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { assertWritePermission } from "@/lib/auth-action";
+import { createCajaGeneralDepositJournalEntry, assertMonthOpen } from "@/lib/accounting";
 
 export async function createBankAccountAction(data: {
   bank_name: string;
@@ -99,18 +100,29 @@ export async function transferFromCajaAction(data: {
     throw new Error("Monto y banco de destino son obligatorios.");
   }
 
-  const { error: err1 } = await supabase.from("bank_transactions").insert({
+  // Validar mes contable abierto
+  await assertMonthOpen(date);
+
+  const { data: destAccount } = await supabase
+    .from("bank_accounts")
+    .select("bank_name, account_number, account_type")
+    .eq("id", bank_id)
+    .maybeSingle();
+
+  const destDesc = `${destAccount?.bank_name || "banco"}${destAccount?.account_number ? ` · ${destAccount.account_number}` : ""}`;
+
+  const { data: txEgreso, error: err1 } = await supabase.from("bank_transactions").insert({
     account_id: caja_id,
     type: "egreso",
     amount,
     date,
-    description: "Depósito en banco desde Caja General",
+    description: `Depósito en ${destDesc} desde Caja General`,
     reference: reference?.trim() || null,
-    payment_method: "transferencia",
+    payment_method: "efectivo",
     status: "confirmado",
     origin: "automatico",
-  });
-  if (err1) throw new Error(err1.message || "Error al registrar egreso de caja.");
+  }).select("id").single();
+  if (err1 || !txEgreso) throw new Error(err1?.message || "Error al registrar egreso de caja.");
 
   const { error: err2 } = await supabase.from("bank_transactions").insert({
     account_id: bank_id,
@@ -119,15 +131,36 @@ export async function transferFromCajaAction(data: {
     date,
     description: "Depósito desde Caja General",
     reference: reference?.trim() || null,
-    payment_method: "transferencia",
+    payment_method: "efectivo",
     status: "confirmado",
     origin: "automatico",
   });
   if (err2) throw new Error(err2.message || "Error al registrar depósito en banco.");
 
+  // Generar Asiento Contable NIIF
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    await createCajaGeneralDepositJournalEntry({
+      amount,
+      date,
+      bank_name: destAccount?.bank_name || "Banco",
+      account_number: destAccount?.account_number,
+      reference: reference?.trim() || null,
+      transaction_id: txEgreso.id,
+      user_id: user?.id,
+      user_email: user?.email,
+    });
+  } catch (accErr: any) {
+    console.error("Error al generar asiento contable de depósito:", accErr);
+    throw new Error(`Se registró el movimiento bancario pero falló el asiento contable: ${accErr?.message}`);
+  }
+
   revalidatePath(`/erp/bancos/${caja_id}`);
   revalidatePath(`/erp/bancos/${bank_id}`);
   revalidatePath("/erp/bancos");
+  revalidatePath("/erp/caja-general");
+  revalidatePath("/erp/contabilidad");
+  revalidatePath("/erp/contabilidad/balance");
   return { success: true };
 }
 

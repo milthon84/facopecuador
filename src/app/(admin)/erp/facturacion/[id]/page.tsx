@@ -23,16 +23,16 @@ function StatusBadge({ status, env }: { status: string; env?: string }) {
   const authLabel = env ? `Autorizado (${isProd ? "Producción" : "Pruebas"})` : "Autorizado";
   
   const map: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
-    authorized: { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} />, label: authLabel },
-    rejected:   { bg: "bg-red-100 text-red-700 border-red-200",       icon: <XCircle size={14} />,      label: "Rechazado"  },
-    error:      { bg: "bg-red-100 text-red-700 border-red-200",       icon: <AlertCircle size={14} />,  label: "Error"      },
-    submitted:  { bg: "bg-blue-100 text-blue-700 border-blue-200",    icon: <Clock size={14} />,        label: "Enviado"    },
-    draft:      { bg: "bg-amber-100 text-amber-700 border-amber-200", icon: <Clock size={14} />,        label: "Borrador"   },
-    cancelled:  { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} />,      label: "Anulado"    },
+    authorized: { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} className="shrink-0" />, label: authLabel },
+    rejected:   { bg: "bg-red-100 text-red-700 border-red-200",       icon: <XCircle size={14} className="shrink-0" />,      label: "Rechazado"  },
+    error:      { bg: "bg-red-100 text-red-700 border-red-200",       icon: <AlertCircle size={14} className="shrink-0" />,  label: "Error"      },
+    submitted:  { bg: "bg-blue-100 text-blue-700 border-blue-200",    icon: <Clock size={14} className="shrink-0" />,        label: "Enviado"    },
+    draft:      { bg: "bg-amber-100 text-amber-700 border-amber-200", icon: <Clock size={14} className="shrink-0" />,        label: "Borrador"   },
+    cancelled:  { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} className="shrink-0" />,      label: "Anulado"    },
   };
   const s = map[status] ?? map.draft;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${s.bg}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border whitespace-nowrap ${s.bg}`}>
       {s.icon}{s.label}
     </span>
   );
@@ -40,14 +40,14 @@ function StatusBadge({ status, env }: { status: string; env?: string }) {
 
 function PaymentBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
-    paid:      { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} />, label: "Cobrado" },
-    partial:   { bg: "bg-blue-100 text-blue-700 border-blue-200",   icon: <Clock size={14} />,        label: "Cobro Parcial" },
-    pending:   { bg: "bg-amber-100 text-amber-700 border-amber-200",icon: <Clock size={14} />,        label: "Por Cobrar" },
-    cancelled: { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} />,      label: "Anulado" },
+    paid:      { bg: "bg-green-100 text-green-700 border-green-200", icon: <CheckCircle2 size={14} className="shrink-0" />, label: "Cobrado" },
+    partial:   { bg: "bg-blue-100 text-blue-700 border-blue-200",   icon: <Clock size={14} className="shrink-0" />,        label: "Cobro Parcial" },
+    pending:   { bg: "bg-amber-100 text-amber-700 border-amber-200",icon: <Clock size={14} className="shrink-0" />,        label: "Por Cobrar" },
+    cancelled: { bg: "bg-slate-100 text-slate-700 border-slate-200",  icon: <XCircle size={14} className="shrink-0" />,      label: "Anulado" },
   };
   const s = map[status] ?? map.pending;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${s.bg}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold border whitespace-nowrap ${s.bg}`}>
       {s.icon}{s.label}
     </span>
   );
@@ -331,8 +331,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasPaymentEntry = journalEntries.some(
     (e) =>
       e.journal_lines.some(
-        (l) => (l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02" || l.account_code === "1.1.01.01") && Number(l.debit) > 0
-      )
+        (l) =>
+          (l.account_code === "1.1.01.03" ||
+           l.account_code === "1.1.01.02" ||
+           l.account_code === "1.1.01.01" ||
+           l.account_code === "2.1.05.01" ||
+           l.account_code.startsWith("1.1.01") ||
+           l.account_code.startsWith("2.1.05")) &&
+          Number(l.debit) > 0
+      ) ||
+      (e.reference_type === "invoice" &&
+       e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("1.1.02")) &&
+       (e.description.toLowerCase().includes("cobro") ||
+        e.description.toLowerCase().includes("recauda") ||
+        e.description.toLowerCase().includes("liquidac") ||
+        e.description.toLowerCase().includes("pago") ||
+        e.description.toLowerCase().includes("cruce")))
   );
 
   if (!hasPaymentEntry) {
@@ -340,17 +354,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       payments.forEach((p: any, idx: number) => {
         const pAmt = Number(p.amount || 0);
         const pDate = p.payment_date || p.created_at?.split("T")[0] || invDate;
-        const isEfectivo = (p.payment_method || "").toLowerCase() === "efectivo";
+        const pMethod = (p.payment_method || "").toLowerCase();
+        const isEfectivo = pMethod === "efectivo";
+        const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
+        const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
+        const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
+
         journalEntries.push({
           id: `proj-pay-${p.id || idx}`,
           entry_date: pDate,
-          description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : p.payment_method || "Cobro"})`,
+          description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : p.payment_method || "Cobro"})`,
           reference_type: "invoice",
           reference_id: invoice.id,
           journal_lines: [
             {
-              account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
-              account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
+              account_code: payCode,
+              account_name: payName,
               debit: pAmt,
               credit: 0,
             },
@@ -365,17 +384,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         });
       });
     } else if (invoice.payment_status === "paid") {
-      const isEfectivo = (invoice.payment_method || "").toLowerCase() === "efectivo";
+      const pMethod = (invoice.payment_method || "").toLowerCase();
+      const isEfectivo = pMethod === "efectivo";
+      const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
+      const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
+      const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
+
       journalEntries.push({
         id: "proj-pay-full",
         entry_date: invDate,
-        description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : "Bancos"})`,
+        description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
         reference_type: "invoice",
         reference_id: invoice.id,
         journal_lines: [
           {
-            account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
-            account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
+            account_code: payCode,
+            account_name: payName,
             debit: tot,
             credit: 0,
           },
@@ -439,34 +463,40 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <Link
-          href="/erp/facturacion"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-bold text-ink-900">
-              Factura {invoice.invoice_number || "Borrador"}
-            </h1>
-            <StatusBadge status={invoice.sri_status || "draft"} env={invoice.sri_environment} />
-            {invoice.payment_status && invoice.payment_status !== "cancelled" && invoice.sri_status !== "cancelled" && (
-              <PaymentBadge status={invoice.payment_status} />
-            )}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-start sm:items-center gap-3 min-w-0">
+          <Link
+            href="/erp/facturacion"
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 mt-0.5 sm:mt-0 shadow-xs"
+            title="Volver a Facturación"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold text-ink-900 tracking-tight">
+                Factura {invoice.invoice_number || "Borrador"}
+              </h1>
+              <StatusBadge status={invoice.sri_status || "draft"} env={invoice.sri_environment} />
+              {invoice.payment_status && invoice.payment_status !== "cancelled" && invoice.sri_status !== "cancelled" && (
+                <PaymentBadge status={invoice.payment_status} />
+              )}
+            </div>
+            <p className="text-xs text-ink-500 mt-1">{issuedAt}</p>
           </div>
-          <p className="text-xs text-ink-500 mt-0.5">{issuedAt}</p>
         </div>
+
         {/* Acciones de Factura */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           {/* Botón Ver Asiento Contable */}
           <AsientoContableModal entries={journalEntries} />
 
           {/* Botón Registrar Cobro (Top) */}
           {(invoice.payment_status === "pending" || invoice.payment_status === "partial") && (
-            <Link href={`/erp/cuentas-por-cobrar?pay=${invoice.id}`}
-              className="text-xs py-2 px-3.5 rounded-xl shadow-2xs flex items-center gap-1.5 font-bold transition-transform bg-amber-400 text-amber-950 hover:bg-amber-300 border border-amber-500 hover:scale-[1.02] active:scale-[0.98]">
+            <Link
+              href={`/erp/cuentas-por-cobrar?pay=${invoice.id}`}
+              className="text-xs py-2 px-3.5 rounded-xl shadow-2xs flex items-center gap-1.5 font-bold transition-transform bg-amber-400 text-amber-950 hover:bg-amber-300 border border-amber-500 hover:scale-[1.02] active:scale-[0.98] shrink-0"
+            >
               <Clock size={15} /> Registrar Cobro
             </Link>
           )}
@@ -475,7 +505,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             href={`/api/factura/${invoice.id}/pdf`}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-primary text-xs py-2 px-3.5 shadow-2xs flex items-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-transform"
+            className="btn-primary text-xs py-2 px-3.5 shadow-2xs flex items-center gap-1.5 font-bold hover:scale-[1.02] active:scale-[0.98] transition-transform shrink-0"
           >
             <Printer size={15} /> Reimprimir Factura
           </a>
@@ -516,8 +546,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       <div className="space-y-4">
         {/* Banner Informativo si existe Nota de Crédito */}
         {existingCreditNote && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-rose-950 shadow-xs">
-            <div className="flex items-center gap-3">
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950 shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="h-9 w-9 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700 shrink-0 font-bold">
                 NC
               </div>

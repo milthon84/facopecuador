@@ -87,7 +87,9 @@ export default async function BancoDetailPage({
   const totalEgresos  = confirmedTxs.filter(t => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const balance = account.initial_balance + totalIngresos - totalEgresos;
 
-  const isCajaGeneral = !!(account as any).is_caja_general;
+  const isCajaGeneral =
+    !!(account as any).is_caja_general ||
+    ["efectivo", "general"].some(k => (account.bank_name as string).toLowerCase().includes(k));
   const bankAccounts  = (allBanks || []) as { id: string; bank_name: string; account_number: string | null }[];
 
   return (

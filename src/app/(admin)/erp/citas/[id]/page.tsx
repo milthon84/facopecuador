@@ -95,9 +95,9 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
       </Link>
 
       <div className="card p-6 mb-5">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <h1 className="text-xl font-bold mb-1">{patient.full_name}</h1>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold mb-1 break-words">{patient.full_name}</h1>
             <div className="text-sm text-ink-600 capitalize">
               {start.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               {" · "}
@@ -106,7 +106,7 @@ export default async function CitaDetalle({ params }: { params: Promise<{ id: st
               {formatTimeLocal(end)}
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 shrink-0 flex-wrap">
             <StatusBadge status={appt.status} />
             {appt.status === "scheduled" && new Date().getTime() < new Date(appt.starts_at).getTime() && (
               <SendReminderButton

@@ -107,17 +107,22 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
   // 2. Cobro / Recaudación (si está cobrada)
   if (invoice.payment_status === "paid") {
-    const isEfectivo = (invoice.payment_method || "").toLowerCase() === "efectivo";
+    const pMethod = (invoice.payment_method || "").toLowerCase();
+    const isEfectivo = pMethod === "efectivo";
+    const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
+    const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
+    const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
+
     entries.push({
       id: `inv-${invoice.id}-pay`,
       entry_date: invDate,
-      description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : "Bancos"})`,
+      description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
       reference_type: "invoice",
       reference_id: invoice.id,
       journal_lines: [
         {
-          account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
-          account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
+          account_code: payCode,
+          account_name: payName,
           debit: tot,
           credit: 0,
         },
@@ -186,6 +191,14 @@ export function getEntryKind(entry: JournalEntryItem) {
       voucherType: "diario" as const,
       voucherLabel: "Nota de Crédito",
       voucherColor: "bg-amber-100 text-amber-900 border-amber-300",
+    };
+  }
+  if (desc.includes("depósito") || desc.includes("deposito")) {
+    return {
+      title: "Depósito Bancario (Caja General → Banco)",
+      voucherType: "diario" as const,
+      voucherLabel: "Comprobante de Diario",
+      voucherColor: "bg-sky-100 text-sky-900 border-sky-300",
     };
   }
   if (

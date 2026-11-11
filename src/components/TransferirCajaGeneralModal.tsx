@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { Building2, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import StandardModal from "@/components/StandardModal";
 import { transferFromCajaGeneralAction } from "@/app/(admin)/erp/caja-general/actions";
 
@@ -54,11 +54,11 @@ export default function TransferirCajaGeneralModal({
     e.preventDefault();
     const numAmount = Number(amount);
     if (!destinoId || numAmount <= 0) {
-      setErrorMsg("Selecciona una cuenta de destino y un monto válido.");
+      setErrorMsg("Selecciona una cuenta bancaria y un monto válido mayor a cero.");
       return;
     }
-    if (numAmount > maxBalance) {
-      setErrorMsg(`El monto no puede superar el saldo disponible de $${maxBalance.toFixed(2)}.`);
+    if (maxBalance > 0 && numAmount > maxBalance) {
+      setErrorMsg(`El monto no puede superar el saldo disponible en caja de $${maxBalance.toFixed(2)}.`);
       return;
     }
 
@@ -78,7 +78,7 @@ export default function TransferirCajaGeneralModal({
       setIsOpen(false);
       router.refresh();
     } catch (err: any) {
-      setErrorMsg(err.message || "Error al realizar la transferencia.");
+      setErrorMsg(err.message || "Error al realizar el depósito.");
     } finally {
       setLoading(false);
     }
@@ -89,18 +89,20 @@ export default function TransferirCajaGeneralModal({
       <button
         type="button"
         onClick={handleOpen}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm bg-green-600 hover:bg-green-700 text-white shadow-md transition-colors shrink-0 cursor-pointer"
+        disabled={maxBalance <= 0}
+        title={maxBalance <= 0 ? "No hay saldo disponible en caja para depositar" : "Depositar efectivo en banco"}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm bg-green-600 hover:bg-green-700 text-white shadow-md transition-all shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg active:scale-[0.98]"
       >
-        <ArrowRight size={15} />
-        <span>Transferir</span>
+        <Building2 size={16} />
+        <span>Depositar en banco</span>
       </button>
 
       <StandardModal
         isOpen={isOpen}
         onClose={handleClose}
-        title="Transferir dinero de Caja General"
-        subtitle="Mueve el efectivo hacia una cuenta bancaria o a la Caja Chica"
-        icon={<ArrowRight size={20} className="text-green-600" />}
+        title="Depositar efectivo en banco"
+        subtitle="Mueve el dinero de Caja General hacia una cuenta bancaria y genera automáticamente su asiento contable NIIF"
+        icon={<Building2 size={20} className="text-green-600" />}
         loading={loading}
         maxWidth="max-w-md"
       >
@@ -114,7 +116,7 @@ export default function TransferirCajaGeneralModal({
 
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Cuenta de destino *
+              Cuenta bancaria de destino *
             </label>
             <select
               value={destinoId}
@@ -123,7 +125,7 @@ export default function TransferirCajaGeneralModal({
               disabled={loading}
               className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
             >
-              <option value="">— Seleccionar destino —</option>
+              <option value="">— Seleccionar banco —</option>
               {destinos.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
@@ -134,9 +136,20 @@ export default function TransferirCajaGeneralModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-ink-700 mb-1">
-                Monto *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-ink-700">
+                  Monto a depositar *
+                </label>
+                {maxBalance > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(String(maxBalance))}
+                    className="text-[10px] text-green-700 hover:underline font-semibold cursor-pointer"
+                  >
+                    Todo
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs font-semibold">
                   $
@@ -161,7 +174,7 @@ export default function TransferirCajaGeneralModal({
 
             <div>
               <label className="block text-xs font-semibold text-ink-700 mb-1">
-                Fecha *
+                Fecha del depósito *
               </label>
               <input
                 type="date"
@@ -176,30 +189,41 @@ export default function TransferirCajaGeneralModal({
 
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Referencia / Comprobante
+              N° Comprobante / Papeleta de depósito
             </label>
             <input
               type="text"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               disabled={loading}
-              placeholder="N° depósito, recibo..."
+              placeholder="Ej. N° depósito, transferencia..."
               className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white font-mono"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Nota / Observaciones
+              Observaciones / Notas (opcional)
             </label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               disabled={loading}
-              placeholder="Ej. Cierre de turno, depósito semanal..."
+              placeholder="Ej. Cierre de caja, depósito recaudación semanal..."
               className="w-full border border-green-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"
             />
+          </div>
+
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
+              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+              <span>Asiento Contable NIIF Automático</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-emerald-700">
+              Al confirmar, el sistema registrará el depósito y creará automáticamente el asiento en el Libro Diario: 
+              <strong> Débito</strong> a Bancos (1.1.01.03) y <strong>Crédito</strong> a Caja General (1.1.01.01).
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -207,7 +231,7 @@ export default function TransferirCajaGeneralModal({
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
             >
               Cancelar
             </button>
@@ -219,12 +243,12 @@ export default function TransferirCajaGeneralModal({
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  <span>Transfiriendo...</span>
+                  <span>Procesando depósito...</span>
                 </>
               ) : (
                 <>
-                  <ArrowRight size={14} />
-                  <span>Transferir</span>
+                  <Building2 size={14} />
+                  <span>Confirmar Depósito</span>
                 </>
               )}
             </button>

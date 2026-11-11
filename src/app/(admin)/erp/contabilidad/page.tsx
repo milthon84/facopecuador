@@ -32,6 +32,9 @@ function getEntryBadge(refType: string, desc: string) {
   if (refType === "credit_note") {
     return { label: "Nota de Crédito", color: "bg-amber-50 text-amber-800 border-amber-200" };
   }
+  if (d.includes("depósito") || d.includes("deposito")) {
+    return { label: "Depósito Bancario", color: "bg-sky-50 text-sky-800 border-sky-200" };
+  }
   if (d.includes("cruce") || d.includes("pago") || d.includes("banco") || d.includes("préstamo") || d.includes("prestamo")) {
     return { label: "Pago / Cruce", color: "bg-indigo-50 text-indigo-800 border-indigo-200" };
   }

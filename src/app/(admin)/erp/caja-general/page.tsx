@@ -3,6 +3,7 @@ import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { Banknote, TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
 import TransferirCajaGeneralModal from "@/components/TransferirCajaGeneralModal";
+import AsientoContableModal, { JournalEntryItem } from "@/components/AsientoContableModal";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,8 @@ export default async function CajaGeneralPage() {
     ["efectivo", "general"].some(k => (a.bank_name as string).toLowerCase().includes(k));
 
   const cajaGeneral = (allCajas || []).find(esCajaGeneral);
-  const otrasCajas  = (allCajas || []).filter(a => a.id !== cajaGeneral?.id);
 
-  // Otras cuentas bancarias para transferir
+  // Otras cuentas bancarias para depositar
   const { data: bancos } = await supabase
     .from("bank_accounts")
     .select("id, bank_name, account_number, account_type")
@@ -50,6 +50,8 @@ export default async function CajaGeneralPage() {
 
   // Movimientos de la Caja General
   let transactions: Tx[] = [];
+  const entriesByRefId: Record<string, JournalEntryItem[]> = {};
+
   if (cajaGeneral) {
     const { data: txs } = await supabase
       .from("bank_transactions")
@@ -58,6 +60,44 @@ export default async function CajaGeneralPage() {
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
     transactions = (txs as unknown as Tx[]) || [];
+
+    // Buscar asientos contables vinculados a estos movimientos o facturas
+    const txIds = transactions.map(t => t.id);
+    const invoiceIds = transactions.filter(t => t.invoice_id).map(t => t.invoice_id as string);
+    const allRefIds = Array.from(new Set([...txIds, ...invoiceIds]));
+
+    if (allRefIds.length > 0) {
+      const { data: jEntries } = await supabase
+        .from("journal_entries")
+        .select(`
+          id,
+          entry_number,
+          entry_code,
+          entry_date,
+          description,
+          reference_type,
+          reference_id,
+          status,
+          created_at,
+          journal_lines (
+            id,
+            account_code,
+            account_name,
+            debit,
+            credit,
+            description
+          )
+        `)
+        .in("reference_id", allRefIds)
+        .eq("status", "posted");
+
+      ((jEntries as unknown as JournalEntryItem[]) || []).forEach(e => {
+        if (e.reference_id) {
+          if (!entriesByRefId[e.reference_id]) entriesByRefId[e.reference_id] = [];
+          entriesByRefId[e.reference_id].push(e);
+        }
+      });
+    }
   }
 
   // Calcular saldo
@@ -66,7 +106,7 @@ export default async function CajaGeneralPage() {
   const totalEgreso  = confirmed.filter(t => t.type === "egreso").reduce((s, t) => s + t.amount, 0);
   const balance      = cajaGeneral ? r2(cajaGeneral.initial_balance + totalIngreso - totalEgreso) : 0;
 
-  // Destinos disponibles para depositar (solo cuentas bancarias de Niagas)
+  // Destinos disponibles para depositar (solo cuentas bancarias de la institución)
   const destinos = (bancos || []).map((b) => ({
     id: b.id,
     label: `${b.bank_name}${b.account_number ? ` · ${b.account_number}` : ""}`,
@@ -80,35 +120,37 @@ export default async function CajaGeneralPage() {
         <p className="text-ink-500 font-medium">No hay Caja General configurada</p>
         <p className="text-sm text-ink-400 mt-1">
           Ve a <Link href="/erp/bancos" className="text-lilac-600 underline">Bancos</Link> y marca
-          una cuenta tipo "Caja" como Caja General.
+          una cuenta tipo &quot;Caja&quot; como Caja General.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="max-w-4xl mx-auto space-y-5">
       {/* Header + saldo */}
       <div className={`rounded-2xl p-5 border shadow-sm ${balance > 0 ? "bg-green-50 border-green-100" : "bg-gray-50 border-gray-200"}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <Banknote size={18} className="text-green-600" />
+              <Banknote size={18} className="text-green-600 shrink-0" />
               <p className="text-xs font-bold text-ink-500 uppercase tracking-wide">Caja General / Efectivo</p>
             </div>
             <p className={`text-4xl font-bold tabular-nums ${balance > 0 ? "text-green-800" : "text-ink-500"}`}>
               ${balance.toFixed(2)}
             </p>
-            <p className="text-xs text-ink-400 mt-1">Recibe automáticamente cobros en efectivo</p>
+            <p className="text-xs text-ink-400 mt-1">Recibe automáticamente cobros en efectivo y permite realizar depósitos a cuentas bancarias con asiento contable.</p>
           </div>
 
-          {/* Botón transferir con Modal */}
+          {/* Botón Depositar en Banco */}
           {canEdit && (
-            <TransferirCajaGeneralModal
-              cajaId={cajaGeneral.id}
-              maxBalance={balance}
-              destinos={destinos}
-            />
+            <div className="shrink-0 w-full sm:w-auto">
+              <TransferirCajaGeneralModal
+                cajaId={cajaGeneral.id}
+                maxBalance={balance}
+                destinos={destinos}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -118,28 +160,28 @@ export default async function CajaGeneralPage() {
         <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center gap-3">
           <TrendingUp size={16} className="text-green-600 shrink-0" />
           <div>
-            <p className="text-[11px] text-green-700">Ingresos totales</p>
+            <p className="text-[11px] text-green-700">Ingresos totales (Cobros)</p>
             <p className="font-bold text-green-800">${r2(totalIngreso).toFixed(2)}</p>
           </div>
         </div>
         <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex items-center gap-3">
           <TrendingDown size={16} className="text-red-500 shrink-0" />
           <div>
-            <p className="text-[11px] text-red-600">Transferido/retirado</p>
+            <p className="text-[11px] text-red-600">Depositado / Egresos</p>
             <p className="font-bold text-red-600">${r2(totalEgreso).toFixed(2)}</p>
           </div>
         </div>
       </div>
 
-      {/* Historial */}
+      {/* Historial de Movimientos */}
       <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-lilac-50 flex items-center justify-between">
-          <h3 className="font-semibold text-ink-900 text-sm">Movimientos</h3>
+          <h3 className="font-semibold text-ink-900 text-sm">Movimientos de Caja General</h3>
           <span className="text-xs text-ink-400">{transactions.length} registros</span>
         </div>
         {transactions.length === 0 ? (
           <p className="text-center text-ink-400 text-sm py-10">
-            Sin movimientos — los cobros en efectivo aparecerán aquí automáticamente.
+            Sin movimientos — los cobros en efectivo y depósitos bancarios aparecerán aquí automáticamente.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -149,30 +191,49 @@ export default async function CajaGeneralPage() {
                   <th className="px-4 py-2.5 text-left">Fecha</th>
                   <th className="px-4 py-2.5 text-left">Descripción</th>
                   <th className="px-4 py-2.5 text-left">Ref.</th>
+                  <th className="px-4 py-2.5 text-center">Asiento Contable</th>
                   <th className="px-4 py-2.5 text-right">Monto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-lilac-50">
-                {transactions.map(tx => (
-                  <tr key={tx.id} className="hover:bg-lilac-50/20">
-                    <td className="px-4 py-2.5 text-xs text-ink-500 whitespace-nowrap">
-                      {new Date(tx.date + "T12:00:00").toLocaleDateString("es-EC")}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <p className="text-sm text-ink-800 leading-tight">{tx.description}</p>
-                      {tx.invoices && (
-                        <Link href={`/erp/facturacion/${tx.invoice_id}`}
-                          className="text-[11px] text-lilac-600 hover:underline">
-                          Factura {tx.invoices.invoice_number}
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-ink-400 font-mono">{tx.reference ?? "—"}</td>
-                    <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${tx.type === "ingreso" ? "text-green-700" : "text-red-600"}`}>
-                      {tx.type === "ingreso" ? "+" : "−"}${tx.amount.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
+                {transactions.map(tx => {
+                  const linkedEntries = entriesByRefId[tx.id] || (tx.invoice_id ? entriesByRefId[tx.invoice_id] : null) || [];
+                  const primaryEntry = linkedEntries[0];
+
+                  return (
+                    <tr key={tx.id} className="hover:bg-lilac-50/20">
+                      <td className="px-4 py-2.5 text-xs text-ink-500 whitespace-nowrap">
+                        {new Date(tx.date + "T12:00:00").toLocaleDateString("es-EC")}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <p className="text-sm text-ink-800 leading-tight">{tx.description}</p>
+                        {tx.invoices && (
+                          <Link href={`/erp/facturacion/${tx.invoice_id}`}
+                            className="text-[11px] text-lilac-600 hover:underline">
+                            Factura {tx.invoices.invoice_number}
+                          </Link>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-ink-400 font-mono">{tx.reference ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        {linkedEntries.length > 0 ? (
+                          <div className="inline-flex justify-center">
+                            <AsientoContableModal
+                              entries={linkedEntries}
+                              buttonVariant="table-compact"
+                              buttonText={primaryEntry.entry_code || "Asiento"}
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-ink-300 font-mono">—</span>
+                        )}
+                      </td>
+                      <td className={`px-4 py-2.5 text-right font-bold tabular-nums ${tx.type === "ingreso" ? "text-green-700" : "text-red-600"}`}>
+                        {tx.type === "ingreso" ? "+" : "−"}${tx.amount.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

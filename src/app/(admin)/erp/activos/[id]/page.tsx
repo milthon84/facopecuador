@@ -121,16 +121,18 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/erp/activos"
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0">
-          <ArrowLeft size={18} />
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold text-ink-900">{asset.name}</h1>
-          <p className="text-sm text-ink-500">{asset.category} · {asset.useful_life_years} años · Línea recta</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/erp/activos"
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-lilac-200 text-ink-600 hover:bg-lilac-50 transition-colors shrink-0 shadow-xs">
+            <ArrowLeft size={18} />
+          </Link>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-ink-900 truncate">{asset.name}</h1>
+            <p className="text-sm text-ink-500">{asset.category} · {asset.useful_life_years} años · Línea recta</p>
+          </div>
         </div>
-        <span className={`ml-auto text-xs font-semibold px-3 py-1 rounded-full ${asset.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+        <span className={`self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${asset.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
           {asset.status === "active" ? "Activo" : "Dado de baja"}
         </span>
       </div>
