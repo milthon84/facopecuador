@@ -35,13 +35,90 @@ function getEntryBadge(refType: string, desc: string) {
   if (d.includes("depósito") || d.includes("deposito")) {
     return { label: "Depósito Bancario", color: "bg-sky-50 text-sky-800 border-sky-200" };
   }
-  if (d.includes("cruce") || d.includes("pago") || d.includes("banco") || d.includes("préstamo") || d.includes("prestamo")) {
-    return { label: "Pago / Cruce", color: "bg-indigo-50 text-indigo-800 border-indigo-200" };
-  }
   if (d.includes("cierre")) {
     return { label: "Cierre", color: "bg-orange-50 text-orange-800 border-orange-200" };
   }
-  return { label: "Gasto", color: "bg-rose-50 text-rose-800 border-rose-200" };
+  if (refType === "expense") {
+    if (d.startsWith("pago") || d.includes("pago / cruce") || d.includes("cruce bancario") || d.includes("cruce caja")) {
+      return { label: "Pago / Cruce", color: "bg-indigo-50 text-indigo-800 border-indigo-200" };
+    }
+    return { label: "Gasto", color: "bg-rose-50 text-rose-800 border-rose-200" };
+  }
+  if (d.startsWith("pago") || d.startsWith("cruce")) {
+    return { label: "Pago / Cruce", color: "bg-indigo-50 text-indigo-800 border-indigo-200" };
+  }
+  return { label: "General", color: "bg-gray-50 text-gray-800 border-gray-200" };
+}
+
+function cleanEntryTitle(desc: string, badgeLabel?: string): string {
+  if (!desc) return "";
+  let clean = desc.trim();
+
+  // Eliminar prefijo redundante "Gasto — " o "Gasto -"
+  clean = clean.replace(/^Gasto\s*[-—–]\s*/i, "");
+
+  // Si la primera parte es una categoría o cuenta contable que ya se muestra en la tabla inferior:
+  if (clean.includes("—") || clean.includes("-")) {
+    const parts = clean.split(/\s*[-—–]\s*/);
+    if (parts.length >= 2) {
+      const firstPart = parts[0].toLowerCase();
+      const isKnownCategory = [
+        "insumo", "material", "honorario", "arriendo", "alquiler", "servicio", "suministro",
+        "mantenimiento", "publicidad", "transporte", "combustible", "impuesto", "financiero",
+        "otro", "cuentas por cobrar", "cuentas por pagar", "bancos", "caja", "gasto"
+      ].some(k => firstPart.includes(k));
+
+      if (isKnownCategory) {
+        clean = parts.slice(1).join(" — ");
+      }
+    }
+  }
+
+  // Eliminar cuentas contables entre paréntesis:
+  clean = clean.replace(/\s*\((?:Bancos?|Cuentas? por (?:Cobrar|Pagar)|Caja|Depósito|Transferencia|Préstamo|Prestamo)[^)]*\)/gi, "");
+
+  // Limpiar prefijos de cobro/pago que duplican el badge
+  clean = clean.replace(/^(?:Pago\s*\/?\s*Cruce(?:\s*Bancario|\s*Caja Chica)?\s*[-—–]\s*)/i, "");
+  clean = clean.replace(/^(?:Cobro\s*(?:Total\s*)?Factura(?:\s*#?\s*)?)/i, "Factura ");
+
+  clean = clean.trim();
+  return clean || desc;
+}
+
+function cleanLineDescription(lineDesc: string | null | undefined, headerTitle: string): string | null {
+  if (!lineDesc) return null;
+  let text = lineDesc.trim();
+  if (!text) return null;
+
+  const headerNorm = (headerTitle || "").trim().toLowerCase();
+  const textNorm = text.toLowerCase();
+
+  // Si la glosa de la línea es idéntica o subcadena del título
+  if (headerNorm && (textNorm === headerNorm || headerNorm.includes(textNorm))) {
+    return null;
+  }
+
+  // Si empieza repitiendo el nombre del proveedor o cliente
+  if (headerNorm && textNorm.startsWith(headerNorm)) {
+    text = text.slice(headerNorm.length).trim();
+  }
+
+  // Si está envuelto en paréntesis, removerlos
+  if (text.startsWith("(") && text.endsWith(")")) {
+    text = text.slice(1, -1).trim();
+  }
+
+  // Si dentro de los paréntesis vuelve a repetir el proveedor/cliente con un guión
+  if (headerNorm && text.toLowerCase().startsWith(headerNorm)) {
+    text = text.slice(headerNorm.length).replace(/^[-—–\s]+/, "").trim();
+  }
+
+  // Si después de limpiar quedó vacío o repite el encabezado
+  if (!text || (headerNorm && text.toLowerCase() === headerNorm)) {
+    return null;
+  }
+
+  return text;
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -507,7 +584,7 @@ export default async function ContabilidadPage({
                                     {tx.badge.label}
                                   </span>
                                   <h4 className="text-xs font-bold text-ink-900 truncate max-w-md" title={tx.title}>
-                                    {tx.title}
+                                    {cleanEntryTitle(tx.title, tx.badge.label)}
                                   </h4>
                                 </div>
                                 <span className="text-[10px] font-bold text-lilac-800 bg-white px-2 py-0.5 rounded-full border border-lilac-200 shadow-2xs">
@@ -520,35 +597,36 @@ export default async function ContabilidadPage({
                             <div className="divide-y divide-gray-100">
                               {tx.entries.map(({ entry, entryNumber, entryCode, isPayment, isCollection, isInvoice, debitTotal, creditTotal }: any) => {
                                 const badge = getEntryBadge(entry.reference_type, entry.description);
+                                const cleanTitle = cleanEntryTitle(entry.description, badge.label);
+                                const entryTitleForLines = hasMultiple ? cleanEntryTitle(tx.title, tx.badge.label) : cleanTitle;
 
                                 return (
                                   <div key={entry.id} className="p-2.5 sm:p-3 space-y-2">
-                                    {/* Cabecera del Asiento: Código Único + Glosa */}
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-xs tracking-tight shadow-2xs ${
-                                          isCollection ? "bg-emerald-700 text-white" : isPayment ? "bg-blue-600 text-white" : "bg-lilac-800 text-white"
-                                        }`}>
-                                          {entryCode}
-                                        </span>
-                                        <h5 className="text-xs font-bold text-ink-800">
-                                          {hasMultiple
-                                            ? (isCollection
-                                                ? "Cobro / Recaudación Bancaria / Caja"
-                                                : isPayment
-                                                ? "Pago / Cruce con Banco"
-                                                : isInvoice
-                                                ? "Factura de Venta (Devengo)"
-                                                : "Causación del Gasto (Devengo)")
-                                            : entry.description}
-                                        </h5>
-                                      </div>
+                                    {/* Cabecera del Asiento: Código Único + Badge + Glosa Limpia */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-xs tracking-tight shadow-2xs ${
+                                        isCollection ? "bg-emerald-700 text-white" : isPayment ? "bg-blue-600 text-white" : "bg-lilac-800 text-white"
+                                      }`}>
+                                        {entryCode}
+                                      </span>
 
                                       {!hasMultiple && (
-                                        <span className={`text-[10px] px-2 py-0.2 rounded-md font-bold border ${badge.color} shrink-0`}>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${badge.color} shrink-0`}>
                                           {badge.label}
                                         </span>
                                       )}
+
+                                      <h5 className="text-xs font-bold text-ink-800">
+                                        {hasMultiple
+                                          ? (isCollection
+                                              ? "Cobro / Recaudación Bancaria / Caja"
+                                              : isPayment
+                                              ? "Pago / Cruce con Banco"
+                                              : isInvoice
+                                              ? "Factura de Venta (Devengo)"
+                                              : "Causación del Gasto (Devengo)")
+                                          : cleanTitle}
+                                      </h5>
                                     </div>
 
                                     {/* Tabla Contable: Código, Cuenta, Débito, Crédito */}
@@ -566,6 +644,7 @@ export default async function ContabilidadPage({
                                           {(entry.lines ?? []).map((l: any, lIdx: number) => {
                                             const deb = Number(l.debit || 0);
                                             const cred = Number(l.credit || 0);
+                                            const lineDetail = cleanLineDescription(l.description, entryTitleForLines);
 
                                             return (
                                               <tr key={l.id || lIdx} className="border-t border-gray-50 hover:bg-gray-50/50">
@@ -580,9 +659,9 @@ export default async function ContabilidadPage({
                                                       <span className="text-gray-400">↳</span> {l.account_name}
                                                     </span>
                                                   )}
-                                                  {l.description && (
+                                                  {lineDetail && (
                                                     <span className="block text-[10px] text-ink-400 font-normal italic">
-                                                      {l.description}
+                                                      {lineDetail}
                                                     </span>
                                                   )}
                                                 </td>

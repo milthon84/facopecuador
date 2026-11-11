@@ -87,7 +87,7 @@ interface JournalLine {
   account_name: string;
   debit:        number;
   credit:       number;
-  description?: string;
+  description?: string | null;
 }
 
 // ── Cuentas de GRUPO que nunca deben recibir imputaciones directas ──────────
@@ -284,7 +284,7 @@ export async function createInvoiceJournalEntry(params: {
       account_name: cxcAccount.name,
       debit:  r2(params.total),
       credit: 0,
-      description: params.client_name,
+      description: null,
     },
     {
       account_code: incomeAccount.code,
@@ -305,7 +305,7 @@ export async function createInvoiceJournalEntry(params: {
 
   return insertJournalEntry({
     entry_date:     params.invoice_date,
-    description:    `Factura de venta (${cxcAccount.name}) — ${params.client_name}`,
+    description:    params.client_name ? `Factura — ${params.client_name}` : "Factura de Venta",
     reference_type: "invoice",
     reference_id:   params.invoice_id,
     lines,
@@ -374,22 +374,21 @@ export async function createInvoicePaymentJournalEntry(params: {
       account_name: moneyAccount.name,
       debit:  r2(params.amount),
       credit: 0,
-      description: params.bank_account_name || params.payment_reference || (isEfectivo ? "Ingreso en Efectivo (Caja General)" : "Depósito / Transferencia Bancaria"),
+      description: params.bank_account_name || params.payment_reference || (isEfectivo ? "Caja General" : "Depósito / Transferencia"),
     },
     {
       account_code: cxcAccount.code,
       account_name: cxcAccount.name,
       debit:  0,
       credit: r2(params.amount),
-      description: `Cobro liquidado ${params.client_name}`,
+      description: null,
     },
   ];
 
   const invNum = params.invoice_number ? ` ${params.invoice_number}` : "";
-  const payChannel = isEfectivo ? "Caja General" : isPrestamoAccionista ? "Préstamos Accionistas" : "Bancos";
   return insertJournalEntry({
     entry_date:     params.payment_date,
-    description:    `Cobro Total Factura${invNum} (${payChannel}) — ${params.client_name}`,
+    description:    `Cobro Factura${invNum} — ${params.client_name}`,
     reference_type: "invoice",
     reference_id:   params.invoice_id,
     lines,
@@ -593,7 +592,7 @@ export async function createExpenseJournalEntry(params: {
         account_name: entry.name,
         debit:  entry.amount,
         credit: 0,
-        description: `${params.supplier_name}${entry.descriptions.length > 0 ? ` (${entry.descriptions.slice(0, 2).join(", ")})` : ""}`,
+        description: entry.descriptions.length > 0 ? entry.descriptions.slice(0, 2).join(", ") : undefined,
       });
     });
 
@@ -621,7 +620,7 @@ export async function createExpenseJournalEntry(params: {
       account_name: name || "Gasto Operativo",
       debit:  subtotalTotal,
       credit: 0,
-      description: params.supplier_name,
+      description: null,
     });
   }
 
@@ -639,12 +638,12 @@ export async function createExpenseJournalEntry(params: {
     account_name: contraAccount.name,
     debit:  0,
     credit: r2(params.total),
-    description: params.supplier_name,
+    description: null,
   });
 
   return insertJournalEntry({
     entry_date:     params.expense_date,
-    description:    `Gasto — ${params.category} — ${params.supplier_name}`,
+    description:    params.supplier_name,
     reference_type: "expense",
     reference_id:   params.expense_id,
     lines,
@@ -671,16 +670,17 @@ export async function createExpensePaymentJournalEntry(params: {
   user_email?:        string | null;
 }) {
   let payAccount = { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
-  let creditDescription = `Salida de fondos (${params.payment_method}) — ${params.bank_account_name || params.payment_reference || params.supplier_name}`;
-  let entryDescription = `Pago / Cruce Bancario — ${params.supplier_name} (${payAccount.name})`;
+  let creditDescription = params.bank_account_name || params.payment_reference || "Salida Bancaria";
+  let entryDescription = `Pago — ${params.supplier_name}`;
 
   if (params.payment_method === "efectivo") {
     payAccount = { code: "1.1.01.02", name: "Caja Chica" };
-    entryDescription = `Pago / Cruce Caja Chica — ${params.supplier_name}`;
+    creditDescription = "Salida Caja Chica";
+    entryDescription = `Pago Caja Chica — ${params.supplier_name}`;
   } else if (params.payment_method === "prestamo_accionistas") {
     payAccount = { code: "2.1.05.01", name: "Préstamos Accionistas por Pagar" };
-    creditDescription = `Préstamo Accionistas por Pagar — ${params.payment_reference || params.supplier_name}`;
-    entryDescription = `Cruce Pasivo Préstamo Accionistas — ${params.supplier_name}`;
+    creditDescription = params.payment_reference || "Préstamos Accionistas";
+    entryDescription = `Cruce Préstamo Accionistas — ${params.supplier_name}`;
   }
 
   const lines: JournalLine[] = [
@@ -689,7 +689,7 @@ export async function createExpensePaymentJournalEntry(params: {
       account_name: "Cuentas por Pagar Proveedores",
       debit:  r2(params.amount),
       credit: 0,
-      description: `Cancelación cta. por pagar — ${params.supplier_name}`,
+      description: null,
     },
     {
       account_code: payAccount.code,
