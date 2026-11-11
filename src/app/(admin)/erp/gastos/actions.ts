@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen, createExpensePaymentJournalEntry } from "@/lib/accounting";
+import { assertMonthOpen, createExpensePaymentJournalEntry, syncExpenseJournalEntries } from "@/lib/accounting";
 import { resolveFacturaSriClave, cleanDocNumberOnly, cleanExpenseDescription } from "@/lib/expense-areas";
 import { revalidatePath } from "next/cache";
 
@@ -199,11 +199,16 @@ export async function deleteOrVoidExpense(expenseId: string) {
       return { success: false, error: voidErr.message };
     }
 
-    // 2. Revertir cualquier transacción bancaria generada por este gasto
+    // 2. Revertir cualquier transacción bancaria generada por este gasto y sincronizar asientos
     try {
       await supabase.from("bank_transactions").delete().eq("expense_id", expenseId);
     } catch (btErr) {
       console.warn("No se pudo revertir transacción bancaria:", btErr);
+    }
+    try {
+      await syncExpenseJournalEntries(expenseId);
+    } catch (jErr) {
+      console.warn("No se pudo limpiar asiento contable en anulación:", jErr);
     }
 
     // 3. Volver la factura del SRI a estado PENDIENTE de registro
@@ -445,19 +450,11 @@ export async function recordExpensePaymentAction(paramsOrFormData: FormData | {
       }
     }
 
-    // 5. Asiento 2 de Cruce Contable con Bancos / Caja Chica
+    // 5. Sincronización completa de asientos contables NIIF (Causación + Pago/Cruce)
     try {
-      await createExpensePaymentJournalEntry({
-        expense_id: expense.id,
-        payment_date: payDate,
-        supplier_name: expense.supplier_name,
-        payment_method,
-        amount: Number(expense.total) || 0,
-        bank_account_name: bankName,
-        payment_reference,
-      });
+      await syncExpenseJournalEntries(expense_id);
     } catch (jErr) {
-      console.warn("No se pudo registrar el asiento de cruce bancario:", jErr);
+      console.warn("No se pudo sincronizar los asientos contables en pago de gasto:", jErr);
     }
 
     revalidatePath("/erp/gastos");

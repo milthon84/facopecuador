@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { ArrowLeft, Lock } from "lucide-react";
 import { assertPermission, assertWritePermission, getUserRole } from "@/lib/auth-action";
-import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry, createExpensePaymentJournalEntry } from "@/lib/accounting";
+import { assertMonthOpen, isMonthClosed, createExpenseJournalEntry, createExpensePaymentJournalEntry, syncExpenseJournalEntries } from "@/lib/accounting";
 import { getExpenseAccountsCatalog, saveSupplierAccountMemory } from "@/lib/expense-accounts-server";
 import NuevaCompraForm from "../../nuevo/NuevaCompraForm";
 import { ExpenseItemRow, FacturaRecibida, parseItemCategoryAndDesc } from "@/lib/expense-types";
@@ -318,49 +318,17 @@ async function updateExpense(formData: FormData) {
     }
   }
 
-  // Si se definió una forma de pago distinta a crédito, sincronizar asiento contable de pago / cruce
-  if (payment_method && payment_method !== "credito") {
-    try {
-      // Verificar si ya existe un asiento de pago para no duplicar
-      const { data: existingPaymentEntries } = await supabase
-        .from("journal_entries")
-        .select("id, description")
-        .eq("reference_type", "expense")
-        .eq("reference_id", id);
-
-      const hasPayEntry = (existingPaymentEntries || []).some((e: any) =>
-        e.description?.toLowerCase().includes("pago") ||
-        e.description?.toLowerCase().includes("cruce")
-      );
-
-      if (!hasPayEntry) {
-        let bankName: string | null = null;
-        if (bank_account_id) {
-          const { data: bAcc } = await supabase
-            .from("bank_accounts")
-            .select("bank_name, account_number")
-            .eq("id", bank_account_id)
-            .maybeSingle();
-          if (bAcc) bankName = `${bAcc.bank_name} (${bAcc.account_number})`;
-        }
-        await createExpensePaymentJournalEntry({
-          expense_id: id,
-          payment_date: new_expense_date,
-          supplier_name,
-          payment_method,
-          amount: total,
-          bank_account_name: bankName,
-          payment_reference,
-        });
-      }
-    } catch (payJErr) {
-      console.warn("No se pudo sincronizar asiento de pago en editar gasto:", payJErr);
-    }
+  // Sincronizar de forma completa y automática los asientos contables NIIF (Causación y Pago/Cruce)
+  try {
+    await syncExpenseJournalEntries(id);
+  } catch (syncErr) {
+    console.warn("No se pudieron sincronizar los asientos contables al editar gasto:", syncErr);
   }
 
   revalidatePath("/erp/gastos");
   revalidatePath(`/erp/gastos/${id}`);
   revalidatePath(`/erp/gastos/${id}/editar`);
+  revalidatePath("/erp/contabilidad");
 
   return { success: true, url: `/erp/gastos/${id}` };
 }

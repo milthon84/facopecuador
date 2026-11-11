@@ -530,6 +530,157 @@ export async function createExpensePaymentJournalEntry(params: {
   });
 }
 
+// ── Sincronizador de Asientos de Gastos (Causación + Pago) ─────────────────
+/**
+ * Elimina asientos obsoletos o desincronizados de un gasto y los re-genera fielmente
+ * según el estado actual del gasto (cuenta contable seleccionada, ítems y forma de pago NIIF).
+ */
+export async function syncExpenseJournalEntries(
+  expenseId: string,
+  options?: { user_id?: string | null; user_email?: string | null }
+) {
+  const supabase = createAdminClient();
+
+  const { data: expense, error: expErr } = await supabase
+    .from("expenses")
+    .select("*, items:expense_items(*)")
+    .eq("id", expenseId)
+    .single();
+
+  if (expErr || !expense) {
+    console.warn("syncExpenseJournalEntries: Gasto no encontrado", expenseId);
+    return;
+  }
+
+  // 1. Localizar y eliminar asientos antiguos vinculados a este gasto
+  const { data: existingEntries } = await supabase
+    .from("journal_entries")
+    .select("id")
+    .eq("reference_type", "expense")
+    .eq("reference_id", expenseId);
+
+  // Buscar también posibles asientos huérfanos generados antes con la misma descripción y fecha
+  const cleanSupplier = (expense.supplier_name || "").trim();
+  let orphanEntryIds: string[] = [];
+  if (cleanSupplier) {
+    const { data: orphans } = await supabase
+      .from("journal_entries")
+      .select("id")
+      .eq("reference_type", "expense")
+      .eq("entry_date", expense.expense_date)
+      .is("reference_id", null)
+      .ilike("description", `%${cleanSupplier}%`);
+    if (orphans && orphans.length > 0) {
+      orphanEntryIds = orphans.map((o: any) => o.id);
+    }
+  }
+
+  const allToDelete = Array.from(new Set([
+    ...(existingEntries || []).map((e: any) => e.id),
+    ...orphanEntryIds,
+  ]));
+
+  if (allToDelete.length > 0) {
+    await supabase.from("journal_lines").delete().in("journal_entry_id", allToDelete);
+    await supabase.from("journal_entries").delete().in("id", allToDelete);
+  }
+
+  // 2. Si el gasto fue anulado, ya se limpiaron los asientos
+  if (expense.status === "void") {
+    return;
+  }
+
+  // 3. Re-generar los asientos oficiales NIIF con las cuentas actuales
+  if (expense.status === "registered") {
+    const subtotal0 = Number(expense.subtotal_0 || 0);
+    const subtotal15 = Number(expense.subtotal_15 || 0);
+    const ivaAmount = Number(expense.iva_amount || 0);
+    const total = Number(expense.total || 0);
+
+    const effectiveAccCode = expense.account_code || expense.items?.[0]?.account_code || null;
+    const effectiveAccName = expense.account_name || expense.items?.[0]?.account_name || null;
+
+    // Asiento 1: Causación (Devengo)
+    await createExpenseJournalEntry({
+      expense_id: expense.id,
+      expense_date: expense.expense_date,
+      supplier_name: expense.supplier_name,
+      category: expense.category,
+      account_code: effectiveAccCode,
+      account_name: effectiveAccName,
+      payment_method: expense.payment_method,
+      subtotal_0: subtotal0,
+      subtotal_15: subtotal15,
+      iva_amount: ivaAmount,
+      total,
+      user_id: options?.user_id,
+      user_email: options?.user_email,
+      items: (expense.items || []).map((it: any) => ({
+        description: it.description || "",
+        category: it.category || expense.category,
+        account_code: it.account_code || effectiveAccCode,
+        account_name: it.account_name || effectiveAccName,
+        subtotal: Number(it.subtotal) || 0,
+      })),
+    });
+
+    // Asiento 2: Cruce de Pasivo / Pago (si la forma de pago no es crédito)
+    if (expense.payment_method && expense.payment_method !== "credito") {
+      let bankName: string | null = null;
+      if (expense.bank_account_id) {
+        const { data: bAcc } = await supabase
+          .from("bank_accounts")
+          .select("bank_name, account_number")
+          .eq("id", expense.bank_account_id)
+          .maybeSingle();
+        if (bAcc) bankName = `${bAcc.bank_name} (${bAcc.account_number})`;
+      }
+
+      await createExpensePaymentJournalEntry({
+        expense_id: expense.id,
+        payment_date: expense.expense_date,
+        supplier_name: expense.supplier_name,
+        payment_method: expense.payment_method,
+        amount: total,
+        bank_account_name: bankName,
+        payment_reference: expense.payment_reference,
+        user_id: options?.user_id,
+        user_email: options?.user_email,
+      });
+    }
+  }
+}
+
+/**
+ * Sincroniza todos los asientos contables de los gastos de un período dado
+ */
+export async function syncPeriodExpensesJournalEntries(period: string) {
+  const supabase = createAdminClient();
+  let query = supabase.from("expenses").select("id, expense_date");
+
+  if (period !== "all") {
+    const [year, month] = period.split("-").map(Number);
+    const from = new Date(year, month - 1, 1).toISOString().split("T")[0];
+    const to = new Date(year, month, 0).toISOString().split("T")[0];
+    query = query.gte("expense_date", from).lte("expense_date", to);
+  }
+
+  const { data: expenses, error } = await query;
+  if (error || !expenses || expenses.length === 0) {
+    return { count: 0 };
+  }
+
+  for (const exp of expenses) {
+    try {
+      await syncExpenseJournalEntries(exp.id);
+    } catch (err) {
+      console.warn(`Error sincronizando asiento de gasto ${exp.id}:`, err);
+    }
+  }
+
+  return { count: expenses.length };
+}
+
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────
 const ASSET_ACCOUNTS: Record<string, { asset: string; assetName: string; dep: string; depName: string; depExp: string; depExpName: string }> = {
   // ⚠️ depExp apunta a cuentas de movimiento hijas de 5.2.08 (cuando existan) —

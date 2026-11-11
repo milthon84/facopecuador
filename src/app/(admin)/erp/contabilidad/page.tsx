@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck, ListTree, FileCheck2 } from "lucide-react";
 import { assertPermission } from "@/lib/auth-action";
 import ExportarExcelContableButton from "./ExportarExcelContableButton";
+import SincronizarAsientosButton from "./SincronizarAsientosButton";
 
 export const dynamic = "force-dynamic";
 
@@ -244,12 +245,15 @@ export default async function ContabilidadPage({
               <h2 className="font-semibold text-sm text-ink-800">Libro Diario / Mayor — {periodLabel(period)}</h2>
               <p className="text-xs text-ink-400">{allEntries.length} asientos · {allLines.length} líneas</p>
             </div>
-            <ExportarExcelContableButton
-              tab="diario"
-              period={period}
-              periodLabel={periodLabel(period)}
-              entries={allEntries}
-            />
+            <div className="flex items-center gap-2">
+              <SincronizarAsientosButton period={period} />
+              <ExportarExcelContableButton
+                tab="diario"
+                period={period}
+                periodLabel={periodLabel(period)}
+                entries={allEntries}
+              />
+            </div>
           </div>
           {allEntries.length === 0 ? (
             <p className="text-center text-sm text-ink-400 py-12">Sin asientos en este período.</p>

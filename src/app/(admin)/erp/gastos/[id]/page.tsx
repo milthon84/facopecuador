@@ -22,7 +22,7 @@ import {
   Clock,
 } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { assertMonthOpen, isMonthClosed } from "@/lib/accounting";
+import { assertMonthOpen, isMonthClosed, syncExpenseJournalEntries } from "@/lib/accounting";
 import {
   resolveExpenseArea,
   EXPENSE_AREA_CONFIG,
@@ -263,7 +263,42 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
     console.warn("No se pudieron consultar asientos de journal_entries:", jErr);
   }
 
-  // Si no hay asientos físicos en journal_entries (gastos previos), proyectar el asiento contable NIIF
+  // Si no hay asientos físicos en journal_entries (gastos previos), sincronizar y persistir automáticamente
+  if (journalEntries.length === 0 && expense.status === "registered") {
+    try {
+      await syncExpenseJournalEntries(id);
+      const { data: refreshed } = await supabase
+        .from("journal_entries")
+        .select(`
+          id,
+          entry_number,
+          entry_date,
+          description,
+          reference_type,
+          reference_id,
+          status,
+          created_at,
+          journal_lines (
+            id,
+            account_code,
+            account_name,
+            debit,
+            credit,
+            description
+          )
+        `)
+        .eq("reference_type", "expense")
+        .eq("reference_id", id)
+        .order("created_at", { ascending: true });
+      if (refreshed && refreshed.length > 0) {
+        journalEntries = refreshed as any[];
+      }
+    } catch (syncErr) {
+      console.warn("No se pudo auto-sincronizar asiento de gasto en detalle:", syncErr);
+    }
+  }
+
+  // Fallback de proyección si aún no hay registros
   if (journalEntries.length === 0) {
     const subtotalTotal = Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0);
     const ivaAmt = Number(expense.iva_amount || 0);
