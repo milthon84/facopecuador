@@ -76,11 +76,55 @@ export default async function BillingDashboard({
     allCreditNotes = res.data || [];
   } catch {}
 
+  // 3. Consultar asientos contables reales en base de datos para las facturas listadas
+  let journalEntriesByInvoiceId: Record<string, any[]> = {};
+  if (invoices.length > 0) {
+    const invIds = invoices.map((inv: any) => inv.id);
+    try {
+      const { data: dbJes } = await supabase
+        .from("journal_entries")
+        .select(`
+          id,
+          entry_number,
+          entry_code,
+          entry_date,
+          description,
+          reference_type,
+          reference_id,
+          status,
+          created_at,
+          journal_lines (
+            id,
+            account_code,
+            account_name,
+            debit,
+            credit,
+            description
+          )
+        `)
+        .eq("reference_type", "invoice")
+        .in("reference_id", invIds)
+        .order("created_at", { ascending: true });
+
+      if (dbJes) {
+        for (const je of dbJes) {
+          if (!journalEntriesByInvoiceId[je.reference_id]) {
+            journalEntriesByInvoiceId[je.reference_id] = [];
+          }
+          journalEntriesByInvoiceId[je.reference_id].push(je);
+        }
+      }
+    } catch (jErr) {
+      console.warn("Error cargando journal_entries para facturas:", jErr);
+    }
+  }
+
   return (
     <FacturacionClient
       initialInvoices={invoices}
       initialCreditNotes={cnData}
       allCreditNotes={allCreditNotes}
+      journalEntriesByInvoiceId={journalEntriesByInvoiceId}
       activeMonth={activeMonth}
       months={months}
       canEdit={canEdit}

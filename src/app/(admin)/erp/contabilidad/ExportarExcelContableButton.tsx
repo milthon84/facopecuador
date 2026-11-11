@@ -65,7 +65,7 @@ export default function ExportarExcelContableButton({
             totalHaber += cred;
 
             const isPago = (entry.description || "").toLowerCase().includes("pago") || (entry.description || "").toLowerCase().includes("cruce");
-            const entryCode = formatAsientoCode(entryNum, entry.entry_date, isPago ? "egreso" : "diario");
+            const entryCode = entry.entry_code || formatAsientoCode(entryNum, entry.entry_date, isPago ? "egreso" : "diario");
 
             rows.push({
               "Fecha": entry.entry_date,

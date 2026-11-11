@@ -20,7 +20,14 @@ function periodLabel(period: string) {
 function getEntryBadge(refType: string, desc: string) {
   const d = (desc || "").toLowerCase();
   if (refType === "invoice") {
-    return { label: "Venta", color: "bg-emerald-50 text-emerald-800 border-emerald-200" };
+    if (d.includes("cobro") || d.includes("recaudaci")) {
+      const isCash = d.includes("caja") || d.includes("efectivo");
+      return {
+        label: isCash ? "Cobro Caja" : "Cobro Banco",
+        color: "bg-emerald-50 text-emerald-800 border-emerald-200"
+      };
+    }
+    return { label: "Venta", color: "bg-purple-50 text-purple-800 border-purple-200" };
   }
   if (refType === "credit_note") {
     return { label: "Nota de Crédito", color: "bg-amber-50 text-amber-800 border-amber-200" };
@@ -159,13 +166,16 @@ export default async function ContabilidadPage({
     const isPayment = !isCollection && (descLower.includes("pago") || descLower.includes("cruce"));
     const isCreditNote = entry.reference_type === "credit_note" || descLower.includes("nota de crédito");
 
-    let entryCode = formatAsientoCode(entryNumber, entry.entry_date, "diario");
-    if (isCollection) {
-      entryCode = formatIngresoCode(entryNumber, entry.entry_date);
-    } else if (isPayment) {
-      entryCode = formatEgresoCode(entryNumber, entry.entry_date);
-    } else if (isCreditNote) {
-      entryCode = formatAsientoCode(entryNumber, entry.entry_date, "nc");
+    let entryCode = entry.entry_code;
+    if (!entryCode) {
+      entryCode = formatAsientoCode(entryNumber, entry.entry_date, "diario");
+      if (isCollection) {
+        entryCode = formatIngresoCode(entryNumber, entry.entry_date);
+      } else if (isPayment) {
+        entryCode = formatEgresoCode(entryNumber, entry.entry_date);
+      } else if (isCreditNote) {
+        entryCode = formatAsientoCode(entryNumber, entry.entry_date, "nc");
+      }
     }
 
     const dKey = entry.entry_date;

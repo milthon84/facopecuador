@@ -16,6 +16,7 @@ export interface JournalLineItem {
 export interface JournalEntryItem {
   id: string;
   entry_number?: string | number | null;
+  entry_code?: string | null;
   egreso_number?: string | number | null;
   entry_date: string;
   description: string;
@@ -114,15 +115,19 @@ export default function AsientoContableGastoCard({ entries, expenseTotal, paymen
                 {/* Cabecera del Asiento Individual */}
                 <div className="px-4 py-2.5 bg-lilac-50/60 border-b border-lilac-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {isPaymentEntry ? (
-                      <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white font-mono text-xs font-bold tracking-tight shadow-2xs">
-                        {entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entry.entry_number || (entryIdx + 1), entry.entry_date)}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-md bg-lilac-800 text-white font-mono text-xs font-bold tracking-tight shadow-2xs">
-                        {formatAsientoCode(entry.entry_number || (entryIdx + 1), entry.entry_date, "diario")}
-                      </span>
-                    )}
+                    {(() => {
+                      const codeStr = entry.entry_code || (
+                        isPaymentEntry
+                          ? (entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entry.entry_number || (entryIdx + 1), entry.entry_date))
+                          : formatAsientoCode(entry.entry_number || (entryIdx + 1), entry.entry_date, "diario")
+                      );
+                      const bgCls = isPaymentEntry || codeStr.startsWith("EG") ? "bg-blue-600 text-white" : "bg-lilac-800 text-white";
+                      return (
+                        <span className={`px-2 py-0.5 rounded-md ${bgCls} font-mono text-xs font-bold tracking-tight shadow-2xs`}>
+                          {codeStr}
+                        </span>
+                      );
+                    })()}
                     <strong className="font-bold text-ink-900">
                       {isPaymentEntry ? "Pago / Cruce con Banco" : "Causación del Gasto (Devengo)"}
                     </strong>

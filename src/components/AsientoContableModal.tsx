@@ -16,6 +16,7 @@ export interface JournalLineItem {
 export interface JournalEntryItem {
   id: string;
   entry_number?: string | number | null;
+  entry_code?: string | null;
   egreso_number?: string | number | null;
   entry_date: string;
   description: string;
@@ -106,16 +107,16 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
   // 2. Cobro / Recaudación (si está cobrada)
   if (invoice.payment_status === "paid") {
-    const isEfectivo = invoice.payment_method === "efectivo";
+    const isEfectivo = (invoice.payment_method || "").toLowerCase() === "efectivo";
     entries.push({
       id: `inv-${invoice.id}-pay`,
       entry_date: invDate,
-      description: `Cobro Total Factura ${invoice.invoice_number || ""}`,
+      description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : "Bancos"})`,
       reference_type: "invoice",
       reference_id: invoice.id,
       journal_lines: [
         {
-          account_code: isEfectivo ? "1.1.01.02" : "1.1.01.03",
+          account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
           account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
           debit: tot,
           credit: 0,
@@ -192,8 +193,12 @@ export function getEntryKind(entry: JournalEntryItem) {
     desc.includes("recaudaci") ||
     (ref === "invoice" && entry.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("1.1.02")))
   ) {
+    const isCash =
+      desc.includes("caja") ||
+      desc.includes("efectivo") ||
+      entry.journal_lines.some((l) => l.account_code === "1.1.01.01" && Number(l.debit) > 0);
     return {
-      title: "Cobro / Recaudación Bancaria",
+      title: isCash ? "Cobro / Recaudación en Efectivo (Caja General)" : "Cobro / Recaudación Bancaria",
       voucherType: "ingreso" as const,
       voucherLabel: "Comprobante de Ingreso",
       voucherColor: "bg-emerald-100 text-emerald-900 border-emerald-300",
@@ -203,7 +208,7 @@ export function getEntryKind(entry: JournalEntryItem) {
     desc.includes("pago") ||
     desc.includes("cruce") ||
     desc.includes("egreso") ||
-    entry.journal_lines.some((l) => l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02" || l.account_code === "2.1.05.01")
+    entry.journal_lines.some((l) => l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02" || l.account_code === "1.1.01.01" || l.account_code === "2.1.05.01")
   ) {
     return {
       title: "Pago / Cruce con Banco",
@@ -342,16 +347,28 @@ export default function AsientoContableModal({
                     {(() => {
                       const kind = getEntryKind(entry);
                       const entryNum = entry.entry_number || (entryIdx + 1);
-                      const asientoCode = formatAsientoCode(entryNum, entry.entry_date, "diario");
-                      const egresoCode = entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entryNum, entry.entry_date);
-                      const ingresoCode = formatIngresoCode(entryNum, entry.entry_date);
+                      const defaultAsientoCode = formatAsientoCode(entryNum, entry.entry_date, "diario");
+                      const defaultEgresoCode = entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entryNum, entry.entry_date);
+                      const defaultIngresoCode = formatIngresoCode(entryNum, entry.entry_date);
+
+                      let codeStr = entry.entry_code;
+                      if (!codeStr) {
+                        codeStr =
+                          kind.voucherType === "egreso"
+                            ? defaultEgresoCode
+                            : kind.voucherType === "ingreso"
+                            ? defaultIngresoCode
+                            : defaultAsientoCode;
+                      }
 
                       const codeBadge =
-                        kind.voucherType === "egreso"
-                          ? { code: egresoCode, cls: "bg-blue-600 text-white" }
-                          : kind.voucherType === "ingreso"
-                          ? { code: ingresoCode, cls: "bg-emerald-600 text-white" }
-                          : { code: asientoCode, cls: "bg-lilac-800 text-white" };
+                        kind.voucherType === "egreso" || codeStr.startsWith("EG")
+                          ? { code: codeStr, cls: "bg-blue-600 text-white" }
+                          : kind.voucherType === "ingreso" || codeStr.startsWith("ING")
+                          ? { code: codeStr, cls: "bg-emerald-600 text-white" }
+                          : codeStr.startsWith("NC")
+                          ? { code: codeStr, cls: "bg-amber-600 text-white" }
+                          : { code: codeStr, cls: "bg-lilac-800 text-white" };
 
                       return (
                         <div className="px-3 py-1.5 bg-lilac-50/80 border-b border-lilac-200 flex items-center justify-between text-[11px] gap-2 flex-wrap">

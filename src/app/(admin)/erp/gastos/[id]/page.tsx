@@ -238,6 +238,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
       .select(`
         id,
         entry_number,
+        entry_code,
         entry_date,
         description,
         reference_type,
@@ -273,6 +274,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
         .select(`
           id,
           entry_number,
+          entry_code,
           entry_date,
           description,
           reference_type,

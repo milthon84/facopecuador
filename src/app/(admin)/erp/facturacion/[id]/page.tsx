@@ -14,6 +14,7 @@ import InvoicePhotosSection, { InvoicePhoto } from "@/components/InvoicePhotosSe
 import AsientoContableModal, { JournalEntryItem, JournalLineItem } from "@/components/AsientoContableModal";
 import { getTipoIdentificacion } from "@/lib/sri";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
+import { syncInvoiceJournalEntries } from "@/lib/accounting";
 
 export const dynamic = "force-dynamic";
 
@@ -179,15 +180,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   // Consultar asientos contables vinculados a la factura y/o nota de crédito
   let journalEntries: JournalEntryItem[] = [];
-  try {
-    const refIds = [id];
-    if (existingCreditNote?.id) refIds.push(existingCreditNote.id);
+  const refIds = [id];
+  if (existingCreditNote?.id) refIds.push(existingCreditNote.id);
 
+  try {
     const { data: rawEntries } = await supabase
       .from("journal_entries")
       .select(`
         id,
         entry_number,
+        entry_code,
         entry_date,
         description,
         reference_type,
@@ -214,7 +216,44 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     console.warn("No se pudieron consultar asientos de journal_entries para factura:", jErr);
   }
 
-  // Si no hay asiento registrado de venta en journal_entries, proyectar el devengo NIIF
+  // Si no hay asientos físicos en journal_entries (facturas previas sin asiento o recién autorizadas), sincronizar y persistir automáticamente en la base de datos
+  if (journalEntries.length === 0 && invoice.sri_status !== "cancelled" && invoice.sri_status !== "draft") {
+    try {
+      await syncInvoiceJournalEntries(id);
+      const { data: refreshed } = await supabase
+        .from("journal_entries")
+        .select(`
+          id,
+          entry_number,
+          entry_code,
+          entry_date,
+          description,
+          reference_type,
+          reference_id,
+          status,
+          created_at,
+          journal_lines (
+            id,
+            account_code,
+            account_name,
+            debit,
+            credit,
+            description
+          )
+        `)
+        .in("reference_type", ["invoice", "credit_note"])
+        .in("reference_id", refIds)
+        .order("created_at", { ascending: true });
+
+      if (refreshed && refreshed.length > 0) {
+        journalEntries = refreshed as any[];
+      }
+    } catch (syncErr) {
+      console.warn("No se pudo auto-sincronizar asiento de factura en detalle:", syncErr);
+    }
+  }
+
+  // Si no hay asiento registrado de venta en journal_entries, proyectar el devengo NIIF (fallback)
   const hasSaleEntry = journalEntries.some(
     (e) =>
       e.reference_type === "invoice" &&
@@ -292,7 +331,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasPaymentEntry = journalEntries.some(
     (e) =>
       e.journal_lines.some(
-        (l) => (l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02") && Number(l.debit) > 0
+        (l) => (l.account_code === "1.1.01.03" || l.account_code === "1.1.01.02" || l.account_code === "1.1.01.01") && Number(l.debit) > 0
       )
   );
 
@@ -301,16 +340,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       payments.forEach((p: any, idx: number) => {
         const pAmt = Number(p.amount || 0);
         const pDate = p.payment_date || p.created_at?.split("T")[0] || invDate;
-        const isEfectivo = p.payment_method === "efectivo";
+        const isEfectivo = (p.payment_method || "").toLowerCase() === "efectivo";
         journalEntries.push({
           id: `proj-pay-${p.id || idx}`,
           entry_date: pDate,
-          description: `Cobro Factura ${invoice.invoice_number || ""} (${p.payment_method || "Cobro"})`,
+          description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : p.payment_method || "Cobro"})`,
           reference_type: "invoice",
           reference_id: invoice.id,
           journal_lines: [
             {
-              account_code: isEfectivo ? "1.1.01.02" : "1.1.01.03",
+              account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
               account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
               debit: pAmt,
               credit: 0,
@@ -326,16 +365,17 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         });
       });
     } else if (invoice.payment_status === "paid") {
+      const isEfectivo = (invoice.payment_method || "").toLowerCase() === "efectivo";
       journalEntries.push({
         id: "proj-pay-full",
         entry_date: invDate,
-        description: `Cobro Total Factura ${invoice.invoice_number || ""}`,
+        description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : "Bancos"})`,
         reference_type: "invoice",
         reference_id: invoice.id,
         journal_lines: [
           {
-            account_code: "1.1.01.03",
-            account_name: "Bancos Cuentas Corrientes y Ahorros",
+            account_code: isEfectivo ? "1.1.01.01" : "1.1.01.03",
+            account_name: isEfectivo ? "Caja General" : "Bancos Cuentas Corrientes y Ahorros",
             debit: tot,
             credit: 0,
           },

@@ -4,6 +4,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -129,19 +130,77 @@ async function insertJournalEntry(params: {
     }
   }
 
-  const { data: entry, error } = await supabase
+  // Calcular correlativo oficial (entry_number) y código oficial (entry_code)
+  const entryYear = params.entry_date && params.entry_date.includes("-")
+    ? parseInt(params.entry_date.split("-")[0], 10)
+    : new Date().getFullYear();
+
+  let entryNumber: number | null = null;
+  let entryCode: string | null = null;
+
+  try {
+    const { data: maxRow } = await supabase
+      .from("journal_entries")
+      .select("entry_number")
+      .gte("entry_date", `${entryYear}-01-01`)
+      .lte("entry_date", `${entryYear}-12-31`)
+      .order("entry_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    entryNumber = ((maxRow?.entry_number as number) || 0) + 1;
+
+    const dLower = params.description.toLowerCase();
+    const isCreditNote = params.reference_type === "credit_note" || dLower.includes("crédito");
+    const isCollection = params.reference_type === "invoice" && (dLower.includes("cobro") || dLower.includes("recaudaci"));
+    const isPayment = dLower.includes("pago") || dLower.includes("cruce") || dLower.includes("egreso") || dLower.includes("desembolso");
+    const isClosing = params.reference_type === "monthly_closure" || dLower.includes("cierre");
+
+    if (isCreditNote) {
+      entryCode = formatAsientoCode(entryNumber, params.entry_date, "nc");
+    } else if (isCollection) {
+      entryCode = formatIngresoCode(entryNumber, params.entry_date);
+    } else if (isPayment) {
+      entryCode = formatEgresoCode(entryNumber, params.entry_date);
+    } else if (isClosing) {
+      entryCode = formatAsientoCode(entryNumber, params.entry_date, "cierre");
+    } else {
+      entryCode = formatAsientoCode(entryNumber, params.entry_date, "diario");
+    }
+  } catch (codeErr) {
+    console.warn("No se pudo calcular entry_number previo a inserción:", codeErr);
+  }
+
+  const insertPayload: Record<string, any> = {
+    entry_date:      params.entry_date,
+    description:     params.description,
+    reference_type:  params.reference_type,
+    reference_id:    params.reference_id ?? null,
+    status:          "posted",
+    created_by_id:   params.user_id   ?? null,
+    created_by_email: params.user_email ?? null,
+  };
+  if (entryNumber) insertPayload.entry_number = entryNumber;
+  if (entryCode) insertPayload.entry_code = entryCode;
+
+  let { data: entry, error } = await supabase
     .from("journal_entries")
-    .insert({
-      entry_date:      params.entry_date,
-      description:     params.description,
-      reference_type:  params.reference_type,
-      reference_id:    params.reference_id ?? null,
-      status:          "posted",
-      created_by_id:   params.user_id   ?? null,
-      created_by_email: params.user_email ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
+
+  // Si falló porque las columnas aún no existen en la BD, reintentar sin ellas
+  if (error && (error.message?.includes("entry_number") || error.message?.includes("entry_code"))) {
+    delete insertPayload.entry_number;
+    delete insertPayload.entry_code;
+    const retry = await supabase
+      .from("journal_entries")
+      .insert(insertPayload)
+      .select()
+      .single();
+    entry = retry.data;
+    error = retry.error;
+  }
 
   if (error || !entry) throw new Error("Error creando asiento: " + error?.message);
 
@@ -300,7 +359,7 @@ export async function createInvoicePaymentJournalEntry(params: {
 
   const isEfectivo = (params.payment_method || "").toLowerCase() === "efectivo";
   const moneyAccount = isEfectivo
-    ? { code: "1.1.01.02", name: "Caja General" }
+    ? { code: "1.1.01.01", name: "Caja General" }
     : { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
 
   const lines: JournalLine[] = [
@@ -309,7 +368,7 @@ export async function createInvoicePaymentJournalEntry(params: {
       account_name: moneyAccount.name,
       debit:  r2(params.amount),
       credit: 0,
-      description: params.bank_account_name || params.payment_reference || (isEfectivo ? "Ingreso en Efectivo" : "Depósito / Transferencia Bancaria"),
+      description: params.bank_account_name || params.payment_reference || (isEfectivo ? "Ingreso en Efectivo (Caja General)" : "Depósito / Transferencia Bancaria"),
     },
     {
       account_code: cxcAccount.code,
@@ -321,9 +380,10 @@ export async function createInvoicePaymentJournalEntry(params: {
   ];
 
   const invNum = params.invoice_number ? ` ${params.invoice_number}` : "";
+  const payChannel = isEfectivo ? "Caja General" : "Bancos";
   return insertJournalEntry({
     entry_date:     params.payment_date,
-    description:    `Cobro Total Factura${invNum} — ${params.client_name}`,
+    description:    `Cobro Total Factura${invNum} (${payChannel}) — ${params.client_name}`,
     reference_type: "invoice",
     reference_id:   params.invoice_id,
     lines,
@@ -855,8 +915,32 @@ export async function syncInvoiceJournalEntries(
     user_email:   options?.user_email,
   });
 
-  // Asiento 2: Cobro / Recaudación (si la factura está pagada)
-  if (inv.payment_status === "paid" && total > 0) {
+  // Asiento 2: Cobro / Recaudación
+  // Primero verificar si existen cobros registrados en invoice_payments
+  const { data: dbPayments } = await supabase
+    .from("invoice_payments")
+    .select("*")
+    .eq("invoice_id", invoiceId)
+    .order("payment_date", { ascending: true });
+
+  if (dbPayments && dbPayments.length > 0) {
+    for (const p of dbPayments) {
+      const pAmt = Number(p.amount || 0);
+      if (pAmt <= 0) continue;
+      await createInvoicePaymentJournalEntry({
+        invoice_id:         inv.id,
+        payment_date:       p.payment_date || issueDate,
+        client_name:        inv.client_name,
+        invoice_number:     inv.invoice_number,
+        payment_method:     p.payment_method || inv.payment_method,
+        amount:             pAmt,
+        billing_area:       inv.billing_area,
+        payment_reference:  p.reference || inv.payment_reference,
+        user_id:            options?.user_id,
+        user_email:         options?.user_email,
+      });
+    }
+  } else if (inv.payment_status === "paid" && total > 0) {
     let bankName = null;
     if (inv.bank_account_id) {
       const { data: bAcc } = await supabase

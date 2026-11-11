@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consultarAutorizacion } from "@/lib/sri-wsdl";
+import { syncInvoiceJournalEntries } from "@/lib/accounting";
 
 /**
  * Reintenta la consulta de autorización para una factura en estado "submitted".
@@ -51,6 +52,14 @@ export async function POST(req: Request) {
       ...(fecha_autorizacion  ? { sri_authorization_date:   fecha_autorizacion  } : {}),
       ...(mensajes            ? { sri_error_messages:       mensajes            } : {}),
     }).eq("id", invoice_id);
+
+    if (nuevo_estado === "authorized") {
+      try {
+        await syncInvoiceJournalEntries(invoice_id);
+      } catch (jErr) {
+        console.warn("No se pudo auto-sincronizar asiento de factura autorizada:", jErr);
+      }
+    }
 
     return NextResponse.json({ estado: nuevo_estado, autorizacion });
 

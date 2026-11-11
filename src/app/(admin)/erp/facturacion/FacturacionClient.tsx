@@ -22,6 +22,7 @@ interface FacturacionClientProps {
   initialInvoices: any[];
   initialCreditNotes: any[];
   allCreditNotes: any[];
+  journalEntriesByInvoiceId?: Record<string, any[]>;
   activeMonth: string;
   months: string[];
   canEdit: boolean;
@@ -32,6 +33,7 @@ export default function FacturacionClient({
   initialInvoices,
   initialCreditNotes,
   allCreditNotes,
+  journalEntriesByInvoiceId,
   activeMonth,
   months,
   canEdit,
@@ -401,7 +403,11 @@ export default function FacturacionClient({
                         <td className="px-5 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <AsientoContableModal
-                              entries={buildInvoiceJournalEntries(inv, linkedCn)}
+                              entries={
+                                journalEntriesByInvoiceId?.[inv.id]?.length
+                                  ? journalEntriesByInvoiceId[inv.id]
+                                  : buildInvoiceJournalEntries(inv, linkedCn)
+                              }
                               buttonVariant="table-compact"
                             />
 

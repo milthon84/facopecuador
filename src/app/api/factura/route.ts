@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generarClaveAcceso, generarXMLFactura, SRIInvoiceData, getTipoIdentificacion } from "@/lib/sri";
 import { signXMLWithP12 } from "@/lib/sri-sign";
 import { enviarYAutorizar } from "@/lib/sri-wsdl";
-import { createInvoiceJournalEntry, assertMonthOpen } from "@/lib/accounting";
+import { syncInvoiceJournalEntries, assertMonthOpen } from "@/lib/accounting";
 import crypto from "crypto";
 import { getSessionUser } from "@/lib/supabase/auth";
 import { ecuadorDateOf } from "@/lib/ecuador-time";
@@ -505,17 +505,11 @@ export async function POST(req: Request) {
         // En caso de que la columna aún no haya sido agregada
       }
 
-      // 12. Generar asiento contable automático con imputación NIIF según origen
+      // 12. Generar asientos contables automáticos con imputación NIIF según origen (Venta y Cobro)
       try {
-        await createInvoiceJournalEntry({
-          invoice_id:   invoice.id,
-          invoice_date: new Date().toISOString().split("T")[0],
-          client_name,
-          subtotal_0:   subtotal0,
-          subtotal_15:  subtotal15,
-          iva_amount:   iva15,
-          total:        importeTotal,
-          billing_area: finalBillingArea,
+        await syncInvoiceJournalEntries(invoice.id, {
+          user_id: user?.id,
+          user_email: user?.email,
         });
       } catch (accErr) {
         console.error("Asiento contable no generado:", accErr);
