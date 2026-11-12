@@ -1130,14 +1130,14 @@ export default async function ContabilidadPage({
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm font-sans">
-              <thead className="bg-slate-50 text-ink-700 text-xs uppercase font-bold border-b-2 border-slate-300">
+              <thead className="bg-white text-ink-900 text-xs font-bold border-t border-b-2 border-ink-900">
                 <tr>
-                  <th className="px-4 py-3 text-left w-36 font-bold">CODIGO</th>
-                  <th className="px-4 py-3 text-left font-bold">NOMBRE DE LA CUENTA</th>
-                  <th className="px-4 py-3 text-right w-36 font-bold">SALDO ANTERIOR</th>
-                  <th className="px-4 py-3 text-right w-36 font-bold">DEBE</th>
-                  <th className="px-4 py-3 text-right w-36 font-bold">HABER</th>
-                  <th className="px-4 py-3 text-right w-36 font-bold">SALDO ACTUAL</th>
+                  <th className="px-4 py-2.5 text-left w-36 font-bold">CODIGO</th>
+                  <th className="px-4 py-2.5 text-left font-bold">NOMBRE DE LA CUENTA</th>
+                  <th className="px-4 py-2.5 text-right w-36 font-bold">SALDO ANTERIOR</th>
+                  <th className="px-4 py-2.5 text-right w-36 font-bold">DEBE</th>
+                  <th className="px-4 py-2.5 text-right w-36 font-bold">HABER</th>
+                  <th className="px-4 py-2.5 text-right w-36 font-bold">SALDO ACTUAL</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1146,7 +1146,7 @@ export default async function ContabilidadPage({
                   hierarchicalRows.map((r, idx) => {
                     if (r.type === "header") {
                       return (
-                        <tr key={`h-${r.code}-${idx}`} className="bg-slate-50/40">
+                        <tr key={`h-${r.code}-${idx}`} className="bg-white">
                           <td className="px-4 py-1.5 font-mono text-xs font-bold text-ink-900">
                             {r.code}
                           </td>
@@ -1164,26 +1164,26 @@ export default async function ContabilidadPage({
                     if (r.type === "subtotal") {
                       return (
                         <tr key={`sub-${r.name}-${idx}`} className="bg-white text-xs font-bold text-ink-900">
-                          <td className="px-4 py-2 font-mono text-xs text-ink-700 font-bold">
+                          <td className="px-4 py-2 font-mono text-xs text-ink-900 font-bold">
                             = TOTAL =
                           </td>
                           <td
-                            className="px-4 py-2 uppercase font-bold text-ink-800"
+                            className="px-4 py-2 uppercase font-bold text-ink-900"
                             style={{ paddingLeft: `${r.level * 16 + 16}px` }}
                           >
                             {r.name}
                           </td>
-                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                          <td className="px-4 py-2 text-right border-t border-ink-900 font-bold text-ink-900">
                             {fmt(r.saldoAnterior)}
                           </td>
-                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                          <td className="px-4 py-2 text-right border-t border-ink-900 font-bold text-ink-900">
                             {r.debe > 0 ? fmt(r.debe) : "0.00"}
                           </td>
-                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                          <td className="px-4 py-2 text-right border-t border-ink-900 font-bold text-ink-900">
                             {r.haber > 0 ? fmt(r.haber) : "0.00"}
                           </td>
                           <td
-                            className={`px-4 py-2 text-right border-t border-slate-300 font-bold ${
+                            className={`px-4 py-2 text-right border-t border-ink-900 font-bold ${
                               r.saldoActual < 0 ? "text-red-600" : "text-ink-900"
                             }`}
                           >
@@ -1196,31 +1196,31 @@ export default async function ContabilidadPage({
                     // Cuenta de movimiento
                     return (
                       <tr key={`mov-${r.code}-${idx}`} className="hover:bg-slate-50/50 transition-colors text-xs">
-                        <td className="px-4 py-1.5 font-mono text-ink-600">
+                        <td className="px-4 py-1.5 font-mono text-ink-700">
                           {r.code}
                         </td>
                         <td
-                          className="px-4 py-1.5 text-ink-800"
+                          className="px-4 py-1.5 text-ink-900"
                           style={{ paddingLeft: `${(r.level + 1) * 16 + 16}px` }}
                         >
                           {r.name}
                         </td>
                         <td
-                          className={`px-4 py-1.5 text-right font-medium ${
-                            r.saldoAnterior < 0 ? "text-red-600" : "text-ink-700"
+                          className={`px-4 py-1.5 text-right font-normal ${
+                            r.saldoAnterior < 0 ? "text-red-600 font-semibold" : "text-ink-900"
                           }`}
                         >
                           {fmt(r.saldoAnterior)}
                         </td>
-                        <td className="px-4 py-1.5 text-right font-medium text-ink-700">
+                        <td className="px-4 py-1.5 text-right font-normal text-ink-900">
                           {r.debe > 0 ? fmt(r.debe) : "0.00"}
                         </td>
-                        <td className="px-4 py-1.5 text-right font-medium text-ink-700">
+                        <td className="px-4 py-1.5 text-right font-normal text-ink-900">
                           {r.haber > 0 ? fmt(r.haber) : "0.00"}
                         </td>
                         <td
-                          className={`px-4 py-1.5 text-right font-semibold ${
-                            r.saldoActual < 0 ? "text-red-600 font-bold" : "text-ink-900"
+                          className={`px-4 py-1.5 text-right font-normal ${
+                            r.saldoActual < 0 ? "text-red-600 font-semibold" : "text-ink-900"
                           }`}
                         >
                           {fmt(r.saldoActual)}
@@ -1233,38 +1233,27 @@ export default async function ContabilidadPage({
                   balanceRows.map((r) => {
                     return (
                       <tr key={r.code} className="hover:bg-slate-50/50 transition-colors text-xs">
-                        <td className="px-4 py-2 font-mono text-ink-600 font-medium">
+                        <td className="px-4 py-2 font-mono text-ink-700">
                           {r.code}
                         </td>
-                        <td className="px-4 py-2 text-ink-800 font-medium">
-                          <div className="flex items-center gap-2">
-                            <span>{r.name}</span>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-normal ${
-                                r.nature === "acreedora"
-                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                  : "bg-blue-50 text-blue-700 border border-blue-200"
-                              }`}
-                            >
-                              {r.nature === "acreedora" ? "Acreedora" : "Deudora"}
-                            </span>
-                          </div>
+                        <td className="px-4 py-2 text-ink-900 font-medium">
+                          {r.name}
                         </td>
                         <td
-                          className={`px-4 py-2 text-right font-medium ${
-                            r.prevBalance < 0 ? "text-red-600" : "text-ink-700"
+                          className={`px-4 py-2 text-right font-normal ${
+                            r.prevBalance < 0 ? "text-red-600 font-semibold" : "text-ink-900"
                           }`}
                         >
                           {fmt(r.prevBalance)}
                         </td>
-                        <td className="px-4 py-2 text-right text-green-700 font-medium">
+                        <td className="px-4 py-2 text-right font-normal text-ink-900">
                           {r.monthDebit > 0 ? fmt(r.monthDebit) : "0.00"}
                         </td>
-                        <td className="px-4 py-2 text-right text-red-600 font-medium">
+                        <td className="px-4 py-2 text-right font-normal text-ink-900">
                           {r.monthCredit > 0 ? fmt(r.monthCredit) : "0.00"}
                         </td>
                         <td
-                          className={`px-4 py-2 text-right font-bold ${
+                          className={`px-4 py-2 text-right font-semibold ${
                             r.finalBalance < 0 ? "text-red-600" : "text-ink-900"
                           }`}
                         >
