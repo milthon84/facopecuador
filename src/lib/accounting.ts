@@ -5,6 +5,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -569,6 +570,8 @@ export async function createExpenseJournalEntry(params: {
         name = account.name;
       }
 
+      name = getOfficialExpenseAccountName(code, name);
+
       const amt = r2(Number(it.subtotal || 0));
       if (amt <= 0) continue;
 
@@ -614,6 +617,7 @@ export async function createExpenseJournalEntry(params: {
       code = expenseAccount.code;
       name = expenseAccount.name;
     }
+    name = getOfficialExpenseAccountName(code, name);
 
     lines.push({
       account_code: code,

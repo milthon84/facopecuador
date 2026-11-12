@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BookOpen, CheckCircle2, ChevronDown, ChevronUp, Scale, Clock, ArrowRight } from "lucide-react";
 import { formatAsientoCode, formatEgresoCode } from "@/lib/accounting-codes";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 
 export interface JournalLineItem {
   id?: string;
@@ -174,7 +175,7 @@ export default function AsientoContableGastoCard({ entries, expenseTotal, paymen
                             </td>
                             <td className="py-2 px-3 font-medium text-ink-900">
                               <span className={isCreditLine ? "pl-4 inline-block text-ink-700" : "font-semibold"}>
-                                {isCreditLine ? "↳ " : ""}{line.account_name}
+                                {isCreditLine ? "↳ " : ""}{getOfficialExpenseAccountName(line.account_code, line.account_name)}
                               </span>
                             </td>
                             <td className="py-2 px-3 text-ink-500 text-[11px] truncate max-w-xs">

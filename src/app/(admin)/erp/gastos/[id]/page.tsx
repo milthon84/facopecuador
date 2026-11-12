@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { assertMonthOpen, isMonthClosed, syncExpenseJournalEntries } from "@/lib/accounting";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 import {
   resolveExpenseArea,
   EXPENSE_AREA_CONFIG,
@@ -548,12 +549,30 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
             </p>
           </div>
 
-          <div>
-            <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
-              <Tag size={11} className="text-lilac-600" /> Categoría Contable Principal
-            </span>
-            <p className="text-sm font-semibold text-ink-900 mt-0.5">{expense.category}</p>
-          </div>
+          {/* Cuenta Contable Principal */}
+          {(() => {
+            const firstItem = items[0] || displayItems[0];
+            const effCode = expense.account_code || firstItem?.account_code || null;
+            const effName = getOfficialExpenseAccountName(
+              effCode,
+              expense.account_name || firstItem?.account_name || expense.category
+            );
+            return (
+              <div>
+                <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
+                  <Tag size={11} className="text-lilac-600" /> Cuenta Contable Principal
+                </span>
+                <p className="text-sm font-semibold text-ink-900 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <span>{effName}</span>
+                  {effCode && (
+                    <span className="text-xs font-mono font-medium text-lilac-700 bg-lilac-50 border border-lilac-200 px-1.5 py-0.2 rounded">
+                      Cta: {effCode}
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          })()}
 
           <div>
             <span className="text-[11px] text-ink-400 uppercase tracking-wide flex items-center gap-1">
@@ -678,7 +697,10 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
                   it.account_code || expense.account_code,
                   it.account_name || expense.account_name
                 );
-                const itemCat = catDetail.name || normalizeCategoryName(rawCategory) || "Gasto Operacional";
+                const itemCat = getOfficialExpenseAccountName(
+                  it.account_code || catDetail.accountCode || expense.account_code,
+                  catDetail.name || normalizeCategoryName(rawCategory) || "Gasto Operacional"
+                );
 
                 // Resolución de descripción del concepto
                 const cleanExpDesc = cleanExpenseDescription(expense.description);

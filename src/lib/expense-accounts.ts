@@ -102,3 +102,31 @@ export const FALLBACK_EXPENSE_MOVEMENTS: ExpenseMovementAccount[] = [
   { code: "1.2.01.02", name: "Mobiliario y Enseres", group_code: "1.2.01", type: "ACTIVO" },
   { code: "1.2.01.03", name: "Equipos de Computación y Software", group_code: "1.2.01", type: "ACTIVO" },
 ];
+
+export const OFFICIAL_ACCOUNT_MAP: Record<string, string> = {
+  ...Object.fromEntries(FALLBACK_EXPENSE_MOVEMENTS.map(m => [m.code, m.name])),
+  "1.1.01.01": "Caja General",
+  "1.1.01.02": "Caja Chica",
+  "1.1.01.03": "Bancos Cuentas Corrientes y Ahorros",
+  "1.1.02.01": "Cuentas por Cobrar Pacientes (Clínica)",
+  "1.1.02.02": "Cuentas por Cobrar Alumnos (Cursos)",
+  "1.1.02.03": "Cuentas por Cobrar Inquilinos (Coworking)",
+  "1.1.02.04": "Anticipos a Proveedores y Otras Ctas. por Cobrar",
+  "1.1.03.01": "Crédito Tributario IVA",
+  "2.1.01.01": "Cuentas por Pagar Proveedores",
+  "2.1.02.01": "IVA en Ventas por Pagar",
+  "2.1.05.01": "Préstamos Accionistas por Pagar",
+  "4.1.01.01": "Servicios Odontológicos",
+  "4.2.01.01": "Servicios de Capacitación y Cursos",
+  "4.3.01.01": "Alquiler de Espacios y Sillones Odontológicos",
+  "4.4.01.01": "Otros Ingresos No Operacionales",
+};
+
+export function getOfficialExpenseAccountName(code?: string | null, fallbackName?: string | null): string {
+  if (!code) return fallbackName || "Gasto Operacional";
+  const cleanCode = code.trim();
+  if (OFFICIAL_ACCOUNT_MAP[cleanCode]) {
+    return OFFICIAL_ACCOUNT_MAP[cleanCode];
+  }
+  return fallbackName || cleanCode;
+}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Eye, Scale, CheckCircle2, X } from "lucide-react";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 
 export interface JournalLineItem {
   id?: string;
@@ -429,7 +430,7 @@ export default function AsientoContableModal({
                               <td className="py-1 px-2 font-medium text-ink-900 truncate max-w-[200px]">
                                 <span className={isCreditLine ? "pl-3 text-ink-700" : "font-semibold"}>
                                   {isCreditLine ? "↳ " : ""}
-                                  {line.account_name}
+                                  {getOfficialExpenseAccountName(line.account_code, line.account_name)}
                                 </span>
                               </td>
                               <td className="py-1 px-2 text-right font-mono font-semibold text-ink-900">

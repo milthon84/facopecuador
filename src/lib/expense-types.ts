@@ -47,7 +47,7 @@ export const EXPENSE_CATEGORY_DETAILS: Record<string, CategoryDetail> = {
     examples: "Odontólogos especialistas asociados, docentes de cursos, laboratoristas dentales.",
   },
   "Suministro": {
-    name: "Suministro",
+    name: "Útiles de Oficina",
     accountCode: "5.2.05.01",
     accountName: "Útiles de Oficina",
     description: "Artículos de papelería, oficina, limpieza y cafetería",
@@ -164,7 +164,7 @@ export function resolveExpenseItemCategoryDetail(
   }
   if (searchStr.includes("suministro") || searchStr.includes("oficina") || searchStr.includes("utiles")) {
     return {
-      name: "Suministro",
+      name: "Útiles de Oficina",
       accountCode: "5.2.05.01",
       description: "Útiles de Oficina",
     };

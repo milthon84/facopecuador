@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import { FacturaRecibida } from "@/lib/expense-types";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 import {
   ExpenseArea,
   EXPENSE_AREA_CONFIG,
@@ -204,6 +205,8 @@ export default function GastosListClient({
         const docLabel = getExpenseDocTypeLabel(exp).toLowerCase();
         const desc = (exp.description || "").toLowerCase();
         const cat = (exp.category || "").toLowerCase();
+        const accName = getOfficialExpenseAccountName(exp.account_code, exp.account_name || exp.category).toLowerCase();
+        const accCode = (exp.account_code || "").toLowerCase();
         const auth = (sriClave || resolveExpenseAuthorization(exp) || "").toLowerCase();
         const tot = String(exp.total || "");
 
@@ -214,6 +217,8 @@ export default function GastosListClient({
           docLabel.includes(q) ||
           desc.includes(q) ||
           cat.includes(q) ||
+          accName.includes(q) ||
+          accCode.includes(q) ||
           auth.includes(q) ||
           tot.includes(q);
 
@@ -795,12 +800,20 @@ export default function GastosListClient({
                       <span className="text-ink-500 font-medium">
                         {PAYMENT_LABELS[exp.payment_method] ?? exp.payment_method}
                       </span>
-                      {exp.category && (
-                        <>
-                          <span className="text-ink-300">·</span>
-                          <span className="text-ink-500">{exp.category}</span>
-                        </>
-                      )}
+                      {(() => {
+                        const accCode = exp.account_code;
+                        const accName = getOfficialExpenseAccountName(accCode, exp.account_name || exp.category);
+                        if (!accName) return null;
+                        return (
+                          <>
+                            <span className="text-ink-300">·</span>
+                            <span className="text-ink-600 font-medium">{accName}</span>
+                            {accCode && (
+                              <span className="text-[10px] font-mono text-ink-400">({accCode})</span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {cleanExpenseDescription(exp.description) && (
