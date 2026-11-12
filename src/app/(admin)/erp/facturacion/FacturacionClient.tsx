@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import SyncNotaCreditoButton from "@/components/SyncNotaCreditoButton";
-import AsientoContableModal, { buildInvoiceJournalEntries } from "@/components/AsientoContableModal";
 
 interface FacturacionClientProps {
   initialInvoices: any[];
@@ -402,15 +401,6 @@ export default function FacturacionClient({
                         </td>
                         <td className="px-5 py-3.5 text-center">
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            <AsientoContableModal
-                              entries={
-                                journalEntriesByInvoiceId?.[inv.id]?.length
-                                  ? journalEntriesByInvoiceId[inv.id]
-                                  : buildInvoiceJournalEntries(inv, linkedCn)
-                              }
-                              buttonVariant="table-compact"
-                            />
-
                             <a
                               href={`/api/factura/${inv.id}/pdf`}
                               target="_blank"
