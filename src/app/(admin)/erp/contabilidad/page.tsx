@@ -5,6 +5,7 @@ import { assertPermission } from "@/lib/auth-action";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 import ExportarExcelContableButton from "./ExportarExcelContableButton";
 import SincronizarAsientosButton from "./SincronizarAsientosButton";
+import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 
 export const dynamic = "force-dynamic";
 
@@ -162,14 +163,27 @@ export default async function ContabilidadPage({
     .order("entry_date", { ascending: true })
     .order("created_at", { ascending: true });
 
+  let prevLinesPromise: PromiseLike<{ data: any[] | null }> = Promise.resolve({ data: [] });
+
   if (!isAllPeriod) {
     const [year, month] = period.split("-").map(Number);
-    const from  = new Date(year, month - 1, 1).toISOString().split("T")[0];
-    const to    = new Date(year, month, 0).toISOString().split("T")[0];
+    const from = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const to = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     entriesQuery = entriesQuery.gte("entry_date", from).lte("entry_date", to);
+
+    prevLinesPromise = supabase
+      .from("journal_lines")
+      .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
+      .lt("journal_entries.entry_date", from)
+      .eq("journal_entries.status", "posted")
+      .limit(50000);
   }
 
-  const { data: entries } = await entriesQuery;
+  const [{ data: entries }, { data: rawPrevLines }] = await Promise.all([
+    entriesQuery,
+    prevLinesPromise,
+  ]);
 
   const allEntries = entries ?? [];
 
@@ -349,18 +363,111 @@ export default async function ContabilidadPage({
 
   const ivaPagar = ivaVentas - ivaCompras;
 
-  // ── Balance de Comprobación ──────────────────────────────────────────────
-  const accountMap: Record<string, { code: string; name: string; debit: number; credit: number }> = {};
-  for (const l of allLines as any[]) {
-    if (!accountMap[l.account_code]) {
-      accountMap[l.account_code] = { code: l.account_code, name: l.account_name, debit: 0, credit: 0 };
+  // ── Balance de Comprobación Acumulado y Mensual (Sumas y Saldos) ──────────
+  const isAcreedora = (code: string) =>
+    code.startsWith("2") || code.startsWith("3") || code.startsWith("4");
+
+  type BalanceItem = {
+    code: string;
+    name: string;
+    nature: "deudora" | "acreedora";
+    prevDebit: number;
+    prevCredit: number;
+    prevBalance: number;
+    monthDebit: number;
+    monthCredit: number;
+    debit: number;
+    credit: number;
+    finalDebit: number;
+    finalCredit: number;
+    finalBalance: number;
+  };
+
+  const accountMap: Record<string, BalanceItem> = {};
+
+  const getOrCreateAcc = (code: string, rawName: string): BalanceItem => {
+    if (!accountMap[code]) {
+      const nature: "deudora" | "acreedora" = isAcreedora(code) ? "acreedora" : "deudora";
+      const officialName = getOfficialExpenseAccountName(code, rawName);
+      accountMap[code] = {
+        code,
+        name: officialName,
+        nature,
+        prevDebit: 0,
+        prevCredit: 0,
+        prevBalance: 0,
+        monthDebit: 0,
+        monthCredit: 0,
+        debit: 0,
+        credit: 0,
+        finalDebit: 0,
+        finalCredit: 0,
+        finalBalance: 0,
+      };
     }
-    accountMap[l.account_code].debit  += Number(l.debit);
-    accountMap[l.account_code].credit += Number(l.credit);
+    return accountMap[code];
+  };
+
+  // 1. Acumular movimientos del mes anterior (histórico previo al período)
+  for (const l of (rawPrevLines || []) as any[]) {
+    if (!l.account_code) continue;
+    const item = getOrCreateAcc(l.account_code, l.account_name);
+    item.prevDebit += Number(l.debit || 0);
+    item.prevCredit += Number(l.credit || 0);
   }
-  const balanceRows = Object.values(accountMap).sort((a, b) => a.code.localeCompare(b.code));
-  const totalDebit  = balanceRows.reduce((s, r) => s + r.debit,  0);
-  const totalCredit = balanceRows.reduce((s, r) => s + r.credit, 0);
+
+  // 2. Acumular movimientos del mes actual seleccionado
+  for (const l of allLines as any[]) {
+    if (!l.account_code) continue;
+    const item = getOrCreateAcc(l.account_code, l.account_name);
+    item.monthDebit += Number(l.debit || 0);
+    item.monthCredit += Number(l.credit || 0);
+  }
+
+  // 3. Calcular saldos iniciales (mes anterior), saldos finales acumulados y redondear
+  for (const item of Object.values(accountMap)) {
+    const isAcreedor = item.nature === "acreedora";
+
+    item.prevDebit = Math.round(item.prevDebit * 100) / 100;
+    item.prevCredit = Math.round(item.prevCredit * 100) / 100;
+    item.monthDebit = Math.round(item.monthDebit * 100) / 100;
+    item.monthCredit = Math.round(item.monthCredit * 100) / 100;
+
+    // Saldo acumulado anterior
+    item.prevBalance = isAcreedor
+      ? Math.round((item.prevCredit - item.prevDebit) * 100) / 100
+      : Math.round((item.prevDebit - item.prevCredit) * 100) / 100;
+
+    // Campos de compatibilidad con vistas y exports existentes
+    item.debit = item.monthDebit;
+    item.credit = item.monthCredit;
+
+    // Sumas totales acumuladas
+    item.finalDebit = Math.round((item.prevDebit + item.monthDebit) * 100) / 100;
+    item.finalCredit = Math.round((item.prevCredit + item.monthCredit) * 100) / 100;
+
+    // Saldo final acumulado al cierre del período
+    item.finalBalance = isAcreedor
+      ? Math.round((item.finalCredit - item.finalDebit) * 100) / 100
+      : Math.round((item.finalDebit - item.finalCredit) * 100) / 100;
+  }
+
+  const balanceRows = Object.values(accountMap)
+    .filter(
+      r =>
+        Math.abs(r.prevBalance) >= 0.005 ||
+        Math.abs(r.monthDebit) >= 0.005 ||
+        Math.abs(r.monthCredit) >= 0.005 ||
+        Math.abs(r.finalBalance) >= 0.005
+    )
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  const totalDebit = balanceRows.reduce((s, r) => s + r.monthDebit, 0);
+  const totalCredit = balanceRows.reduce((s, r) => s + r.monthCredit, 0);
+  const totalPrevBalance = balanceRows.reduce((s, r) => s + r.prevBalance, 0);
+  const totalFinalBalance = balanceRows.reduce((s, r) => s + r.finalBalance, 0);
+  const totalFinalDebit = balanceRows.reduce((s, r) => s + r.finalDebit, 0);
+  const totalFinalCredit = balanceRows.reduce((s, r) => s + r.finalCredit, 0);
 
   const tabs = [
     { key: "diario",    label: "Libro Diario",           icon: <BookOpen size={14} /> },
@@ -783,10 +890,17 @@ export default async function ContabilidadPage({
       {/* ── BALANCE DE COMPROBACIÓN ───────────────────────────────────────── */}
       {tab === "balance" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
+          <div className="px-5 py-4 border-b border-lilac-100 bg-lilac-50/40 flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h2 className="font-semibold text-sm text-ink-800">Balance de Comprobación — {periodLabel(period)}</h2>
-              <p className="text-xs text-ink-400">{balanceRows.length} cuentas registradas</p>
+              <div className="flex items-center gap-2">
+                <Scale size={18} className="text-lilac-600" />
+                <h2 className="font-bold text-base text-ink-900">
+                  Balance de Comprobación de Sumas y Saldos — {periodLabel(period)}
+                </h2>
+              </div>
+              <p className="text-xs text-ink-500 mt-0.5">
+                {balanceRows.length} cuentas contables con saldo anterior, movimientos del período y saldo final acumulado NIIF
+              </p>
             </div>
             <ExportarExcelContableButton
               tab="balance"
@@ -797,38 +911,124 @@ export default async function ContabilidadPage({
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-lilac-50/50 text-ink-500 text-xs uppercase">
+              <thead className="bg-lilac-50/70 text-ink-600 text-xs uppercase font-semibold border-b border-lilac-200">
                 <tr>
-                  <th className="px-4 py-2.5 text-left w-28">Código</th>
-                  <th className="px-4 py-2.5 text-left">Cuenta</th>
-                  <th className="px-4 py-2.5 text-right w-32">Débito</th>
-                  <th className="px-4 py-2.5 text-right w-32">Crédito</th>
-                  <th className="px-4 py-2.5 text-right w-32">Saldo</th>
+                  <th className="px-4 py-3 text-left w-28">Código</th>
+                  <th className="px-4 py-3 text-left">Cuenta Contable</th>
+                  <th className="px-4 py-3 text-right w-36">Saldo Mes Anterior</th>
+                  <th className="px-4 py-3 text-right w-36 text-green-800 bg-green-50/40">Mov. Mes (Debe)</th>
+                  <th className="px-4 py-3 text-right w-36 text-red-800 bg-red-50/40">Mov. Mes (Haber)</th>
+                  <th className="px-4 py-3 text-right w-40 font-bold text-ink-900 bg-lilac-100/30">Saldo Final Acumulado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-lilac-50">
-                {balanceRows.map(r => {
-                  const saldo = r.debit - r.credit;
+              <tbody className="divide-y divide-lilac-100">
+                {balanceRows.map((r) => {
+                  const hasPrev = Math.abs(r.prevBalance) >= 0.005;
+                  const hasDeb = r.monthDebit > 0;
+                  const hasCred = r.monthCredit > 0;
+                  const hasFinal = Math.abs(r.finalBalance) >= 0.005;
+
                   return (
-                    <tr key={r.code} className="hover:bg-lilac-50/20">
-                      <td className="px-4 py-2 font-mono text-xs text-ink-400">{r.code}</td>
-                      <td className="px-4 py-2 text-ink-800">{r.name}</td>
-                      <td className="px-4 py-2 text-right text-green-700 font-medium">{r.debit > 0 ? `$${fmt(r.debit)}` : ""}</td>
-                      <td className="px-4 py-2 text-right text-red-600 font-medium">{r.credit > 0 ? `$${fmt(r.credit)}` : ""}</td>
-                      <td className={`px-4 py-2 text-right font-bold ${saldo >= 0 ? "text-ink-900" : "text-red-600"}`}>
-                        ${fmt(Math.abs(saldo))}
+                    <tr key={r.code} className="hover:bg-lilac-50/30 transition-colors">
+                      <td className="px-4 py-2.5 font-mono text-xs font-medium text-ink-500">
+                        {r.code}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-ink-900 font-medium">{r.name}</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-normal ${
+                              r.nature === "acreedora"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                            }`}
+                          >
+                            {r.nature === "acreedora" ? "Acreedora" : "Deudora"}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right font-medium ${
+                          !hasPrev
+                            ? "text-ink-300"
+                            : r.prevBalance >= 0
+                            ? "text-ink-700"
+                            : "text-red-600 font-semibold"
+                        }`}
+                      >
+                        {hasPrev ? `$${fmt(r.prevBalance)}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-green-700 font-semibold bg-green-50/20">
+                        {hasDeb ? `$${fmt(r.monthDebit)}` : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-red-600 font-semibold bg-red-50/20">
+                        {hasCred ? `$${fmt(r.monthCredit)}` : "—"}
+                      </td>
+                      <td
+                        className={`px-4 py-2.5 text-right font-bold bg-lilac-50/30 ${
+                          !hasFinal
+                            ? "text-ink-300 font-normal"
+                            : r.finalBalance >= 0
+                            ? "text-ink-900"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {hasFinal ? `$${fmt(r.finalBalance)}` : "—"}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="bg-lilac-50 font-bold text-sm border-t-2 border-lilac-200">
+              <tfoot className="bg-lilac-50/80 font-bold text-sm border-t-2 border-lilac-200">
                 <tr>
-                  <td colSpan={2} className="px-4 py-2.5">TOTALES</td>
-                  <td className="px-4 py-2.5 text-right text-green-700">${fmt(totalDebit)}</td>
-                  <td className="px-4 py-2.5 text-right text-red-600">${fmt(totalCredit)}</td>
-                  <td className={`px-4 py-2.5 text-right ${totalDebit === totalCredit ? "text-green-700" : "text-red-700"}`}>
-                    {totalDebit === totalCredit ? "✓ Cuadrado" : "✗ Descuadrado"}
+                  <td colSpan={2} className="px-4 py-3 text-ink-800">
+                    TOTALES DEL PERÍODO
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink-700 font-semibold">
+                    ${fmt(totalPrevBalance)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-green-800 bg-green-100/40">
+                    ${fmt(totalDebit)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-red-700 bg-red-100/40">
+                    ${fmt(totalCredit)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink-900 bg-lilac-100/40">
+                    ${fmt(totalFinalBalance)}
+                  </td>
+                </tr>
+                <tr className="border-t border-lilac-200/60 bg-white text-xs font-normal">
+                  <td colSpan={6} className="px-4 py-2.5 text-ink-600">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-ink-700">Cuadre del Mes:</span>
+                        <span
+                          className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full ${
+                            Math.abs(totalDebit - totalCredit) < 0.01
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-red-50 text-red-700 border border-red-200"
+                          }`}
+                        >
+                          {Math.abs(totalDebit - totalCredit) < 0.01
+                            ? `✓ Cuadrado ($${fmt(totalDebit)})`
+                            : `✗ Descuadre de $${fmt(Math.abs(totalDebit - totalCredit))}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-ink-700">Sumas Acumuladas NIIF:</span>
+                        <span
+                          className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full ${
+                            Math.abs(totalFinalDebit - totalFinalCredit) < 0.01
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-red-50 text-red-700 border border-red-200"
+                          }`}
+                        >
+                          {Math.abs(totalFinalDebit - totalFinalCredit) < 0.01
+                            ? `✓ Cuadrado Total ($${fmt(totalFinalDebit)})`
+                            : `✗ Descuadre Total de $${fmt(Math.abs(totalFinalDebit - totalFinalCredit))}`}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               </tfoot>

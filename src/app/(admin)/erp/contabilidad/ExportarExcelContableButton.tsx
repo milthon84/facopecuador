@@ -9,7 +9,21 @@ interface Props {
   period: string;
   periodLabel: string;
   entries?: any[];
-  balanceRows?: { code: string; name: string; debit: number; credit: number }[];
+  balanceRows?: Array<{
+    code: string;
+    name: string;
+    nature?: "deudora" | "acreedora";
+    prevDebit?: number;
+    prevCredit?: number;
+    prevBalance?: number;
+    monthDebit?: number;
+    monthCredit?: number;
+    debit: number;
+    credit: number;
+    finalDebit?: number;
+    finalCredit?: number;
+    finalBalance?: number;
+  }>;
   ingresos?: number;
   gastos?: number;
   utilidad?: number;
@@ -188,47 +202,53 @@ export default function ExportarExcelContableButton({
         XLSX.writeFile(wb, `Estado_Resultados_${periodSuffix}.xlsx`);
 
       } else if (tab === "balance") {
-        // Exportar Balance de Comprobación
-        let sumDeb = 0;
-        let sumCred = 0;
+        // Exportar Balance de Comprobación con saldo anterior, movimientos del mes y saldo final acumulado
+        let sumPrev = 0;
+        let sumMonthDeb = 0;
+        let sumMonthCred = 0;
+        let sumFinal = 0;
 
         const rows = balanceRows.map((r) => {
-          const deb = Number(r.debit || 0);
-          const cred = Number(r.credit || 0);
-          const saldo = Math.round((deb - cred) * 100) / 100;
-          sumDeb += deb;
-          sumCred += cred;
+          const prevBal = Number(r.prevBalance !== undefined ? r.prevBalance : (Number(r.prevDebit || 0) - Number(r.prevCredit || 0)));
+          const mDeb = Number(r.monthDebit !== undefined ? r.monthDebit : r.debit);
+          const mCred = Number(r.monthCredit !== undefined ? r.monthCredit : r.credit);
+          const fBal = Number(r.finalBalance !== undefined ? r.finalBalance : (prevBal + mDeb - mCred));
+
+          sumPrev += prevBal;
+          sumMonthDeb += mDeb;
+          sumMonthCred += mCred;
+          sumFinal += fBal;
 
           return {
             "Código Cuenta": r.code,
             "Nombre Cuenta Contable": r.name,
-            "Débitos ($)": deb > 0 ? deb : 0,
-            "Créditos ($)": cred > 0 ? cred : 0,
-            "Saldo Deudor ($)": saldo > 0 ? saldo : 0,
-            "Saldo Acreedor ($)": saldo < 0 ? Math.abs(saldo) : 0,
+            "Naturaleza": r.nature === "acreedora" ? "Acreedora" : "Deudora",
+            "Saldo Mes Anterior ($)": Math.round(prevBal * 100) / 100,
+            "Movimiento Mes Débito ($)": Math.round(mDeb * 100) / 100,
+            "Movimiento Mes Crédito ($)": Math.round(mCred * 100) / 100,
+            "Saldo Final Acumulado ($)": Math.round(fBal * 100) / 100,
           };
         });
 
-        const totSaldoDeudor = rows.reduce((s, r) => s + Number(r["Saldo Deudor ($)"] || 0), 0);
-        const totSaldoAcreedor = rows.reduce((s, r) => s + Number(r["Saldo Acreedor ($)"] || 0), 0);
-
         rows.push({
           "Código Cuenta": "TOTALES",
-          "Nombre Cuenta Contable": Math.abs(sumDeb - sumCred) < 0.01 ? "Balance Cuadrado NIIF" : "Descuadrado",
-          "Débitos ($)": Math.round(sumDeb * 100) / 100,
-          "Créditos ($)": Math.round(sumCred * 100) / 100,
-          "Saldo Deudor ($)": Math.round(totSaldoDeudor * 100) / 100,
-          "Saldo Acreedor ($)": Math.round(totSaldoAcreedor * 100) / 100,
+          "Nombre Cuenta Contable": Math.abs(sumMonthDeb - sumMonthCred) < 0.01 ? "Balance Cuadrado NIIF" : "Descuadrado",
+          "Naturaleza": "-",
+          "Saldo Mes Anterior ($)": Math.round(sumPrev * 100) / 100,
+          "Movimiento Mes Débito ($)": Math.round(sumMonthDeb * 100) / 100,
+          "Movimiento Mes Crédito ($)": Math.round(sumMonthCred * 100) / 100,
+          "Saldo Final Acumulado ($)": Math.round(sumFinal * 100) / 100,
         });
 
         const ws = XLSX.utils.json_to_sheet(rows);
         ws["!cols"] = [
-          { wch: 15 },
-          { wch: 40 },
           { wch: 16 },
+          { wch: 42 },
           { wch: 16 },
-          { wch: 16 },
-          { wch: 16 },
+          { wch: 24 },
+          { wch: 24 },
+          { wch: 24 },
+          { wch: 26 },
         ];
         XLSX.utils.book_append_sheet(wb, ws, "Balance Comprobación");
         XLSX.writeFile(wb, `Balance_Comprobacion_${periodSuffix}.xlsx`);
