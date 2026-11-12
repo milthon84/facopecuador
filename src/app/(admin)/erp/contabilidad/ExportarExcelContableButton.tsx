@@ -8,7 +8,18 @@ interface Props {
   tab: string;
   period: string;
   periodLabel: string;
+  view?: string;
   entries?: any[];
+  hierarchicalRows?: Array<{
+    type: "header" | "movement" | "subtotal";
+    code: string;
+    name: string;
+    level: number;
+    saldoAnterior: number;
+    debe: number;
+    haber: number;
+    saldoActual: number;
+  }>;
   balanceRows?: Array<{
     code: string;
     name: string;
@@ -38,6 +49,8 @@ export default function ExportarExcelContableButton({
   tab,
   period,
   periodLabel,
+  view = "tree",
+  hierarchicalRows = [],
   entries = [],
   balanceRows = [],
   ingresos = 0,
@@ -202,54 +215,105 @@ export default function ExportarExcelContableButton({
         XLSX.writeFile(wb, `Estado_Resultados_${periodSuffix}.xlsx`);
 
       } else if (tab === "balance") {
-        // Exportar Balance de Comprobación con saldo anterior, movimientos del mes y saldo final acumulado
-        let sumPrev = 0;
-        let sumMonthDeb = 0;
-        let sumMonthCred = 0;
-        let sumFinal = 0;
+        // Exportar Balance de Comprobación idéntico al modelo oficial (CODIGO, NOMBRE DE LA CUENTA, SALDO ANTERIOR, DEBE, HABER, SALDO ACTUAL)
+        let rows: any[] = [];
+        let cols: any[] = [];
 
-        const rows = balanceRows.map((r) => {
-          const prevBal = Number(r.prevBalance !== undefined ? r.prevBalance : (Number(r.prevDebit || 0) - Number(r.prevCredit || 0)));
-          const mDeb = Number(r.monthDebit !== undefined ? r.monthDebit : r.debit);
-          const mCred = Number(r.monthCredit !== undefined ? r.monthCredit : r.credit);
-          const fBal = Number(r.finalBalance !== undefined ? r.finalBalance : (prevBal + mDeb - mCred));
+        if (view !== "flat" && hierarchicalRows && hierarchicalRows.length > 0) {
+          // Formato Jerárquico NIIF con grupos y filas = TOTAL =
+          rows = hierarchicalRows.map((r) => {
+            if (r.type === "header") {
+              return {
+                "CODIGO": r.code,
+                "NOMBRE DE LA CUENTA": r.name,
+                "SALDO ANTERIOR": "",
+                "DEBE": "",
+                "HABER": "",
+                "SALDO ACTUAL": "",
+              };
+            }
+            const prefix = r.type === "movement" ? "   ".repeat(Math.max(1, r.level)) : "";
+            return {
+              "CODIGO": r.code,
+              "NOMBRE DE LA CUENTA": prefix + r.name,
+              "SALDO ANTERIOR": Math.round(r.saldoAnterior * 100) / 100,
+              "DEBE": r.debe > 0 ? Math.round(r.debe * 100) / 100 : 0,
+              "HABER": r.haber > 0 ? Math.round(r.haber * 100) / 100 : 0,
+              "SALDO ACTUAL": Math.round(r.saldoActual * 100) / 100,
+            };
+          });
 
-          sumPrev += prevBal;
-          sumMonthDeb += mDeb;
-          sumMonthCred += mCred;
-          sumFinal += fBal;
+          const totalDeb = balanceRows.reduce((s, r) => s + (r.monthDebit ?? r.debit ?? 0), 0);
+          const totalCred = balanceRows.reduce((s, r) => s + (r.monthCredit ?? r.credit ?? 0), 0);
+          const totalAnt = balanceRows.reduce((s, r) => s + (r.prevBalance ?? 0), 0);
+          const totalAct = balanceRows.reduce((s, r) => s + (r.finalBalance ?? 0), 0);
 
-          return {
-            "Código Cuenta": r.code,
-            "Nombre Cuenta Contable": r.name,
-            "Naturaleza": r.nature === "acreedora" ? "Acreedora" : "Deudora",
-            "Saldo Mes Anterior ($)": Math.round(prevBal * 100) / 100,
-            "Movimiento Mes Débito ($)": Math.round(mDeb * 100) / 100,
-            "Movimiento Mes Crédito ($)": Math.round(mCred * 100) / 100,
-            "Saldo Final Acumulado ($)": Math.round(fBal * 100) / 100,
-          };
-        });
+          rows.push({
+            "CODIGO": "= TOTAL GENERAL =",
+            "NOMBRE DE LA CUENTA": Math.abs(totalDeb - totalCred) < 0.01 ? "BALANCE DE COMPROBACIÓN NIIF CUADRADO" : "BALANCE DESCUADRADO",
+            "SALDO ANTERIOR": Math.round(totalAnt * 100) / 100,
+            "DEBE": Math.round(totalDeb * 100) / 100,
+            "HABER": Math.round(totalCred * 100) / 100,
+            "SALDO ACTUAL": Math.round(totalAct * 100) / 100,
+          });
 
-        rows.push({
-          "Código Cuenta": "TOTALES",
-          "Nombre Cuenta Contable": Math.abs(sumMonthDeb - sumMonthCred) < 0.01 ? "Balance Cuadrado NIIF" : "Descuadrado",
-          "Naturaleza": "-",
-          "Saldo Mes Anterior ($)": Math.round(sumPrev * 100) / 100,
-          "Movimiento Mes Débito ($)": Math.round(sumMonthDeb * 100) / 100,
-          "Movimiento Mes Crédito ($)": Math.round(sumMonthCred * 100) / 100,
-          "Saldo Final Acumulado ($)": Math.round(sumFinal * 100) / 100,
-        });
+          cols = [
+            { wch: 18 },
+            { wch: 48 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 20 },
+          ];
+        } else {
+          // Formato de solo cuentas de movimiento
+          let sumPrev = 0;
+          let sumMonthDeb = 0;
+          let sumMonthCred = 0;
+          let sumFinal = 0;
+
+          rows = balanceRows.map((r) => {
+            const prevBal = Number(r.prevBalance !== undefined ? r.prevBalance : (Number(r.prevDebit || 0) - Number(r.prevCredit || 0)));
+            const mDeb = Number(r.monthDebit !== undefined ? r.monthDebit : r.debit);
+            const mCred = Number(r.monthCredit !== undefined ? r.monthCredit : r.credit);
+            const fBal = Number(r.finalBalance !== undefined ? r.finalBalance : (prevBal + mDeb - mCred));
+
+            sumPrev += prevBal;
+            sumMonthDeb += mDeb;
+            sumMonthCred += mCred;
+            sumFinal += fBal;
+
+            return {
+              "CODIGO": r.code,
+              "NOMBRE DE LA CUENTA": r.name,
+              "SALDO ANTERIOR": Math.round(prevBal * 100) / 100,
+              "DEBE": Math.round(mDeb * 100) / 100,
+              "HABER": Math.round(mCred * 100) / 100,
+              "SALDO ACTUAL": Math.round(fBal * 100) / 100,
+            };
+          });
+
+          rows.push({
+            "CODIGO": "= TOTAL GENERAL =",
+            "NOMBRE DE LA CUENTA": Math.abs(sumMonthDeb - sumMonthCred) < 0.01 ? "Balance Cuadrado NIIF" : "Descuadrado",
+            "SALDO ANTERIOR": Math.round(sumPrev * 100) / 100,
+            "DEBE": Math.round(sumMonthDeb * 100) / 100,
+            "HABER": Math.round(sumMonthCred * 100) / 100,
+            "SALDO ACTUAL": Math.round(sumFinal * 100) / 100,
+          });
+
+          cols = [
+            { wch: 18 },
+            { wch: 48 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 20 },
+          ];
+        }
 
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws["!cols"] = [
-          { wch: 16 },
-          { wch: 42 },
-          { wch: 16 },
-          { wch: 24 },
-          { wch: 24 },
-          { wch: 24 },
-          { wch: 26 },
-        ];
+        ws["!cols"] = cols;
         XLSX.utils.book_append_sheet(wb, ws, "Balance Comprobación");
         XLSX.writeFile(wb, `Balance_Comprobacion_${periodSuffix}.xlsx`);
 

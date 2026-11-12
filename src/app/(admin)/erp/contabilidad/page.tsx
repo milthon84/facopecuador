@@ -126,11 +126,12 @@ function cleanLineDescription(lineDesc: string | null | undefined, headerTitle: 
 export default async function ContabilidadPage({
   searchParams: searchParamsPromise,
 }: {
-  searchParams: Promise<{ tab?: string; period?: string }>;
+  searchParams: Promise<{ tab?: string; period?: string; view?: string }>;
 }) {
   await assertPermission("/erp/contabilidad");
   const searchParams = await searchParamsPromise;
   const tab    = searchParams.tab    ?? "diario";
+  const view   = searchParams.view   ?? "tree";
   const now    = new Date();
   const period = searchParams.period
     ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -146,10 +147,15 @@ export default async function ContabilidadPage({
 
   const supabase = createAdminClient();
 
-  // Cargar cierres mensuales y cierres anuales
-  const [{ data: monthlyRecords }, { data: annualRecords }] = await Promise.all([
+  // Cargar cierres mensuales, cierres anuales y catálogo de cuentas contables NIIF
+  const [
+    { data: monthlyRecords },
+    { data: annualRecords },
+    { data: rawAccounts },
+  ] = await Promise.all([
     supabase.from("monthly_closures").select("period").eq("status", "closed"),
     supabase.from("annual_closures").select("year").eq("status", "closed"),
+    supabase.from("accounts").select("code, name, is_movement, type, parent_code").order("code", { ascending: true }),
   ]);
 
   const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
@@ -468,6 +474,187 @@ export default async function ContabilidadPage({
   const totalFinalBalance = balanceRows.reduce((s, r) => s + r.finalBalance, 0);
   const totalFinalDebit = balanceRows.reduce((s, r) => s + r.finalDebit, 0);
   const totalFinalCredit = balanceRows.reduce((s, r) => s + r.finalCredit, 0);
+
+  // ── Construcción de Balance Jerárquico NIIF (con Grupos y Subtotales = TOTAL =) ──
+  type HierarchyRow = {
+    type: "header" | "movement" | "subtotal";
+    code: string;
+    name: string;
+    level: number;
+    saldoAnterior: number;
+    debe: number;
+    haber: number;
+    saldoActual: number;
+    isCredit?: boolean;
+  };
+
+  const accountsList: Array<{ code: string; name: string; is_movement: boolean; type: string }> = [
+    ...(rawAccounts || []).map((a: any) => ({
+      code: a.code,
+      name: a.name,
+      is_movement: Boolean(a.is_movement),
+      type: a.type || "",
+    })),
+  ];
+
+  // Si hay alguna cuenta con movimientos que no esté en el catálogo, agregarla
+  for (const code of Object.keys(accountMap)) {
+    if (!accountsList.some(a => a.code === code)) {
+      accountsList.push({
+        code,
+        name: accountMap[code].name,
+        is_movement: true,
+        type: "",
+      });
+    }
+  }
+
+  type NodeRollup = {
+    code: string;
+    name: string;
+    is_movement: boolean;
+    saldoAnterior: number;
+    debe: number;
+    haber: number;
+    saldoActual: number;
+    hasActivity: boolean;
+  };
+
+  const nodeDataMap = new Map<string, NodeRollup>();
+
+  for (const a of accountsList) {
+    const mov = accountMap[a.code];
+    if (a.is_movement && mov) {
+      nodeDataMap.set(a.code, {
+        code: a.code,
+        name: mov.name,
+        is_movement: true,
+        saldoAnterior: mov.prevBalance,
+        debe: mov.monthDebit,
+        haber: mov.monthCredit,
+        saldoActual: mov.finalBalance,
+        hasActivity:
+          Math.abs(mov.prevBalance) >= 0.005 ||
+          mov.monthDebit > 0 ||
+          mov.monthCredit > 0 ||
+          Math.abs(mov.finalBalance) >= 0.005,
+      });
+    } else {
+      nodeDataMap.set(a.code, {
+        code: a.code,
+        name: a.name,
+        is_movement: a.is_movement,
+        saldoAnterior: 0,
+        debe: 0,
+        haber: 0,
+        saldoActual: 0,
+        hasActivity: false,
+      });
+    }
+  }
+
+  // Acumular sumas en grupos padres (desde los códigos más largos hasta los más cortos)
+  const groupAccounts = accountsList
+    .filter(a => !a.is_movement)
+    .sort((a, b) => b.code.length - a.code.length);
+
+  for (const grp of groupAccounts) {
+    const children = accountsList.filter(
+      c => c.is_movement && c.code.startsWith(grp.code + ".")
+    );
+    const ant = children.reduce(
+      (s, c) => s + (nodeDataMap.get(c.code)?.saldoAnterior || 0),
+      0
+    );
+    const deb = children.reduce(
+      (s, c) => s + (nodeDataMap.get(c.code)?.debe || 0),
+      0
+    );
+    const cred = children.reduce(
+      (s, c) => s + (nodeDataMap.get(c.code)?.haber || 0),
+      0
+    );
+    const act = children.reduce(
+      (s, c) => s + (nodeDataMap.get(c.code)?.saldoActual || 0),
+      0
+    );
+    const hasAct = children.some(c => nodeDataMap.get(c.code)?.hasActivity);
+
+    const item = nodeDataMap.get(grp.code)!;
+    item.saldoAnterior = Math.round(ant * 100) / 100;
+    item.debe = Math.round(deb * 100) / 100;
+    item.haber = Math.round(cred * 100) / 100;
+    item.saldoActual = Math.round(act * 100) / 100;
+    item.hasActivity = hasAct;
+  }
+
+  // Agrupar nodos por código del padre directo
+  const activeNodes = accountsList.filter(a => nodeDataMap.get(a.code)?.hasActivity);
+  const nodesByParent = new Map<string, typeof accountsList>();
+
+  for (const node of activeNodes) {
+    const parts = node.code.split(".");
+    const parentCode = parts.length > 1 ? parts.slice(0, -1).join(".") : "";
+    if (!nodesByParent.has(parentCode)) {
+      nodesByParent.set(parentCode, []);
+    }
+    nodesByParent.get(parentCode)!.push(node);
+  }
+
+  const hierarchicalRows: HierarchyRow[] = [];
+
+  const traverseNodes = (parentCode: string, level = 0) => {
+    const children = (nodesByParent.get(parentCode) || []).sort((a, b) =>
+      a.code.localeCompare(b.code)
+    );
+
+    for (const child of children) {
+      const data = nodeDataMap.get(child.code)!;
+      if (!child.is_movement) {
+        // Fila de encabezado de grupo
+        hierarchicalRows.push({
+          type: "header",
+          code: `${child.code}.`,
+          name: child.name.toUpperCase(),
+          level,
+          saldoAnterior: 0,
+          debe: 0,
+          haber: 0,
+          saldoActual: 0,
+        });
+
+        // Recorrer subgrupos o cuentas hijas
+        traverseNodes(child.code, level + 1);
+
+        // Fila de subtotal = TOTAL =
+        hierarchicalRows.push({
+          type: "subtotal",
+          code: "= TOTAL =",
+          name: child.name.toUpperCase(),
+          level,
+          saldoAnterior: data.saldoAnterior,
+          debe: data.debe,
+          haber: data.haber,
+          saldoActual: data.saldoActual,
+        });
+      } else {
+        // Fila de cuenta de movimiento
+        hierarchicalRows.push({
+          type: "movement",
+          code: child.code,
+          name: child.name,
+          level,
+          saldoAnterior: data.saldoAnterior,
+          debe: data.debe,
+          haber: data.haber,
+          saldoActual: data.saldoActual,
+          isCredit: isAcreedora(child.code),
+        });
+      }
+    }
+  };
+
+  traverseNodes("", 0);
 
   const tabs = [
     { key: "diario",    label: "Libro Diario",           icon: <BookOpen size={14} /> },
@@ -895,113 +1082,213 @@ export default async function ContabilidadPage({
               <div className="flex items-center gap-2">
                 <Scale size={18} className="text-lilac-600" />
                 <h2 className="font-bold text-base text-ink-900">
-                  Balance de Comprobación de Sumas y Saldos — {periodLabel(period)}
+                  Balance de Comprobación — {periodLabel(period)}
                 </h2>
               </div>
               <p className="text-xs text-ink-500 mt-0.5">
-                {balanceRows.length} cuentas contables con saldo anterior, movimientos del período y saldo final acumulado NIIF
+                {view !== "flat"
+                  ? `${hierarchicalRows.length} líneas estructuradas con grupos y subtotales (= TOTAL =)`
+                  : `${balanceRows.length} cuentas de movimiento registradas`}
               </p>
             </div>
-            <ExportarExcelContableButton
-              tab="balance"
-              period={period}
-              periodLabel={periodLabel(period)}
-              balanceRows={balanceRows}
-            />
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Selector de Vista: Estructurado NIIF vs Lista Plana */}
+              <div className="flex items-center bg-white border border-lilac-200 p-0.5 rounded-xl text-xs font-semibold shadow-2xs">
+                <Link
+                  href={`/erp/contabilidad?tab=balance&period=${period}&view=tree`}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${
+                    view !== "flat"
+                      ? "bg-lilac-600 text-white shadow-2xs font-bold"
+                      : "text-ink-600 hover:text-ink-900"
+                  }`}
+                >
+                  Estructurado NIIF (= TOTAL =)
+                </Link>
+                <Link
+                  href={`/erp/contabilidad?tab=balance&period=${period}&view=flat`}
+                  className={`px-3 py-1.5 rounded-lg transition-colors ${
+                    view === "flat"
+                      ? "bg-lilac-600 text-white shadow-2xs font-bold"
+                      : "text-ink-600 hover:text-ink-900"
+                  }`}
+                >
+                  Solo Cuentas
+                </Link>
+              </div>
+
+              <ExportarExcelContableButton
+                tab="balance"
+                period={period}
+                periodLabel={periodLabel(period)}
+                view={view}
+                hierarchicalRows={hierarchicalRows}
+                balanceRows={balanceRows}
+              />
+            </div>
           </div>
+
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-lilac-50/70 text-ink-600 text-xs uppercase font-semibold border-b border-lilac-200">
+            <table className="w-full text-sm font-sans">
+              <thead className="bg-slate-50 text-ink-700 text-xs uppercase font-bold border-b-2 border-slate-300">
                 <tr>
-                  <th className="px-4 py-3 text-left w-28">Código</th>
-                  <th className="px-4 py-3 text-left">Cuenta Contable</th>
-                  <th className="px-4 py-3 text-right w-36">Saldo Mes Anterior</th>
-                  <th className="px-4 py-3 text-right w-36 text-green-800 bg-green-50/40">Mov. Mes (Debe)</th>
-                  <th className="px-4 py-3 text-right w-36 text-red-800 bg-red-50/40">Mov. Mes (Haber)</th>
-                  <th className="px-4 py-3 text-right w-40 font-bold text-ink-900 bg-lilac-100/30">Saldo Final Acumulado</th>
+                  <th className="px-4 py-3 text-left w-36 font-bold">CODIGO</th>
+                  <th className="px-4 py-3 text-left font-bold">NOMBRE DE LA CUENTA</th>
+                  <th className="px-4 py-3 text-right w-36 font-bold">SALDO ANTERIOR</th>
+                  <th className="px-4 py-3 text-right w-36 font-bold">DEBE</th>
+                  <th className="px-4 py-3 text-right w-36 font-bold">HABER</th>
+                  <th className="px-4 py-3 text-right w-36 font-bold">SALDO ACTUAL</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-lilac-100">
-                {balanceRows.map((r) => {
-                  const hasPrev = Math.abs(r.prevBalance) >= 0.005;
-                  const hasDeb = r.monthDebit > 0;
-                  const hasCred = r.monthCredit > 0;
-                  const hasFinal = Math.abs(r.finalBalance) >= 0.005;
+              <tbody className="divide-y divide-slate-100">
+                {view !== "flat" ? (
+                  // ── Vista Estructurada Jerárquica NIIF (Idéntica al ejemplo) ──
+                  hierarchicalRows.map((r, idx) => {
+                    if (r.type === "header") {
+                      return (
+                        <tr key={`h-${r.code}-${idx}`} className="bg-slate-50/40">
+                          <td className="px-4 py-1.5 font-mono text-xs font-bold text-ink-900">
+                            {r.code}
+                          </td>
+                          <td
+                            colSpan={5}
+                            className="px-4 py-1.5 font-bold text-xs text-ink-900 tracking-wide uppercase"
+                            style={{ paddingLeft: `${r.level * 16 + 16}px` }}
+                          >
+                            {r.name}
+                          </td>
+                        </tr>
+                      );
+                    }
 
-                  return (
-                    <tr key={r.code} className="hover:bg-lilac-50/30 transition-colors">
-                      <td className="px-4 py-2.5 font-mono text-xs font-medium text-ink-500">
-                        {r.code}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-ink-900 font-medium">{r.name}</span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-normal ${
-                              r.nature === "acreedora"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                    if (r.type === "subtotal") {
+                      return (
+                        <tr key={`sub-${r.name}-${idx}`} className="bg-white text-xs font-bold text-ink-900">
+                          <td className="px-4 py-2 font-mono text-xs text-ink-700 font-bold">
+                            = TOTAL =
+                          </td>
+                          <td
+                            className="px-4 py-2 uppercase font-bold text-ink-800"
+                            style={{ paddingLeft: `${r.level * 16 + 16}px` }}
+                          >
+                            {r.name}
+                          </td>
+                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                            {fmt(r.saldoAnterior)}
+                          </td>
+                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                            {r.debe > 0 ? fmt(r.debe) : "0.00"}
+                          </td>
+                          <td className="px-4 py-2 text-right border-t border-slate-300 font-medium text-ink-800">
+                            {r.haber > 0 ? fmt(r.haber) : "0.00"}
+                          </td>
+                          <td
+                            className={`px-4 py-2 text-right border-t border-slate-300 font-bold ${
+                              r.saldoActual < 0 ? "text-red-600" : "text-ink-900"
                             }`}
                           >
-                            {r.nature === "acreedora" ? "Acreedora" : "Deudora"}
-                          </span>
-                        </div>
-                      </td>
-                      <td
-                        className={`px-4 py-2.5 text-right font-medium ${
-                          !hasPrev
-                            ? "text-ink-300"
-                            : r.prevBalance >= 0
-                            ? "text-ink-700"
-                            : "text-red-600 font-semibold"
-                        }`}
-                      >
-                        {hasPrev ? `$${fmt(r.prevBalance)}` : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-green-700 font-semibold bg-green-50/20">
-                        {hasDeb ? `$${fmt(r.monthDebit)}` : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-red-600 font-semibold bg-red-50/20">
-                        {hasCred ? `$${fmt(r.monthCredit)}` : "—"}
-                      </td>
-                      <td
-                        className={`px-4 py-2.5 text-right font-bold bg-lilac-50/30 ${
-                          !hasFinal
-                            ? "text-ink-300 font-normal"
-                            : r.finalBalance >= 0
-                            ? "text-ink-900"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {hasFinal ? `$${fmt(r.finalBalance)}` : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
+                            {fmt(r.saldoActual)}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Cuenta de movimiento
+                    return (
+                      <tr key={`mov-${r.code}-${idx}`} className="hover:bg-slate-50/50 transition-colors text-xs">
+                        <td className="px-4 py-1.5 font-mono text-ink-600">
+                          {r.code}
+                        </td>
+                        <td
+                          className="px-4 py-1.5 text-ink-800"
+                          style={{ paddingLeft: `${(r.level + 1) * 16 + 16}px` }}
+                        >
+                          {r.name}
+                        </td>
+                        <td
+                          className={`px-4 py-1.5 text-right font-medium ${
+                            r.saldoAnterior < 0 ? "text-red-600" : "text-ink-700"
+                          }`}
+                        >
+                          {fmt(r.saldoAnterior)}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-medium text-ink-700">
+                          {r.debe > 0 ? fmt(r.debe) : "0.00"}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-medium text-ink-700">
+                          {r.haber > 0 ? fmt(r.haber) : "0.00"}
+                        </td>
+                        <td
+                          className={`px-4 py-1.5 text-right font-semibold ${
+                            r.saldoActual < 0 ? "text-red-600 font-bold" : "text-ink-900"
+                          }`}
+                        >
+                          {fmt(r.saldoActual)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  // ── Vista Plana (Solo Cuentas de Movimiento) ──
+                  balanceRows.map((r) => {
+                    return (
+                      <tr key={r.code} className="hover:bg-slate-50/50 transition-colors text-xs">
+                        <td className="px-4 py-2 font-mono text-ink-600 font-medium">
+                          {r.code}
+                        </td>
+                        <td className="px-4 py-2 text-ink-800 font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>{r.name}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-normal ${
+                                r.nature === "acreedora"
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                  : "bg-blue-50 text-blue-700 border border-blue-200"
+                              }`}
+                            >
+                              {r.nature === "acreedora" ? "Acreedora" : "Deudora"}
+                            </span>
+                          </div>
+                        </td>
+                        <td
+                          className={`px-4 py-2 text-right font-medium ${
+                            r.prevBalance < 0 ? "text-red-600" : "text-ink-700"
+                          }`}
+                        >
+                          {fmt(r.prevBalance)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-green-700 font-medium">
+                          {r.monthDebit > 0 ? fmt(r.monthDebit) : "0.00"}
+                        </td>
+                        <td className="px-4 py-2 text-right text-red-600 font-medium">
+                          {r.monthCredit > 0 ? fmt(r.monthCredit) : "0.00"}
+                        </td>
+                        <td
+                          className={`px-4 py-2 text-right font-bold ${
+                            r.finalBalance < 0 ? "text-red-600" : "text-ink-900"
+                          }`}
+                        >
+                          {fmt(r.finalBalance)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
-              <tfoot className="bg-lilac-50/80 font-bold text-sm border-t-2 border-lilac-200">
+              <tfoot className="bg-slate-100 font-bold text-xs border-t-2 border-slate-400">
                 <tr>
-                  <td colSpan={2} className="px-4 py-3 text-ink-800">
-                    TOTALES DEL PERÍODO
-                  </td>
-                  <td className="px-4 py-3 text-right text-ink-700 font-semibold">
-                    ${fmt(totalPrevBalance)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-green-800 bg-green-100/40">
-                    ${fmt(totalDebit)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-red-700 bg-red-100/40">
-                    ${fmt(totalCredit)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-ink-900 bg-lilac-100/40">
-                    ${fmt(totalFinalBalance)}
-                  </td>
+                  <td className="px-4 py-3 font-mono font-bold text-ink-900">= TOTAL GENERAL =</td>
+                  <td className="px-4 py-3 uppercase font-bold text-ink-900">BALANCE DE COMPROBACIÓN NIIF</td>
+                  <td className="px-4 py-3 text-right text-ink-800">${fmt(totalPrevBalance)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalDebit)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalCredit)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalFinalBalance)}</td>
                 </tr>
-                <tr className="border-t border-lilac-200/60 bg-white text-xs font-normal">
+                <tr className="border-t border-slate-200 bg-white text-xs font-normal">
                   <td colSpan={6} className="px-4 py-2.5 text-ink-600">
                     <div className="flex items-center justify-between flex-wrap gap-4">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-ink-700">Cuadre del Mes:</span>
+                        <span className="font-semibold text-ink-700">Partida Doble (Mes):</span>
                         <span
                           className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full ${
                             Math.abs(totalDebit - totalCredit) < 0.01
