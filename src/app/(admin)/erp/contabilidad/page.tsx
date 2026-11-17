@@ -1,11 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck, ListTree, FileCheck2, Calendar, CheckCircle2 } from "lucide-react";
-import { assertPermission } from "@/lib/auth-action";
+import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 import ExportarExcelContableButton from "./ExportarExcelContableButton";
 import SincronizarAsientosButton from "./SincronizarAsientosButton";
 import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
+import NuevoAsientoManualModal from "./NuevoAsientoManualModal";
+import EliminarAsientoManualButton from "./EliminarAsientoManualButton";
 
 export const dynamic = "force-dynamic";
 
@@ -33,8 +35,14 @@ function getEntryBadge(refType: string, desc: string) {
   if (refType === "credit_note") {
     return { label: "Nota de Crédito", color: "bg-amber-50 text-amber-800 border-amber-200" };
   }
+  if (refType === "manual") {
+    return { label: "Asiento Manual", color: "bg-purple-100 text-purple-900 border-purple-300 font-bold" };
+  }
   if (d.includes("depósito") || d.includes("deposito")) {
     return { label: "Depósito Bancario", color: "bg-sky-50 text-sky-800 border-sky-200" };
+  }
+  if (d.includes("cruce") || d.includes("pago") || d.includes("banco") || d.includes("préstamo") || d.includes("prestamo")) {
+    return { label: "Pago / Cruce", color: "bg-indigo-50 text-indigo-800 border-indigo-200" };
   }
   if (d.includes("cierre")) {
     return { label: "Cierre", color: "bg-orange-50 text-orange-800 border-orange-200" };
@@ -129,6 +137,7 @@ export default async function ContabilidadPage({
   searchParams: Promise<{ tab?: string; period?: string; view?: string }>;
 }) {
   await assertPermission("/erp/contabilidad");
+  const canWrite = await hasWritePermission("/erp/contabilidad");
   const searchParams = await searchParamsPromise;
   const tab    = searchParams.tab    ?? "diario";
   const view   = searchParams.view   ?? "tree";
@@ -155,8 +164,16 @@ export default async function ContabilidadPage({
   ] = await Promise.all([
     supabase.from("monthly_closures").select("period").eq("status", "closed"),
     supabase.from("annual_closures").select("year").eq("status", "closed"),
-    supabase.from("accounts").select("code, name, is_movement, type, parent_code").order("code", { ascending: true }),
+    supabase.from("accounts").select("code, name, is_movement, type, subtype, parent_code, active").order("code", { ascending: true }),
   ]);
+
+  const movementAccounts = (rawAccounts ?? [])
+    .filter((a: any) => a.is_movement !== false && a.subtype !== "grupo")
+    .map((a: any) => ({
+      code: a.code,
+      name: a.name,
+      type: a.type,
+    }));
 
   const monthlyClosedSet = new Set((monthlyRecords ?? []).map((c: any) => c.period));
   const annualClosedYears = new Set((annualRecords ?? []).map((a: any) => Number(a.year)));
@@ -677,7 +694,7 @@ export default async function ContabilidadPage({
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2.5">
           <FileBarChart2 size={22} className="text-lilac-600" />
           <div>
@@ -685,6 +702,13 @@ export default async function ContabilidadPage({
             <p className="text-xs text-ink-400">Libros contables NIIF, reportes financieros y obligaciones tributarias</p>
           </div>
         </div>
+        <NuevoAsientoManualModal
+          accounts={movementAccounts}
+          closedMonths={Array.from(monthlyClosedSet)}
+          closedYears={Array.from(annualClosedYears)}
+          defaultDate={period !== "all" ? `${period}-01` : undefined}
+          canEdit={canWrite}
+        />
       </div>
 
       {/* Acceso Rápido a Módulos Contables */}
@@ -802,7 +826,14 @@ export default async function ContabilidadPage({
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto flex-wrap">
+              <NuevoAsientoManualModal
+                accounts={movementAccounts}
+                closedMonths={Array.from(monthlyClosedSet)}
+                closedYears={Array.from(annualClosedYears)}
+                defaultDate={period !== "all" ? `${period}-01` : undefined}
+                canEdit={canWrite}
+              />
               <SincronizarAsientosButton period={period} />
               <ExportarExcelContableButton
                 tab="diario"
@@ -897,30 +928,51 @@ export default async function ContabilidadPage({
                                 return (
                                   <div key={entry.id} className="p-2.5 sm:p-3 space-y-2">
                                     {/* Cabecera del Asiento: Código Único + Badge + Glosa Limpia */}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-xs tracking-tight shadow-2xs ${
-                                        isCollection ? "bg-emerald-700 text-white" : isPayment ? "bg-blue-600 text-white" : "bg-lilac-800 text-white"
-                                      }`}>
-                                        {entryCode}
-                                      </span>
-
-                                      {!hasMultiple && (
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${badge.color} shrink-0`}>
-                                          {badge.label}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-xs tracking-tight shadow-2xs ${
+                                          isCollection
+                                            ? "bg-emerald-700 text-white"
+                                            : isPayment
+                                            ? "bg-blue-600 text-white"
+                                            : entry.reference_type === "manual"
+                                            ? "bg-purple-700 text-white"
+                                            : "bg-lilac-800 text-white"
+                                        }`}>
+                                          {entryCode}
                                         </span>
-                                      )}
 
-                                      <h5 className="text-xs font-bold text-ink-800">
-                                        {hasMultiple
-                                          ? (isCollection
-                                              ? "Cobro / Recaudación Bancaria / Caja"
-                                              : isPayment
-                                              ? "Pago / Cruce con Banco"
-                                              : isInvoice
-                                              ? "Factura de Venta (Devengo)"
-                                              : "Causación del Gasto (Devengo)")
-                                          : cleanTitle}
-                                      </h5>
+                                        {!hasMultiple && (
+                                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${badge.color} shrink-0`}>
+                                            {badge.label}
+                                          </span>
+                                        )}
+
+                                        <h5 className="text-xs font-bold text-ink-800">
+                                          {hasMultiple
+                                            ? (isCollection
+                                                ? "Cobro / Recaudación Bancaria / Caja"
+                                                : isPayment
+                                                ? "Pago / Cruce con Banco"
+                                                : isInvoice
+                                                ? "Factura de Venta (Devengo)"
+                                                : "Causación del Gasto (Devengo)")
+                                            : cleanTitle}
+                                        </h5>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {entry.reference_type === "manual" && canWrite && (
+                                          <EliminarAsientoManualButton
+                                            entryId={entry.id}
+                                            entryCode={entryCode}
+                                            isPeriodClosed={
+                                              monthlyClosedSet.has(entry.entry_date.slice(0, 7)) ||
+                                              annualClosedYears.has(Number(entry.entry_date.slice(0, 4)))
+                                            }
+                                          />
+                                        )}
+                                      </div>
                                     </div>
 
                                     {/* Tabla Contable: Código, Cuenta, Débito, Crédito */}

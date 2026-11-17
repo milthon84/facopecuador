@@ -1331,3 +1331,101 @@ export async function createAnnualClosingJournalEntry(params: {
     user_email:     params.user_email,
   });
 }
+
+// ── Asiento Manual / Ajustes Contables NIIF ────────────────────────────────
+export async function createManualJournalEntry(params: {
+  entry_date:       string;
+  description:      string;
+  reference?:       string | null;
+  lines:            JournalLine[];
+  user_id?:         string | null;
+  user_email?:      string | null;
+}) {
+  if (!params.entry_date) {
+    throw new Error("La fecha del asiento es obligatoria.");
+  }
+
+  await assertMonthOpen(params.entry_date);
+
+  const cleanDesc = (params.description || "").trim();
+  if (!cleanDesc) {
+    throw new Error("El concepto o glosa del asiento es obligatorio.");
+  }
+
+  const cleanLines = (params.lines || []).map(l => ({
+    account_code: (l.account_code || "").trim(),
+    account_name: (l.account_name || "").trim(),
+    debit:        r2(Number(l.debit || 0)),
+    credit:       r2(Number(l.credit || 0)),
+    description:  (l.description || "").trim() || undefined,
+  })).filter(l => l.account_code && (l.debit > 0 || l.credit > 0));
+
+  if (cleanLines.length < 2) {
+    throw new Error("El asiento debe contener al menos dos líneas contables con montos mayores a 0.");
+  }
+
+  for (const l of cleanLines) {
+    if (l.debit > 0 && l.credit > 0) {
+      throw new Error(`La línea de la cuenta "${l.account_code} - ${l.account_name}" no puede tener valores en Débito y Crédito simultáneamente.`);
+    }
+  }
+
+  const totalDebit  = r2(cleanLines.reduce((s, l) => s + l.debit, 0));
+  const totalCredit = r2(cleanLines.reduce((s, l) => s + l.credit, 0));
+  const diff        = r2(Math.abs(totalDebit - totalCredit));
+
+  if (diff > 0 || totalDebit <= 0) {
+    throw new Error(`El asiento no cumple con la partida doble. Total Débito: $${totalDebit.toFixed(2)}, Total Crédito: $${totalCredit.toFixed(2)}. Diferencia: $${diff.toFixed(2)}.`);
+  }
+
+  const fullDesc = params.reference && params.reference.trim()
+    ? `[Ref: ${params.reference.trim()}] ${cleanDesc}`
+    : cleanDesc;
+
+  return insertJournalEntry({
+    entry_date:     params.entry_date,
+    description:    fullDesc,
+    reference_type: "manual",
+    reference_id:   null,
+    lines:          cleanLines,
+    user_id:        params.user_id,
+    user_email:     params.user_email,
+  });
+}
+
+export async function deleteManualJournalEntry(entryId: string) {
+  if (!entryId) throw new Error("ID de asiento requerido.");
+  const supabase = createAdminClient();
+
+  const { data: entry, error: fetchErr } = await supabase
+    .from("journal_entries")
+    .select("id, entry_date, reference_type")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  if (fetchErr || !entry) {
+    throw new Error("Asiento no encontrado.");
+  }
+
+  if (entry.reference_type !== "manual") {
+    throw new Error("Solo se permite anular o eliminar asientos registrados manualmente.");
+  }
+
+  await assertMonthOpen(entry.entry_date);
+
+  const { error: linesErr } = await supabase
+    .from("journal_lines")
+    .delete()
+    .eq("journal_entry_id", entryId);
+
+  if (linesErr) throw new Error(`Error al eliminar líneas del asiento: ${linesErr.message}`);
+
+  const { error: entryErr } = await supabase
+    .from("journal_entries")
+    .delete()
+    .eq("id", entryId);
+
+  if (entryErr) throw new Error(`Error al eliminar asiento: ${entryErr.message}`);
+
+  return true;
+}

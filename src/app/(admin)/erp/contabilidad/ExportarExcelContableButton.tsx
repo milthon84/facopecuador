@@ -82,6 +82,8 @@ export default function ExportarExcelContableButton({
               ? "Gasto (Compra)"
               : entry.reference_type === "credit_note"
               ? "Nota de Crédito"
+              : entry.reference_type === "manual"
+              ? "Asiento Manual / Ajuste"
               : entry.reference_type || "Diario";
 
           const lines = entry.lines || [];

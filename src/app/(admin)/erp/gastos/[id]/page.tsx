@@ -39,7 +39,7 @@ import {
 } from "@/lib/expense-areas";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
 import ComprobanteAdjuntoCard from "./ComprobanteAdjuntoCard";
-import AsientoContableModal from "./AsientoContableModal";
+import AsientoContableModal from "@/components/AsientoContableModal";
 import ComprobanteModalButton from "./ComprobanteModalButton";
 import { JournalEntryItem } from "./AsientoContableGastoCard";
 import {
