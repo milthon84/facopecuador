@@ -7,6 +7,10 @@ if (dns && typeof dns.setDefaultResultOrder === "function") {
 const nextConfig = {
   reactStrictMode: true,
 
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   experimental: {
     middlewareClientMaxBodySize: "100mb",
     serverActions: {

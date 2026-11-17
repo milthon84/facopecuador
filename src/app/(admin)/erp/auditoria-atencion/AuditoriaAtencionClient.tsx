@@ -404,7 +404,6 @@ export default function AuditoriaAtencionClient({ initialChats, initialAudits }:
     if (periodDates.start && periodDates.end) {
       fetchChats(periodDates.start, periodDates.end);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodDates.start, periodDates.end]);
 
   const fetchHistorial = async () => {

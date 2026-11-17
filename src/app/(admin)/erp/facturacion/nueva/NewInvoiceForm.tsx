@@ -256,7 +256,7 @@ export default function NewInvoiceForm({
       ...item,
       discount: isCashOrTransfer ? Math.round((item.quantity * item.unit_price) * (discountRate / 100) * 100) / 100 : 0
     })));
-  }, [paymentMethod, discountRate]);
+  }, [paymentMethod, discountRate, isCashOrTransfer]);
 
   function addFromCatalog(s: Service) {
     const price = Number(s.price);

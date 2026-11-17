@@ -57,8 +57,6 @@ export default function NuevoAsientoManualModal({
     { id: "2", account_code: "", account_name: "", debit: "", credit: "", description: "" },
   ]);
 
-  if (!canEdit) return null;
-
   // Validar si el mes o año está cerrado contablemente
   const isPeriodClosed = useMemo(() => {
     if (!entryDate) return false;
@@ -247,6 +245,8 @@ export default function NuevoAsientoManualModal({
       setLoading(false);
     }
   }
+
+  if (!canEdit) return null;
 
   return (
     <>

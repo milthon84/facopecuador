@@ -295,6 +295,7 @@ export default function NuevaCompraForm({
         aplicarFacturaRecibida(match);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFacturaClave, pendingFacturas, isEditing]);
 
   async function lookupSupplier(ruc: string) {

@@ -30,10 +30,9 @@ export default function TeacherMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync state if initialSelectedIds changes externally
-  const initialKey = initialSelectedIds.join(",");
   useEffect(() => {
     setSelectedIds(initialSelectedIds);
-  }, [initialKey]);
+  }, [initialSelectedIds]);
 
   // Click outside to close dropdown
   useEffect(() => {

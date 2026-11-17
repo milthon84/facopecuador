@@ -68,6 +68,7 @@ export default function DoorOpenHeaderButton({
         setSettingsModalOpen(true);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadSettings() {

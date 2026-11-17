@@ -172,7 +172,7 @@ export default function DeclaracionesClient({
 
       return true;
     });
-  }, [documents, viewAllMonths, selectedPeriod, selectedYear, categoryFilter, searchQuery]);
+  }, [documents, viewAllMonths, selectedPeriod, selectedYear, selectedMonth, categoryFilter, searchQuery]);
 
   // Estado de las 4 obligaciones principales del mes seleccionado
   const activeMonthDocs = docsByMonth[selectedMonth] || [];
