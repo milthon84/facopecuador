@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -88,28 +88,218 @@ interface Props {
 const fmt = (n: number) =>
   n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const fmt4 = (n: number) =>
-  n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-
 function getModBadge(mod: string) {
   switch (mod) {
     case "ING":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ING</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ING</span>;
     case "EGR":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">EGR</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-blue-50 text-blue-700 border border-blue-200">EGR</span>;
     case "FAC":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">FAC</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-purple-50 text-purple-700 border border-purple-200">FAC</span>;
     case "GAS":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">GAS</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-rose-50 text-rose-700 border border-rose-200">GAS</span>;
     case "NC":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">NC</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-amber-50 text-amber-800 border border-amber-200">NC</span>;
     case "MAN":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200">MAN</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-violet-100 text-violet-800 border border-violet-200">MAN</span>;
     case "CIE":
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200">CIE</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-orange-50 text-orange-800 border border-orange-200">CIE</span>;
     default:
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">{mod}</span>;
+      return <span className="px-1.5 py-0.5 rounded text-[10px] print:text-[8px] font-bold bg-slate-100 text-slate-700 border border-slate-200">{mod}</span>;
   }
+}
+
+// ── COMBOBOX BUSCADOR UNIFICADO DE CUENTAS (Estilo Nuevo Asiento / Arriba) ──
+function MayorAccountCombobox({
+  accounts,
+  selectedCode,
+  onSelect,
+  onOpenF8,
+}: {
+  accounts: AccountOption[];
+  selectedCode: string;
+  onSelect: (code: string) => void;
+  onOpenF8: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const selectedAccount = useMemo(() => {
+    if (!selectedCode) return null;
+    return accounts.find((a) => a.code === selectedCode) || null;
+  }, [accounts, selectedCode]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return accounts.slice(0, 50);
+    const q = query.toLowerCase().trim();
+    return accounts
+      .filter((a) => a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q))
+      .slice(0, 50);
+  }, [accounts, query]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <div
+        className={`w-full flex items-center justify-between gap-1.5 text-xs rounded-xl px-3 py-2 border bg-slate-50 transition cursor-pointer hover:bg-white ${
+          selectedCode
+            ? "border-purple-300 ring-1 ring-purple-100 bg-purple-50/20"
+            : "border-slate-200 text-ink-600 hover:border-slate-300"
+        }`}
+        onClick={() => {
+          setOpen((p) => !p);
+          setQuery("");
+        }}
+      >
+        <div className="flex-1 text-left truncate flex items-center gap-2">
+          {selectedAccount ? (
+            <>
+              <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 shrink-0">
+                {selectedAccount.code}
+              </span>
+              <span className="truncate font-semibold text-ink-900 text-xs">
+                {selectedAccount.name}
+              </span>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-ink-600">
+              <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span>
+              <span className="font-medium text-xs">
+                Todas las Cuentas (Procesar todas con movimiento)
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {selectedCode && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect("");
+              }}
+              title="Restablecer a Todas las Cuentas"
+              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <div className="text-slate-400 p-0.5">
+            <ChevronDown size={14} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
+          </div>
+        </div>
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 w-full min-w-[320px] max-w-lg bg-white border border-purple-100 rounded-2xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Buscar por código (ej: 1.1) o nombre (ej: Banco)..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full text-xs pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white"
+            />
+          </div>
+
+          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50">
+            {/* Opción 0: Todas las Cuentas */}
+            <button
+              type="button"
+              onClick={() => {
+                onSelect("");
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 text-xs rounded-xl transition flex items-center justify-between cursor-pointer mb-1 ${
+                !selectedCode
+                  ? "bg-purple-100/70 font-bold text-purple-950"
+                  : "bg-purple-50/50 hover:bg-purple-100/60 text-purple-900"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                <span className="font-semibold">★ Procesar Todas las Cuentas (Con movimiento)</span>
+              </div>
+              <span className="text-[10px] font-bold text-purple-700 bg-white/80 px-2 py-0.5 rounded-md border border-purple-200">
+                General
+              </span>
+            </button>
+
+            {filtered.length === 0 ? (
+              <p className="p-4 text-center text-xs text-slate-400">
+                No se encontraron cuentas con el criterio ingresado.
+              </p>
+            ) : (
+              filtered.map((acc) => (
+                <button
+                  key={acc.code}
+                  type="button"
+                  onClick={() => {
+                    onSelect(acc.code);
+                    setOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-xs hover:bg-purple-50/80 rounded-xl transition flex items-center justify-between cursor-pointer ${
+                    selectedCode === acc.code
+                      ? "bg-purple-50 font-bold text-purple-900"
+                      : "text-slate-800"
+                  }`}
+                >
+                  <div className="truncate pr-2 flex items-center gap-2">
+                    <span className="font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 border border-purple-100">
+                      {acc.code}
+                    </span>
+                    <span className="truncate">{acc.name}</span>
+                  </div>
+                  {acc.type && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded uppercase font-semibold bg-slate-100 text-slate-500 shrink-0">
+                      {acc.type}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-between px-1">
+            <span className="text-[11px] text-slate-400">
+              {filtered.length} de {accounts.length} cuentas
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenF8();
+              }}
+              className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 flex items-center gap-1 hover:underline cursor-pointer"
+            >
+              <ListTree size={12} />
+              Ver Catálogo Completo (F8)
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LibroMayorClient({
@@ -137,12 +327,7 @@ export default function LibroMayorClient({
   // Estados de filtros
   const [desde, setDesde] = useState(initialDesde);
   const [hasta, setHasta] = useState(initialHasta);
-  const [cuentaMode, setCuentaMode] = useState<"todas" | "especifica" | "rango">(
-    initialCuenta ? "especifica" : initialCuentaDesde || initialCuentaHasta ? "rango" : "todas"
-  );
-  const [cuenta, setCuenta] = useState(initialCuenta);
-  const [cuentaDesde, setCuentaDesde] = useState(initialCuentaDesde);
-  const [cuentaHasta, setCuentaHasta] = useState(initialCuentaHasta);
+  const [cuenta, setCuenta] = useState(initialCuenta || initialCuentaDesde || "");
   const [tipo, setTipo] = useState(initialTipo);
   const [doc, setDoc] = useState(initialDoc);
   const [soloConMovimientos, setSoloConMovimientos] = useState(initialSoloConMovimientos);
@@ -151,7 +336,6 @@ export default function LibroMayorClient({
   // UI state
   const [showFilters, setShowFilters] = useState(!isGenerated);
   const [showF8Modal, setShowF8Modal] = useState(false);
-  const [f8Target, setF8Target] = useState<"cuenta" | "cuentaDesde" | "cuentaHasta">("cuenta");
   const [f8Search, setF8Search] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -166,7 +350,6 @@ export default function LibroMayorClient({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "F8") {
         e.preventDefault();
-        setF8Target("cuenta");
         setShowF8Modal(true);
       }
     };
@@ -214,11 +397,8 @@ export default function LibroMayorClient({
     params.set("generar", "1");
     if (desde) params.set("desde", desde);
     if (hasta) params.set("hasta", hasta);
-    if (cuentaMode === "especifica" && cuenta) {
+    if (cuenta) {
       params.set("cuenta", cuenta);
-    } else if (cuentaMode === "rango") {
-      if (cuentaDesde) params.set("cuentaDesde", cuentaDesde);
-      if (cuentaHasta) params.set("cuentaHasta", cuentaHasta);
     }
     if (tipo && tipo !== "todos") params.set("tipo", tipo);
     if (doc) params.set("doc", doc);
@@ -232,10 +412,7 @@ export default function LibroMayorClient({
 
   const handleResetFilters = () => {
     applyPreset("este_mes");
-    setCuentaMode("todas");
     setCuenta("");
-    setCuentaDesde("");
-    setCuentaHasta("");
     setTipo("todos");
     setDoc("");
     setSoloConMovimientos(true);
@@ -260,7 +437,7 @@ export default function LibroMayorClient({
         C: `Fecha Emisión: ${new Date().toLocaleDateString("es-EC")}`,
       });
       rows.push({
-        A: `Desde: ${cuentaDesde || cuenta || "Todas"}  Hasta: ${cuentaHasta || cuenta || "Todas"}`,
+        A: `Cuenta: ${cuenta || "Todas las Cuentas"}`,
         D: `Período: ${desde}  al  ${hasta}`,
       });
       rows.push({}); // Fila en blanco
@@ -382,22 +559,54 @@ export default function LibroMayorClient({
   }, [accountOptions, f8Search]);
 
   const selectAccountF8 = (code: string) => {
-    if (f8Target === "cuenta") {
-      setCuenta(code);
-      setCuentaMode("especifica");
-    } else if (f8Target === "cuentaDesde") {
-      setCuentaDesde(code);
-      setCuentaMode("rango");
-    } else if (f8Target === "cuentaHasta") {
-      setCuentaHasta(code);
-      setCuentaMode("rango");
-    }
+    setCuenta(code);
     setShowF8Modal(false);
     setF8Search("");
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
+      {/* ── ESTILOS GLOBALES DE IMPRESIÓN (SIN SCROLLBARS Y COLUMNAS AJUSTADAS AL 100%) ── */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          @media print {
+            @page {
+              size: auto;
+              margin: 8mm 6mm 10mm 6mm;
+            }
+            html, body {
+              overflow: visible !important;
+              background: white !important;
+            }
+            ::-webkit-scrollbar {
+              display: none !important;
+              width: 0 !important;
+              height: 0 !important;
+            }
+            * {
+              scrollbar-width: none !important;
+              -ms-overflow-style: none !important;
+            }
+            .overflow-x-auto {
+              overflow: visible !important;
+              overflow-x: visible !important;
+            }
+            table {
+              width: 100% !important;
+              table-layout: fixed !important;
+            }
+            tr {
+              page-break-inside: avoid !important;
+            }
+            .break-inside-avoid {
+              page-break-inside: avoid !important;
+            }
+          }
+        `,
+        }}
+      />
+
       {/* ── BLOQUEO DE PANTALLA MIENTRAS GENERA EL LIBRO MAYOR (Como el resto de procesos del sistema) ── */}
       {(isGenerating || isPending) && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
@@ -471,7 +680,7 @@ export default function LibroMayorClient({
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-all ${
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
               showFilters
                 ? "bg-purple-50 text-purple-700 border-purple-300 ring-2 ring-purple-100"
                 : "bg-white text-ink-700 border-slate-200 hover:bg-slate-50"
@@ -487,7 +696,7 @@ export default function LibroMayorClient({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-ink-700 hover:bg-slate-50 shadow-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-ink-700 hover:bg-slate-50 shadow-sm cursor-pointer"
               >
                 <Printer size={14} className="text-blue-600" />
                 Imprimir / PDF
@@ -497,7 +706,7 @@ export default function LibroMayorClient({
                 type="button"
                 onClick={handleExportExcel}
                 disabled={exportingExcel}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-sm transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-sm transition-all cursor-pointer"
               >
                 <FileSpreadsheet size={14} className="text-emerald-600" />
                 {exportingExcel ? "Exportando..." : "Exportar Excel"}
@@ -507,7 +716,7 @@ export default function LibroMayorClient({
         </div>
       </div>
 
-      {/* ── PANEL DE FILTROS DEL INFORME (Matching Screenshot) ── */}
+      {/* ── PANEL DE FILTROS DEL INFORME (Matching Screenshot + Selector Unificado) ── */}
       {showFilters && (
         <form
           onSubmit={handleGenerar}
@@ -527,28 +736,28 @@ export default function LibroMayorClient({
               <button
                 type="button"
                 onClick={() => applyPreset("este_mes")}
-                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors"
+                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors cursor-pointer"
               >
                 Este Mes
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("mes_anterior")}
-                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors"
+                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors cursor-pointer"
               >
                 Mes Anterior
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("trimestre")}
-                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors"
+                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors cursor-pointer"
               >
                 Trimestre
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset("anio")}
-                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors"
+                className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-slate-100 hover:bg-purple-100 hover:text-purple-800 text-ink-700 transition-colors cursor-pointer"
               >
                 Año en Curso
               </button>
@@ -620,17 +829,14 @@ export default function LibroMayorClient({
               </div>
             </div>
 
-            {/* Columna 2: Cuentas Contables y Presione F8 */}
+            {/* Columna 2: Cuentas Contables (UNIFICADO EN UN SOLO BUSCADOR ELEGANTE) */}
             <div className="space-y-3.5">
               <div className="flex items-center justify-between text-xs font-semibold text-ink-700">
-                <span>SELECCIÓN DE CUENTAS</span>
+                <span>CUENTA CONTABLE</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setF8Target(cuentaMode === "rango" ? "cuentaDesde" : "cuenta");
-                    setShowF8Modal(true);
-                  }}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 px-2.5 py-0.5 rounded-lg transition-colors border border-purple-200"
+                  onClick={() => setShowF8Modal(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 px-2.5 py-0.5 rounded-lg transition-colors border border-purple-200 cursor-pointer"
                   title="Abrir Plan de Cuentas (Tecla F8)"
                 >
                   <ListTree size={12} />
@@ -638,119 +844,30 @@ export default function LibroMayorClient({
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 text-xs">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cuentaMode"
-                    checked={cuentaMode === "todas"}
-                    onChange={() => setCuentaMode("todas")}
-                    className="accent-purple-600"
-                  />
-                  <span>Todas</span>
+              {/* Combobox con buscador unificado (como en Asientos Manuales) */}
+              <div>
+                <label className="block text-[11px] font-medium text-ink-500 mb-1">
+                  Seleccione o busque una cuenta:
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cuentaMode"
-                    checked={cuentaMode === "especifica"}
-                    onChange={() => setCuentaMode("especifica")}
-                    className="accent-purple-600"
-                  />
-                  <span>Una Cuenta</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cuentaMode"
-                    checked={cuentaMode === "rango"}
-                    onChange={() => setCuentaMode("rango")}
-                    className="accent-purple-600"
-                  />
-                  <span>Rango Cuentas</span>
-                </label>
+                <MayorAccountCombobox
+                  accounts={accountOptions}
+                  selectedCode={cuenta}
+                  onSelect={(code) => setCuenta(code)}
+                  onOpenF8={() => setShowF8Modal(true)}
+                />
               </div>
 
-              {cuentaMode === "especifica" && (
-                <div>
-                  <label className="block text-[11px] font-medium text-ink-600 mb-1">
-                    Cuenta Contable de Movimiento
-                  </label>
-                  <select
-                    value={cuenta}
-                    onChange={(e) => setCuenta(e.target.value)}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-ink-800 font-mono focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white"
-                  >
-                    <option value="">-- Seleccione o busque una cuenta --</option>
-                    {accountOptions.map((a) => (
-                      <option key={a.code} value={a.code}>
-                        {a.code} — {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {cuentaMode === "rango" && (
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-medium text-ink-500 mb-1">
-                      CUENTA DESDE
-                    </label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        placeholder="1.1.01.01"
-                        value={cuentaDesde}
-                        onChange={(e) => setCuentaDesde(e.target.value)}
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setF8Target("cuentaDesde");
-                          setShowF8Modal(true);
-                        }}
-                        className="p-2 text-slate-500 hover:text-purple-600 border border-slate-200 rounded-xl hover:bg-purple-50"
-                        title="Buscar cuenta desde"
-                      >
-                        <Search size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium text-ink-500 mb-1">
-                      CUENTA HASTA
-                    </label>
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        placeholder="1.1.02.02"
-                        value={cuentaHasta}
-                        onChange={(e) => setCuentaHasta(e.target.value)}
-                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-ink-800 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setF8Target("cuentaHasta");
-                          setShowF8Modal(true);
-                        }}
-                        className="p-2 text-slate-500 hover:text-purple-600 border border-slate-200 rounded-xl hover:bg-purple-50"
-                        title="Buscar cuenta hasta"
-                      >
-                        <Search size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {cuentaMode === "todas" && (
-                <div className="bg-purple-50/60 border border-purple-100 rounded-xl p-3 text-xs text-purple-900 leading-relaxed">
-                  ✓ Se procesarán todas las cuentas con actividad contable dentro del período.
-                </div>
-              )}
+              <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-2.5 text-[11px] text-purple-900 leading-relaxed">
+                {cuenta ? (
+                  <span>
+                    ✓ Filtrando únicamente la cuenta <strong>{cuenta}</strong>. Para procesar todo el libro mayor, haga clic en la cruz (X).
+                  </span>
+                ) : (
+                  <span>
+                    ✓ <strong>Todas las Cuentas:</strong> Se procesarán todas las cuentas con actividad contable en el período seleccionado.
+                  </span>
+                )}
+              </div>
 
               <div className="pt-1">
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-ink-700">
@@ -797,7 +914,7 @@ export default function LibroMayorClient({
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all active:scale-[0.99] disabled:opacity-50 text-sm"
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all active:scale-[0.99] disabled:opacity-50 text-sm cursor-pointer"
                 >
                   <BookOpen size={16} />
                   {isPending ? "Generando Libro Mayor..." : "GENERAR LIBRO MAYOR"}
@@ -806,10 +923,10 @@ export default function LibroMayorClient({
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 py-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center gap-1.5 text-xs text-ink-500 hover:text-ink-800 py-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 >
                   <RotateCcw size={12} />
-                  Restablecer valores por defecto
+                  Restablecer a Todas las Cuentas / Este Mes
                 </button>
               </div>
             </div>
@@ -827,7 +944,7 @@ export default function LibroMayorClient({
             Configure los criterios del informe arriba
           </h3>
           <p className="text-xs text-ink-500 max-w-md mx-auto">
-            Seleccione el período de fechas, cuenta contable específica o rango de cuentas, y haga
+            Seleccione el período de fechas, cuenta contable específica o todas las cuentas, y haga
             clic en <strong>GENERAR LIBRO MAYOR</strong> para calcular saldos iniciales, movimientos y
             saldos progresivos.
           </p>
@@ -848,45 +965,26 @@ export default function LibroMayorClient({
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-50 text-purple-800 border-purple-200">
                   {mayorAccounts.length} Cuentas con actividad
                 </span>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    Math.abs(totalGeneralDebe - totalGeneralHaber) < 0.01
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-red-50 text-red-800 border-red-200"
-                  }`}
-                >
-                  {Math.abs(totalGeneralDebe - totalGeneralHaber) < 0.01
-                    ? "✓ Partida Doble Cuadrada"
-                    : `Descuadre: $${fmt(Math.abs(totalGeneralDebe - totalGeneralHaber))}`}
-                </span>
               </div>
-              <p className="text-xs text-ink-500">
-                Período: <strong className="text-ink-800">{formatDateDMYLocal(desde)}</strong> al{" "}
-                <strong className="text-ink-800">{formatDateDMYLocal(hasta)}</strong> · Cuenta:{" "}
-                <strong className="text-ink-800">
-                  {cuenta
-                    ? `${cuenta}`
-                    : cuentaDesde || cuentaHasta
-                    ? `${cuentaDesde || "Inicio"} a ${cuentaHasta || "Fin"}`
-                    : "Todas las Cuentas"}
-                </strong> · Tipo: <strong className="text-ink-800">{tipo === "todos" ? "Todos los Comprobantes" : tipo}</strong>
+              <p className="text-xs text-ink-500 font-medium">
+                Criterios Activos: Desde <strong>{formatDateDMYLocal(desde)}</strong> hasta <strong>{formatDateDMYLocal(hasta)}</strong> • Cuenta: <strong>{cuenta || "Todas las Cuentas"}</strong> • Tipo: <strong>{tipo === "todos" ? "Todos los Comprobantes" : tipo}</strong>
               </p>
             </div>
 
-            <div className="flex items-center gap-3 bg-purple-50/60 border border-purple-100 rounded-xl px-3.5 py-2 shrink-0 self-start md:self-auto">
+            <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 self-start md:self-auto">
               <div className="text-right">
-                <p className="text-[10px] uppercase font-semibold text-purple-700">Total Débitos</p>
-                <p className="font-mono text-xs font-bold text-emerald-700">${fmt(totalGeneralDebe)}</p>
+                <span className="text-[10px] uppercase text-slate-400 font-bold block">Débito Total</span>
+                <span className="font-mono text-xs font-bold text-emerald-700">${fmt(totalGeneralDebe)}</span>
               </div>
-              <div className="w-px h-6 bg-purple-200"></div>
+              <div className="w-px h-6 bg-slate-200"></div>
               <div className="text-right">
-                <p className="text-[10px] uppercase font-semibold text-purple-700">Total Créditos</p>
-                <p className="font-mono text-xs font-bold text-blue-700">${fmt(totalGeneralHaber)}</p>
+                <span className="text-[10px] uppercase text-slate-400 font-bold block">Crédito Total</span>
+                <span className="font-mono text-xs font-bold text-blue-700">${fmt(totalGeneralHaber)}</span>
               </div>
             </div>
           </div>
 
-          {/* CONTENEDOR DEL DOCUMENTO FORMAL */}
+          {/* DOCUMENTO OFICIAL / HOJA DE REPORTE */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm print:p-0 print:border-none print:shadow-none print:rounded-none space-y-6">
             {/* Encabezado Oficial del Reporte */}
             <div className="border-b-2 border-slate-900 pb-4">
@@ -911,7 +1009,7 @@ export default function LibroMayorClient({
                   </h3>
                   <div className="text-xs text-slate-600 font-medium mt-1 flex items-center justify-center gap-4">
                     <span>
-                      Cuentas: <strong>{cuentaDesde || cuenta || "1.0.00.00"}</strong> al <strong>{cuentaHasta || cuenta || "9.9.99.99"}</strong>
+                      Cuentas: <strong>{cuenta || "1.0.00.00 al 9.9.99.99 (Todas)"}</strong>
                     </span>
                     <span>•</span>
                     <span>
@@ -932,14 +1030,14 @@ export default function LibroMayorClient({
                 No se encontraron movimientos contables para los filtros seleccionados.
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-6 print:space-y-4">
                 {mayorAccounts.map((acc) => (
                   <div
                     key={acc.code}
-                    className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs break-inside-avoid"
+                    className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs print:shadow-none print:border-slate-300 print:rounded-lg break-inside-avoid print:mb-4"
                   >
                     {/* Encabezado de la Cuenta */}
-                    <div className="bg-slate-50/80 border-b border-slate-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="bg-slate-50/80 border-b border-slate-200 px-4 py-3 print:px-3 print:py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg shrink-0">
                           {acc.code}
@@ -964,20 +1062,20 @@ export default function LibroMayorClient({
                       </div>
                     </div>
 
-                    {/* Tabla de Movimientos */}
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-100/70 text-slate-600 uppercase text-[11px] font-bold border-b border-slate-200">
+                    {/* Tabla de Movimientos (Garantizada sin scrollbars en impresión y SALDO 100% visible) */}
+                    <div className="overflow-x-auto print:overflow-visible print:w-full">
+                      <table className="w-full text-xs print:text-[9.5px] print:w-full print:table-fixed">
+                        <thead className="bg-slate-100/70 text-slate-600 uppercase text-[11px] print:text-[9px] font-bold border-b border-slate-200">
                           <tr>
-                            <th className="px-3 py-2 text-left w-24">Fecha</th>
-                            <th className="px-2 py-2 text-center w-14">Mod</th>
-                            <th className="px-2 py-2 text-center w-12">TP</th>
-                            <th className="px-3 py-2 text-left w-36">Asiento</th>
-                            <th className="px-3 py-2 text-left w-44">Referencia</th>
-                            <th className="px-3 py-2 text-left min-w-[200px]">Concepto del Movimiento</th>
-                            <th className="px-3 py-2 text-right w-28">Debe</th>
-                            <th className="px-3 py-2 text-right w-28">Haber</th>
-                            <th className="px-3 py-2 text-right w-32">Saldo</th>
+                            <th className="px-3 py-2 print:px-1.5 print:py-1 text-left w-24 print:w-[10%]">Fecha</th>
+                            <th className="px-2 py-2 print:px-0.5 print:py-1 text-center w-14 print:w-[6%]">Mod</th>
+                            <th className="px-2 py-2 print:px-0.5 print:py-1 text-center w-12 print:w-[5%]">TP</th>
+                            <th className="px-3 py-2 print:px-1 print:py-1 text-left w-32 print:w-[14%]">Asiento</th>
+                            <th className="px-3 py-2 print:px-1 print:py-1 text-left w-36 print:w-[14%]">Referencia</th>
+                            <th className="px-3 py-2 print:px-1.5 print:py-1 text-left min-w-[180px] print:min-w-0 print:w-[27%]">Concepto del Movimiento</th>
+                            <th className="px-3 py-2 print:px-1 print:py-1 text-right w-24 print:w-[8%]">Debe</th>
+                            <th className="px-3 py-2 print:px-1 print:py-1 text-right w-24 print:w-[8%]">Haber</th>
+                            <th className="px-3 py-2 print:px-1 print:py-1 text-right w-28 print:w-[8%]">Saldo</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
@@ -993,34 +1091,34 @@ export default function LibroMayorClient({
                                 {m.movements.map((mov) => (
                                   <tr
                                     key={mov.id}
-                                    className="hover:bg-purple-50/25 transition-colors text-[11px]"
+                                    className="hover:bg-purple-50/25 transition-colors text-[11px] print:text-[9px]"
                                   >
-                                    <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">
+                                    <td className="px-3 py-2 print:px-1.5 print:py-1 font-mono text-slate-600 whitespace-nowrap print:whitespace-normal">
                                       {mov.date}
                                     </td>
-                                    <td className="px-2 py-2 text-center">
+                                    <td className="px-2 py-2 print:px-0.5 print:py-1 text-center">
                                       {getModBadge(mov.mod)}
                                     </td>
-                                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                                    <td className="px-2 py-2 print:px-0.5 print:py-1 text-center font-mono text-slate-500">
                                       {mov.tp}
                                     </td>
-                                    <td className="px-3 py-2 font-mono font-semibold text-purple-950 whitespace-nowrap">
+                                    <td className="px-3 py-2 print:px-1 print:py-1 font-mono font-semibold text-purple-950 whitespace-nowrap print:break-all">
                                       {mov.asiento}
                                     </td>
-                                    <td className="px-3 py-2 font-mono text-slate-700 font-medium whitespace-nowrap">
+                                    <td className="px-3 py-2 print:px-1 print:py-1 font-mono text-slate-700 font-medium whitespace-nowrap print:break-all">
                                       {mov.referencia || "—"}
                                     </td>
-                                    <td className="px-3 py-2 text-slate-800 leading-snug">
+                                    <td className="px-3 py-2 print:px-1.5 print:py-1 text-slate-800 leading-snug break-words">
                                       {mov.concepto}
                                     </td>
-                                    <td className="px-3 py-2 text-right font-mono font-medium">
+                                    <td className="px-3 py-2 print:px-1 print:py-1 text-right font-mono font-medium whitespace-nowrap">
                                       {mov.debe > 0 ? `$${fmt(mov.debe)}` : "—"}
                                     </td>
-                                    <td className="px-3 py-2 text-right font-mono font-medium">
+                                    <td className="px-3 py-2 print:px-1 print:py-1 text-right font-mono font-medium whitespace-nowrap">
                                       {mov.haber > 0 ? `$${fmt(mov.haber)}` : "—"}
                                     </td>
                                     <td
-                                      className={`px-3 py-2 text-right font-mono font-bold ${
+                                      className={`px-3 py-2 print:px-1 print:py-1 text-right font-mono font-bold whitespace-nowrap ${
                                         mov.saldo < 0 ? "text-rose-600" : "text-slate-900"
                                       }`}
                                     >
@@ -1030,24 +1128,24 @@ export default function LibroMayorClient({
                                 ))}
 
                                 {/* Subtotal del Mes (TOTAL MES) */}
-                                <tr className="bg-purple-50/40 font-bold border-t border-b border-purple-100 text-xs text-purple-950">
-                                  <td colSpan={5} className="px-4 py-2">
+                                <tr className="bg-purple-50/40 font-bold border-t border-b border-purple-100 text-xs print:text-[9.5px] text-purple-950">
+                                  <td colSpan={5} className="px-4 py-2 print:px-2 print:py-1">
                                     <span className="inline-flex items-center gap-1.5 font-bold text-purple-900">
-                                      <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                                      <span className="w-2 h-2 rounded-full bg-purple-600 print:hidden"></span>
                                       TOTAL MES: {m.monthName}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-2 text-right text-purple-700 text-[11px] font-normal">
+                                  <td className="px-3 py-2 print:px-1.5 print:py-1 text-right text-purple-700 text-[11px] print:text-[9px] font-normal">
                                     Subtotal del mes:
                                   </td>
-                                  <td className="px-3 py-2 text-right font-mono text-purple-950">
+                                  <td className="px-3 py-2 print:px-1 print:py-1 text-right font-mono text-purple-950 whitespace-nowrap">
                                     ${fmt(m.totalDebe)}
                                   </td>
-                                  <td className="px-3 py-2 text-right font-mono text-purple-950">
+                                  <td className="px-3 py-2 print:px-1 print:py-1 text-right font-mono text-purple-950 whitespace-nowrap">
                                     ${fmt(m.totalHaber)}
                                   </td>
                                   <td
-                                    className={`px-3 py-2 text-right font-mono font-bold ${
+                                    className={`px-3 py-2 print:px-1 print:py-1 text-right font-mono font-bold whitespace-nowrap ${
                                       m.saldoFinalMes < 0 ? "text-rose-600" : "text-purple-950"
                                     }`}
                                   >
@@ -1059,22 +1157,22 @@ export default function LibroMayorClient({
                           )}
                         </tbody>
                         {/* Total Final de la Cuenta (TOTAL AL) */}
-                        <tfoot className="bg-slate-100 font-black border-t-2 border-b-2 border-slate-800 text-xs text-ink-950">
+                        <tfoot className="bg-slate-100 font-black border-t-2 border-b-2 border-slate-800 text-xs print:text-[9.5px] text-ink-950">
                           <tr>
-                            <td colSpan={5} className="px-4 py-2.5 uppercase tracking-wide">
+                            <td colSpan={5} className="px-4 py-2.5 print:px-2 print:py-1 uppercase tracking-wide">
                               TOTAL CUENTA AL {acc.finalDate}
                             </td>
-                            <td className="px-3 py-2.5 text-right text-slate-500 text-[11px] font-semibold">
+                            <td className="px-3 py-2.5 print:px-1.5 print:py-1 text-right text-slate-500 text-[11px] print:text-[9px] font-semibold">
                               Movimientos Período:
                             </td>
-                            <td className="px-3 py-2.5 text-right font-mono text-ink-950">
+                            <td className="px-3 py-2.5 print:px-1 print:py-1 text-right font-mono text-ink-950 whitespace-nowrap">
                               ${fmt(acc.totalDebe)}
                             </td>
-                            <td className="px-3 py-2.5 text-right font-mono text-ink-950">
+                            <td className="px-3 py-2.5 print:px-1 print:py-1 text-right font-mono text-ink-950 whitespace-nowrap">
                               ${fmt(acc.totalHaber)}
                             </td>
                             <td
-                              className={`px-3 py-2.5 text-right font-mono font-black ${
+                              className={`px-3 py-2.5 print:px-1 print:py-1 text-right font-mono font-black whitespace-nowrap ${
                                 acc.finalBalance < 0 ? "text-rose-700" : "text-ink-950"
                               }`}
                             >
@@ -1088,7 +1186,7 @@ export default function LibroMayorClient({
                 ))}
 
                 {/* Gran Total Mayor General */}
-                <div className="pt-2 text-xs font-black text-slate-900">
+                <div className="pt-2 text-xs font-black text-slate-900 break-inside-avoid">
                   <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div>
                       <p className="font-bold text-sm tracking-wide">
@@ -1138,13 +1236,7 @@ export default function LibroMayorClient({
                 <div>
                   <h3 className="text-sm font-bold text-ink-900">Plan de Cuentas Contables</h3>
                   <p className="text-[11px] text-ink-500">
-                    Seleccione una cuenta de movimiento para el filtro (
-                    {f8Target === "cuenta"
-                      ? "Cuenta única"
-                      : f8Target === "cuentaDesde"
-                      ? "Cuenta Desde"
-                      : "Cuenta Hasta"}
-                    )
+                    Seleccione una cuenta contable para el filtro del Libro Mayor
                   </p>
                 </div>
               </div>
@@ -1152,7 +1244,7 @@ export default function LibroMayorClient({
               <button
                 type="button"
                 onClick={() => setShowF8Modal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-ink-900 hover:bg-slate-200/60 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-ink-900 hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1173,11 +1265,28 @@ export default function LibroMayorClient({
                 <button
                   type="button"
                   onClick={() => setF8Search("")}
-                  className="text-xs text-slate-400 hover:text-slate-600"
+                  className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   Limpiar
                 </button>
               )}
+            </div>
+
+            {/* Opción para seleccionar todas las cuentas */}
+            <div className="p-2 border-b border-slate-100 bg-purple-50/40">
+              <button
+                type="button"
+                onClick={() => selectAccountF8("")}
+                className="w-full text-left px-3 py-2 rounded-xl bg-white hover:bg-purple-100/70 border border-purple-200 transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2 text-xs font-bold text-purple-900">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                  <span>Procesar Todas las Cuentas (Libro Mayor Completo)</span>
+                </div>
+                <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                  Todas
+                </span>
+              </button>
             </div>
 
             {/* Lista de Cuentas */}
@@ -1192,7 +1301,7 @@ export default function LibroMayorClient({
                     key={acc.code}
                     type="button"
                     onClick={() => selectAccountF8(acc.code)}
-                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-between group"
+                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-between group cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="font-mono text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md group-hover:bg-purple-200 transition-colors shrink-0">
@@ -1215,7 +1324,7 @@ export default function LibroMayorClient({
               <button
                 type="button"
                 onClick={() => setShowF8Modal(false)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
               >
                 Cerrar
               </button>
