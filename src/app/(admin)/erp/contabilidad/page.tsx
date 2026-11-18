@@ -674,13 +674,15 @@ export default async function ContabilidadPage({
   traverseNodes("", 0);
 
   const tabs = [
-    { key: "diario",    label: "Libro Diario",           icon: <BookOpen size={14} /> },
-    { key: "resultados",label: "Estado de Resultados",   icon: <TrendingUp size={14} /> },
-    { key: "balance",   label: "Bal. de Comprobación",   icon: <Scale size={14} /> },
-    { key: "iva",       label: "Resumen IVA (Form. 104)",icon: <Receipt size={14} /> },
+    { key: "diario",    label: "Libro Diario",           icon: <BookOpen size={14} />, href: `/erp/contabilidad?tab=diario&period=${period}` },
+    { key: "mayor",     label: "Libro Mayor",            icon: <BookOpen size={14} />, href: `/erp/contabilidad/mayor` },
+    { key: "resultados",label: "Estado de Resultados",   icon: <TrendingUp size={14} />, href: `/erp/contabilidad?tab=resultados&period=${period}` },
+    { key: "balance",   label: "Bal. de Comprobación",   icon: <Scale size={14} />, href: `/erp/contabilidad?tab=balance&period=${period}` },
+    { key: "iva",       label: "Resumen IVA (Form. 104)",icon: <Receipt size={14} />, href: `/erp/contabilidad?tab=iva&period=${period}` },
   ];
 
   const quickLinks = [
+    { href: "/erp/contabilidad/mayor",                         label: "Libro Mayor General",            icon: <BookOpen size={14} className="text-purple-600" />,         desc: "Movimientos cronológicos por cuenta, saldos iniciales y saldos acumulados" },
     { href: "/erp/contabilidad/plan-cuentas",                  label: "Plan de Cuentas",                icon: <ListTree size={14} className="text-teal-600" />,           desc: "Catálogo de cuentas, activos, pasivos y resultados" },
     { href: `/erp/contabilidad/declaraciones?period=${period}`,label: "Respaldos de Declaraciones SRI", icon: <FileCheck2 size={14} className="text-emerald-600" />,       desc: "Archivo mensual organizado de Form. 104, 103, CEP, ATS y justificativos" },
     { href: "/erp/contabilidad/caja-chica-liquidaciones",       label: "Liquidación y Rendición de Caja Chica", icon: <ShieldCheck size={14} className="text-purple-600" />, desc: "Auditoría de comprobantes, restitución de fondo fijo y legalización" },
@@ -730,7 +732,7 @@ export default async function ContabilidadPage({
         {tabs.map(t => (
           <Link
             key={t.key}
-            href={`/erp/contabilidad?tab=${t.key}&period=${period}`}
+            href={t.href || `/erp/contabilidad?tab=${t.key}&period=${period}`}
             className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
               tab === t.key
                 ? "bg-lilac-600 text-white shadow-xs"
