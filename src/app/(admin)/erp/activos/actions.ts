@@ -315,3 +315,63 @@ export async function processBatchDepreciationAction(data: { period: string }) {
     finishedCount,
   };
 }
+
+export async function registerSingleDepreciationAction(data: {
+  asset_id: string;
+  period: string;
+  monthly_amount: number;
+  accumulated: number;
+  book_value: number;
+}) {
+  await assertWritePermission("/erp/activos");
+
+  const supabase = createAdminClient();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+
+  const { asset_id, period, monthly_amount, accumulated, book_value } = data;
+
+  const { data: asset } = await supabase
+    .from("fixed_assets")
+    .select("id, name, category, code, account_code, description")
+    .eq("id", asset_id)
+    .single();
+
+  if (!asset) throw new Error("Activo no encontrado");
+
+  const assetCode = extractAssetCode(asset);
+  const fullName = assetCode ? `[${assetCode}] ${asset.name}` : asset.name;
+
+  let journal_entry_id: string | null = null;
+  try {
+    journal_entry_id = await createDepreciationJournalEntry({
+      asset_id,
+      asset_name: fullName,
+      category: asset.category,
+      account_code: asset.account_code || undefined,
+      period,
+      monthly_amount,
+      user_id: user?.id,
+      user_email: user?.email,
+    });
+  } catch (e) {
+    console.error("Asiento no generado:", e);
+  }
+
+  await supabase.from("asset_depreciations").upsert({
+    asset_id,
+    period,
+    monthly_amount,
+    accumulated,
+    book_value,
+    journal_entry_id,
+  }, { onConflict: "asset_id,period" });
+
+  revalidatePath(`/erp/activos/${asset_id}`);
+  revalidatePath("/erp/activos");
+  revalidatePath("/erp/contabilidad/diario");
+  revalidatePath("/erp/contabilidad/mayor");
+  revalidatePath("/erp/contabilidad/balance");
+
+  return { success: true, journal_entry_id };
+}

@@ -1,10 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect, notFound } from "next/navigation";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
-import { ArrowLeft, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { createDepreciationJournalEntry } from "@/lib/accounting";
 import { extractAssetCode } from "@/lib/fixed-assets-utils";
+import DepreciationScheduleTable from "@/components/DepreciationScheduleTable";
 
 export const dynamic = "force-dynamic";
 
@@ -35,52 +35,6 @@ function buildSchedule(asset: {
   return rows;
 }
 
-// Registra un período de depreciación
-async function registerDepreciation(formData: FormData) {
-  "use server";
-  const user = await assertWritePermission("/erp/activos");
-
-  const supabase       = createAdminClient();
-  const asset_id       = formData.get("asset_id") as string;
-  const period         = formData.get("period") as string;
-  const monthly_amount = Number(formData.get("monthly_amount"));
-  const accumulated    = Number(formData.get("accumulated"));
-  const book_value     = Number(formData.get("book_value"));
-
-  // Obtener datos del activo para el asiento
-  const { data: asset } = await supabase
-    .from("fixed_assets")
-    .select("id, name, category, code, account_code, description")
-    .eq("id", asset_id)
-    .single();
-
-  if (!asset) throw new Error("Activo no encontrado");
-
-  const assetCode = extractAssetCode(asset);
-  const fullName = assetCode ? `[${assetCode}] ${asset.name}` : asset.name;
-
-  let journal_entry_id: string | null = null;
-  try {
-    journal_entry_id = await createDepreciationJournalEntry({
-      asset_id,
-      asset_name: fullName,
-      category: asset.category,
-      account_code: asset.account_code || undefined,
-      period,
-      monthly_amount,
-      user_id: user?.id,
-      user_email: user?.email,
-    });
-  } catch (e) { console.error("Asiento no generado:", e); }
-
-  await supabase.from("asset_depreciations").upsert({
-    asset_id, period, monthly_amount, accumulated, book_value,
-    journal_entry_id,
-  }, { onConflict: "asset_id,period" });
-
-  redirect(`/erp/activos/${asset_id}`);
-}
-
 // Dar de baja el activo
 async function disposeAsset(formData: FormData) {
   "use server";
@@ -105,15 +59,66 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const supabase = createAdminClient();
 
-  const [{ data: asset }, { data: regPeriods }] = await Promise.all([
+  const [{ data: asset }, { data: regDepreciations }] = await Promise.all([
     supabase.from("fixed_assets").select("*").eq("id", id).single(),
-    supabase.from("asset_depreciations").select("period").eq("asset_id", id),
+    supabase
+      .from("asset_depreciations")
+      .select("id, period, monthly_amount, accumulated, book_value, journal_entry_id")
+      .eq("asset_id", id),
   ]);
 
   if (!asset) notFound();
 
+  // Buscar asientos contables relacionados con este activo
+  const journalEntryIds = (regDepreciations || [])
+    .map((r) => r.journal_entry_id)
+    .filter(Boolean);
+
+  let journalEntries: any[] = [];
+  if (journalEntryIds.length > 0) {
+    const { data: entriesById } = await supabase
+      .from("journal_entries")
+      .select(
+        "id, entry_number, entry_code, entry_date, description, lines:journal_lines(id, account_code, account_name, debit, credit, description)"
+      )
+      .in("id", journalEntryIds);
+    journalEntries = entriesById || [];
+  }
+
+  // Complementar por reference_id si algún asiento no guardó id en asset_depreciations
+  const { data: entriesByRef } = await supabase
+    .from("journal_entries")
+    .select(
+      "id, entry_number, entry_code, entry_date, description, lines:journal_lines(id, account_code, account_name, debit, credit, description)"
+    )
+    .eq("reference_type", "depreciation")
+    .eq("reference_id", id);
+
+  const allEntriesMap = new Map<string, any>();
+  for (const e of journalEntries) allEntriesMap.set(e.id, e);
+  for (const e of entriesByRef || []) allEntriesMap.set(e.id, e);
+
+  // Mapear cada período a su información de depreciación y asiento contable
+  const registeredMap: Record<string, any> = {};
+  for (const dep of regDepreciations || []) {
+    let matchedEntry = dep.journal_entry_id
+      ? allEntriesMap.get(dep.journal_entry_id)
+      : null;
+    if (!matchedEntry) {
+      matchedEntry = [...allEntriesMap.values()].find(
+        (e) =>
+          e.description?.includes(dep.period) ||
+          e.entry_date?.startsWith(dep.period)
+      );
+    }
+    registeredMap[dep.period] = {
+      ...dep,
+      journal_entry: matchedEntry || null,
+    };
+  }
+
   const schedule = buildSchedule(asset);
-  const registeredSet = new Set((regPeriods || []).map(r => r.period));
+  const registeredSet = new Set((regDepreciations || []).map((r) => r.period));
 
   const now = new Date();
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -204,78 +209,17 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {/* Tabla de depreciación */}
-      <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden mb-6">
-        <div className="px-5 py-4 border-b border-lilac-50 flex items-center justify-between">
-          <h2 className="font-semibold text-ink-900 flex items-center gap-2">
-            <TrendingDown size={16} className="text-lilac-600" />
-            Tabla de depreciación
-          </h2>
-          <span className="text-xs text-ink-400">{schedule.length} períodos · {asset.useful_life_years} años</span>
-        </div>
-        <div className="overflow-x-auto max-h-96 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-lilac-50/50 text-xs text-ink-500 uppercase font-semibold sticky top-0">
-              <tr>
-                <th className="px-4 py-2.5 text-left">Período</th>
-                <th className="px-4 py-2.5 text-right">Cuota mensual</th>
-                <th className="px-4 py-2.5 text-right">Dep. acumulada</th>
-                <th className="px-4 py-2.5 text-right">Valor en libros</th>
-                <th className="px-4 py-2.5 text-center">Estado</th>
-                {asset.status === "active" && canEdit && <th className="px-4 py-2.5"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-lilac-50">
-              {schedule.map(row => {
-                const isRegistered = registeredSet.has(row.period);
-                const isFuture     = row.period > currentPeriod;
-                const isCurrent    = row.period === currentPeriod;
-                return (
-                  <tr key={row.period} className={`transition-colors ${isCurrent ? "bg-lilac-50/40" : "hover:bg-lilac-50/20"}`}>
-                    <td className="px-4 py-2 font-mono text-sm">
-                      {row.period}
-                      {isCurrent && <span className="ml-2 text-[10px] bg-lilac-100 text-lilac-700 px-1.5 py-0.5 rounded-full">actual</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono">${row.monthly_amount.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-right font-mono text-ink-600">${row.accumulated.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-right font-bold font-mono text-green-700">${row.book_value.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-center">
-                      {isRegistered ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                          <CheckCircle2 size={10} /> Registrado
-                        </span>
-                      ) : isFuture ? (
-                        <span className="text-[10px] text-ink-300">Futuro</span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                          <Clock size={10} /> Pendiente
-                        </span>
-                      )}
-                    </td>
-                    {asset.status === "active" && canEdit && (
-                      <td className="px-4 py-2 text-right">
-                        {!isRegistered && !isFuture && (
-                          <form action={registerDepreciation}>
-                            <input type="hidden" name="asset_id"       value={asset.id} />
-                            <input type="hidden" name="period"         value={row.period} />
-                            <input type="hidden" name="monthly_amount" value={row.monthly_amount} />
-                            <input type="hidden" name="accumulated"    value={row.accumulated} />
-                            <input type="hidden" name="book_value"     value={row.book_value} />
-                            <button type="submit"
-                              className="text-xs text-lilac-600 hover:text-lilac-800 border border-lilac-200 hover:bg-lilac-50 px-2 py-0.5 rounded-lg transition-colors font-medium">
-                              Registrar
-                            </button>
-                          </form>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Tabla de depreciación interactiva con visualizador de asientos */}
+      <DepreciationScheduleTable
+        assetId={asset.id}
+        assetName={asset.name}
+        assetCode={assetCode}
+        usefulLifeYears={asset.useful_life_years}
+        schedule={schedule}
+        registeredMap={registeredMap}
+        currentPeriod={currentPeriod}
+        canEdit={canEdit}
+      />
 
       {/* Dar de baja */}
       {asset.status === "active" && canEdit && (
