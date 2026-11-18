@@ -386,7 +386,57 @@ async function saveExpense(formData: FormData) {
     }
   }
 
+  // ── CREACIÓN AUTOMÁTICA DE ACTIVOS FIJOS SI SE COMPRÓ PROPIEDAD, PLANTA Y EQUIPO ──
+  try {
+    const assetItems = parsedItemsList.filter((it: any) => {
+      const grp = (it.group_code || group_code || "").trim();
+      const acc = (it.account_code || account_code || "").trim();
+      return (grp === "1.2.01" || acc.startsWith("1.2.01")) && !acc.endsWith(".99");
+    });
+
+    if (assetItems.length > 0) {
+      const { resolveAssetTypeFromExpenseItem, getNextAssetCode } = await import("@/lib/fixed-assets-utils");
+      for (const it of assetItems) {
+        const itAcc = it.account_code || account_code;
+        const itDesc = it.description || description || "Activo Fijo Adquirido";
+        const assetTypeDef = resolveAssetTypeFromExpenseItem(itAcc, itDesc);
+        const nextCode = await getNextAssetCode(assetTypeDef.prefix);
+
+        const assetPayload: Record<string, any> = {
+          name: itDesc,
+          category: assetTypeDef.category,
+          purchase_date: expense_date,
+          purchase_value: Number(it.subtotal) || Number(it.total) || total,
+          salvage_value: 0,
+          useful_life_years: assetTypeDef.years,
+          supplier_name: supplier_name || null,
+          supplier_ruc: supplier_ruc || null,
+          invoice_number: cleanDocNumberOnly(formData.get("document_number") as string) || null,
+          bank_account_id: bank_account_id || null,
+          payment_reference: payment_reference || null,
+          description: `[CODIGO:${nextCode}] [CUENTA:${assetTypeDef.accountCode}] [GASTO_ID:${expense.id}] Adquirido en compra #${cleanDocNumberOnly(formData.get("document_number") as string) || "S/N"}`,
+          status: "active",
+          created_by_id: user?.id ?? null,
+          code: nextCode,
+          account_code: assetTypeDef.accountCode,
+          expense_id: expense.id,
+        };
+
+        let { error: assetErr } = await supabase.from("fixed_assets").insert(assetPayload);
+        if (assetErr && (assetErr.code === "42703" || assetErr.message.includes("column") || assetErr.message.includes("does not exist"))) {
+          delete assetPayload.code;
+          delete assetPayload.account_code;
+          delete assetPayload.expense_id;
+          await supabase.from("fixed_assets").insert(assetPayload);
+        }
+      }
+    }
+  } catch (assetCreateErr) {
+    console.error("Error al registrar activo fijo desde compra:", assetCreateErr);
+  }
+
   revalidatePath("/erp/gastos");
+  revalidatePath("/erp/activos");
 
   return {
     success: true,

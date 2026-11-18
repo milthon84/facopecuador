@@ -1234,6 +1234,14 @@ export default function NuevaCompraForm({
                           placeholder={`Descripción del bien o servicio ${idx + 1}`}
                           className="w-full border border-lilac-200 rounded-lg px-2.5 py-1.5 bg-white text-ink-900 text-xs focus:ring-1 focus:ring-lilac-400 focus:outline-none resize-none leading-snug"
                         />
+                        {grpCode && grpCode.startsWith("1.2") && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md font-semibold">
+                            <span>🏛️ Activo Fijo:</span>
+                            <span className="font-normal text-purple-900">
+                              Se registrará en Activos Fijos con código secuencial (EQM / MUE / COM) y depreciación SRI.
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Selector Grupo Contable */}

@@ -3,6 +3,7 @@ import { Landmark, TrendingDown, DollarSign, Package, Plus } from "lucide-react"
 import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import NuevoActivoModal from "@/components/NuevoActivoModal";
+import { extractAssetCode } from "@/lib/fixed-assets-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 type FixedAsset = {
   id: string;
+  code?: string | null;
   name: string;
   category: string;
+  description?: string | null;
   purchase_date: string;
   purchase_value: number;
   salvage_value: number;
@@ -58,7 +61,7 @@ export default async function ActivosPage() {
   const [{ data: assets }, { data: bankAccounts }] = await Promise.all([
     supabase
       .from("fixed_assets")
-      .select("id,name,category,purchase_date,purchase_value,salvage_value,useful_life_years,status,disposal_value")
+      .select("*")
       .order("purchase_date", { ascending: false }),
     supabase
       .from("bank_accounts")
@@ -137,11 +140,19 @@ export default async function ActivosPage() {
                 {list.map(asset => {
                   const bv  = currentBookValue(asset);
                   const pct = pctDepreciated(asset);
+                  const assetCode = extractAssetCode(asset);
                   return (
                     <tr key={asset.id} className="hover:bg-lilac-50/20 transition-colors">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-ink-900">{asset.name}</p>
-                        <p className="text-xs text-ink-400">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {assetCode && (
+                            <span className="font-mono text-[11px] font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 shrink-0">
+                              {assetCode}
+                            </span>
+                          )}
+                          <p className="font-medium text-ink-900">{asset.name}</p>
+                        </div>
+                        <p className="text-xs text-ink-400 mt-0.5">
                           Adquirido {new Date(asset.purchase_date + "T12:00:00").toLocaleDateString("es-EC")}
                         </p>
                       </td>

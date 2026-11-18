@@ -4,6 +4,7 @@ import { assertPermission, assertWritePermission, hasWritePermission } from "@/l
 import { ArrowLeft, TrendingDown, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { createDepreciationJournalEntry } from "@/lib/accounting";
+import { extractAssetCode } from "@/lib/fixed-assets-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
   const currentBookValue = r2(asset.purchase_value - totalAccum);
 
   const today = new Date().toISOString().split("T")[0];
+  const assetCode = extractAssetCode(asset);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -128,8 +130,15 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
             <ArrowLeft size={18} />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-ink-900 truncate">{asset.name}</h1>
-            <p className="text-sm text-ink-500">{asset.category} · {asset.useful_life_years} años · Línea recta</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {assetCode && (
+                <span className="font-mono text-xs font-bold text-purple-800 bg-purple-100 px-2.5 py-0.5 rounded-lg border border-purple-200">
+                  {assetCode}
+                </span>
+              )}
+              <h1 className="text-xl font-bold text-ink-900 truncate">{asset.name}</h1>
+            </div>
+            <p className="text-sm text-ink-500 mt-0.5">{asset.category} · {asset.useful_life_years} años · Línea recta</p>
           </div>
         </div>
         <span className={`self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${asset.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -143,10 +152,11 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
           <p className="text-xs font-bold text-ink-400 uppercase tracking-wider mb-3">Datos del activo</p>
           <dl className="space-y-1.5 text-sm">
             {[
+              ...(assetCode ? [["Código oficial", assetCode]] : []),
               ["Fecha de compra",   new Date(asset.purchase_date + "T12:00:00").toLocaleDateString("es-EC")],
               ["Costo de adquisición", `$${Number(asset.purchase_value).toFixed(2)}`],
-              ["Valor residual",    `$${Number(asset.salvage_value).toFixed(2)}`],
               ["Vida útil SRI",     `${asset.useful_life_years} años`],
+              ["Depreciación anual", `${asset.useful_life_years === 3 ? "33.33%" : (100 / asset.useful_life_years).toFixed(0) + "%"}`],
               ...(asset.supplier_name ? [["Proveedor", asset.supplier_name]] : []),
               ...(asset.invoice_number ? [["Factura compra", asset.invoice_number]] : []),
             ].map(([k, v]) => (
