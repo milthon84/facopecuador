@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { assertWritePermission } from "@/lib/auth-action";
 import { createAssetPurchaseJournalEntry } from "@/lib/accounting";
-import { ASSET_TYPES, getNextAssetCode } from "@/lib/fixed-assets-utils";
+import { ASSET_TYPES } from "@/lib/fixed-assets-utils";
+import { getNextAssetCode } from "@/lib/fixed-assets-server";
 
 export async function createAssetAction(data: {
   name: string;

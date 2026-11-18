@@ -395,7 +395,8 @@ async function saveExpense(formData: FormData) {
     });
 
     if (assetItems.length > 0) {
-      const { resolveAssetTypeFromExpenseItem, getNextAssetCode } = await import("@/lib/fixed-assets-utils");
+      const { resolveAssetTypeFromExpenseItem } = await import("@/lib/fixed-assets-utils");
+      const { getNextAssetCode } = await import("@/lib/fixed-assets-server");
       for (const it of assetItems) {
         const itAcc = it.account_code || account_code;
         const itDesc = it.description || description || "Activo Fijo Adquirido";
