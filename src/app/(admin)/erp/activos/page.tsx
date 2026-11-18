@@ -22,6 +22,8 @@ type FixedAsset = {
   useful_life_years: number;
   status: string;
   disposal_value: number | null;
+  supplier_name?: string | null;
+  invoice_number?: string | null;
 };
 
 /** Calcula el valor en libros actual según depreciación lineal */
@@ -162,9 +164,19 @@ export default async function ActivosPage() {
                           )}
                           <p className="font-medium text-ink-900">{asset.name}</p>
                         </div>
-                        <p className="text-xs text-ink-400 mt-0.5">
-                          Adquirido {new Date(asset.purchase_date + "T12:00:00").toLocaleDateString("es-EC")}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-ink-400 mt-0.5">
+                          <span>Adquirido {new Date(asset.purchase_date + "T12:00:00").toLocaleDateString("es-EC")}</span>
+                          {asset.invoice_number && (
+                            <span className="font-mono text-[10px] font-semibold bg-slate-100 text-ink-700 px-1.5 py-0.5 rounded border border-slate-200">
+                              Fac: {asset.invoice_number}
+                            </span>
+                          )}
+                          {asset.supplier_name && (
+                            <span className="text-ink-500 truncate max-w-[200px]" title={asset.supplier_name}>
+                              · {asset.supplier_name}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${CATEGORY_COLOR[asset.category] ?? "bg-gray-50 text-gray-700 border-gray-200"}`}>
