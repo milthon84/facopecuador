@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useMemo } from "react";
+import React, { useState, useEffect, useTransition, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -90,6 +90,27 @@ const fmt = (n: number) =>
 
 const fmt4 = (n: number) =>
   n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+function getModBadge(mod: string) {
+  switch (mod) {
+    case "ING":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">ING</span>;
+    case "EGR":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">EGR</span>;
+    case "FAC":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">FAC</span>;
+    case "GAS":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">GAS</span>;
+    case "NC":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">NC</span>;
+    case "MAN":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200">MAN</span>;
+    case "CIE":
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200">CIE</span>;
+    default:
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">{mod}</span>;
+  }
+}
 
 export default function LibroMayorClient({
   initialDesde,
@@ -813,96 +834,101 @@ export default function LibroMayorClient({
         </div>
       )}
 
-      {/* ── REPORTE FORMAL: MAYOR GENERAL CONTABLE (Idéntico a las capturas) ── */}
+      {/* ── REPORTE MODERNO: MAYOR GENERAL CONTABLE (Estilo Libro Diario NIIF) ── */}
       {isGenerated && (
         <div className="space-y-4">
-          {/* Badge Resumen de Criterios (Pantalla) */}
-          <div className="print:hidden bg-purple-50 border border-purple-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-purple-950">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold">Criterios Activos:</span>
-              <span>
-                Desde <strong>{desde}</strong> hasta <strong>{hasta}</strong>
-              </span>
-              <span>•</span>
-              <span>
-                Cuenta:{" "}
-                <strong>
+          {/* Barra Resumen de Criterios y Totales (Pantalla) */}
+          <div className="print:hidden bg-white border border-lilac-100 rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <BookOpen size={16} className="text-purple-600" />
+                <span className="font-bold text-sm text-ink-900">
+                  Mayor General Contable NIIF
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-purple-50 text-purple-800 border-purple-200">
+                  {mayorAccounts.length} Cuentas con actividad
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    Math.abs(totalGeneralDebe - totalGeneralHaber) < 0.01
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-red-50 text-red-800 border-red-200"
+                  }`}
+                >
+                  {Math.abs(totalGeneralDebe - totalGeneralHaber) < 0.01
+                    ? "✓ Partida Doble Cuadrada"
+                    : `Descuadre: $${fmt(Math.abs(totalGeneralDebe - totalGeneralHaber))}`}
+                </span>
+              </div>
+              <p className="text-xs text-ink-500">
+                Período: <strong className="text-ink-800">{formatDateDMYLocal(desde)}</strong> al{" "}
+                <strong className="text-ink-800">{formatDateDMYLocal(hasta)}</strong> · Cuenta:{" "}
+                <strong className="text-ink-800">
                   {cuenta
                     ? `${cuenta}`
                     : cuentaDesde || cuentaHasta
                     ? `${cuentaDesde || "Inicio"} a ${cuentaHasta || "Fin"}`
                     : "Todas las Cuentas"}
-                </strong>
-              </span>
-              <span>•</span>
-              <span>
-                Tipo: <strong>{tipo === "todos" ? "Todos los Comprobantes" : tipo}</strong>
-              </span>
-              <span>•</span>
-              <span>
-                Total Cuentas: <strong>{mayorAccounts.length}</strong>
-              </span>
+                </strong> · Tipo: <strong className="text-ink-800">{tipo === "todos" ? "Todos los Comprobantes" : tipo}</strong>
+              </p>
             </div>
 
-            <div className="text-right text-[11px] text-purple-700 font-mono">
-              Débito Total: ${fmt(totalGeneralDebe)} | Crédito Total: ${fmt(totalGeneralHaber)}
+            <div className="flex items-center gap-3 bg-purple-50/60 border border-purple-100 rounded-xl px-3.5 py-2 shrink-0 self-start md:self-auto">
+              <div className="text-right">
+                <p className="text-[10px] uppercase font-semibold text-purple-700">Total Débitos</p>
+                <p className="font-mono text-xs font-bold text-emerald-700">${fmt(totalGeneralDebe)}</p>
+              </div>
+              <div className="w-px h-6 bg-purple-200"></div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase font-semibold text-purple-700">Total Créditos</p>
+                <p className="font-mono text-xs font-bold text-blue-700">${fmt(totalGeneralHaber)}</p>
+              </div>
             </div>
           </div>
 
-          {/* DOCUMENTO FORMAL DE MAYOR GENERAL (Apto para Impresión o PDF) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm print:p-0 print:border-none print:shadow-none print:rounded-none">
+          {/* CONTENEDOR DEL DOCUMENTO FORMAL */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm print:p-0 print:border-none print:shadow-none print:rounded-none space-y-6">
             {/* Encabezado Oficial del Reporte */}
-            <div className="border-b-2 border-slate-900 pb-3 mb-4">
-              <div className="flex justify-between items-start text-xs font-mono">
+            <div className="border-b-2 border-slate-900 pb-4">
+              <div className="flex justify-between items-start text-xs">
                 <div>
-                  <div className="font-bold text-sm text-slate-900 tracking-wider">
+                  <h2 className="font-black text-base text-slate-900 tracking-wide">
                     {companyName.toUpperCase()}
-                  </div>
-                  <div className="text-[11px] text-slate-700">
-                    Fecha: {new Date().toLocaleDateString("es-EC")}
+                  </h2>
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    Fecha de Emisión: <strong>{new Date().toLocaleDateString("es-EC")}</strong>
                   </div>
                   {companyRuc && (
-                    <div className="text-[10px] text-slate-500 font-normal">RUC: {companyRuc}</div>
+                    <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                      RUC: {companyRuc}
+                    </div>
                   )}
                 </div>
 
                 <div className="text-center">
-                  <h2 className="text-base font-bold text-slate-900 tracking-wider">
+                  <h3 className="text-lg font-black text-slate-900 tracking-wider uppercase">
                     MAYOR GENERAL CONTABLE
-                  </h2>
-                  <div className="text-[11px] text-slate-700 font-mono mt-0.5 space-x-4">
+                  </h3>
+                  <div className="text-xs text-slate-600 font-medium mt-1 flex items-center justify-center gap-4">
                     <span>
-                      Desde: {cuentaDesde || cuenta || "1.0.00.00"} &nbsp; Hasta:{" "}
-                      {cuentaHasta || cuenta || "9.9.99.99"}
+                      Cuentas: <strong>{cuentaDesde || cuenta || "1.0.00.00"}</strong> al <strong>{cuentaHasta || cuenta || "9.9.99.99"}</strong>
                     </span>
+                    <span>•</span>
                     <span>
-                      Desde: {formatDateDMYLocal(desde)} &nbsp; Hasta: {formatDateDMYLocal(hasta)}
+                      Período: <strong>{formatDateDMYLocal(desde)}</strong> al <strong>{formatDateDMYLocal(hasta)}</strong>
                     </span>
                   </div>
                 </div>
 
-                <div className="text-right text-[11px] text-slate-700">
-                  <span>Página: 1 de 1</span>
+                <div className="text-right text-xs text-slate-500 font-mono">
+                  Página 1 de 1
                 </div>
               </div>
             </div>
 
-            {/* Cabecera de Columnas */}
-            <div className="border-b border-t border-slate-900 py-1.5 mb-4 text-[11px] font-mono font-bold text-slate-900 grid grid-cols-12 gap-2">
-              <div className="col-span-1">FECHA</div>
-              <div className="col-span-1">MOD</div>
-              <div className="col-span-1">TP</div>
-              <div className="col-span-2">ASIENTO</div>
-              <div className="col-span-1">REFEREN.</div>
-              <div className="col-span-3">CONCEPTO DEL MOVIMIENTO</div>
-              <div className="col-span-1 text-right">DEBE</div>
-              <div className="col-span-1 text-right">HABER</div>
-              <div className="col-span-1 text-right">SALDO</div>
-            </div>
-
             {/* Lista de Cuentas */}
             {mayorAccounts.length === 0 ? (
-              <div className="py-12 text-center text-xs font-mono text-slate-500">
+              <div className="py-12 text-center text-xs text-slate-500">
                 No se encontraron movimientos contables para los filtros seleccionados.
               </div>
             ) : (
@@ -910,133 +936,186 @@ export default function LibroMayorClient({
                 {mayorAccounts.map((acc) => (
                   <div
                     key={acc.code}
-                    className="font-mono text-[11px] text-slate-900 border-b border-slate-200 pb-5 break-inside-avoid"
+                    className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs break-inside-avoid"
                   >
                     {/* Encabezado de la Cuenta */}
-                    <div className="flex items-center gap-4 font-bold text-xs pt-1">
-                      <span>CODIGO: {acc.code}</span>
-                      <span>NOMBRE: {acc.name}</span>
-                      <span className="text-[10px] text-slate-500 font-normal ml-auto">
-                        ({acc.nature.toUpperCase()})
-                      </span>
+                    <div className="bg-slate-50/80 border-b border-slate-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg shrink-0">
+                          {acc.code}
+                        </span>
+                        <div>
+                          <h4 className="text-sm font-bold text-ink-900">{acc.name}</h4>
+                          <span className="text-[10px] uppercase font-semibold text-slate-400">
+                            Naturaleza {acc.nature}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+                        <span className="text-xs text-slate-500 font-medium">Saldo Inicial al {acc.initialBalanceDate}:</span>
+                        <span
+                          className={`font-mono text-xs font-bold ${
+                            acc.initialBalance < 0 ? "text-rose-600" : "text-ink-900"
+                          }`}
+                        >
+                          ${fmt(acc.initialBalance)}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Fila de Saldo Anterior */}
-                    <div className="grid grid-cols-12 gap-2 py-1.5 text-slate-700 font-semibold border-b border-dashed border-slate-300">
-                      <div className="col-span-6 flex items-center">
-                        <span className="mr-2">Saldo Al {acc.initialBalanceDate}</span>
-                        <span className="text-slate-400">----------------------&gt;</span>
-                      </div>
-                      <div className="col-span-5"></div>
-                      <div
-                        className={`col-span-1 text-right ${
-                          acc.initialBalance < 0 ? "text-rose-700" : ""
-                        }`}
-                      >
-                        {fmt4(acc.initialBalance)}
-                      </div>
-                    </div>
+                    {/* Tabla de Movimientos */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-100/70 text-slate-600 uppercase text-[11px] font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="px-3 py-2 text-left w-24">Fecha</th>
+                            <th className="px-2 py-2 text-center w-14">Mod</th>
+                            <th className="px-2 py-2 text-center w-12">TP</th>
+                            <th className="px-3 py-2 text-left w-36">Asiento</th>
+                            <th className="px-3 py-2 text-left w-44">Referencia</th>
+                            <th className="px-3 py-2 text-left min-w-[200px]">Concepto del Movimiento</th>
+                            <th className="px-3 py-2 text-right w-28">Debe</th>
+                            <th className="px-3 py-2 text-right w-28">Haber</th>
+                            <th className="px-3 py-2 text-right w-32">Saldo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {acc.months.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="px-4 py-4 text-center text-slate-400 italic">
+                                Sin movimientos en el período seleccionado. Saldo al corte: ${fmt(acc.finalBalance)}
+                              </td>
+                            </tr>
+                          ) : (
+                            acc.months.map((m) => (
+                              <React.Fragment key={m.monthKey}>
+                                {m.movements.map((mov) => (
+                                  <tr
+                                    key={mov.id}
+                                    className="hover:bg-purple-50/25 transition-colors text-[11px]"
+                                  >
+                                    <td className="px-3 py-2 font-mono text-slate-600 whitespace-nowrap">
+                                      {mov.date}
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      {getModBadge(mov.mod)}
+                                    </td>
+                                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                                      {mov.tp}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono font-semibold text-purple-950 whitespace-nowrap">
+                                      {mov.asiento}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono text-slate-700 font-medium whitespace-nowrap">
+                                      {mov.referencia || "—"}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-800 leading-snug">
+                                      {mov.concepto}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-mono font-medium">
+                                      {mov.debe > 0 ? `$${fmt(mov.debe)}` : "—"}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-mono font-medium">
+                                      {mov.haber > 0 ? `$${fmt(mov.haber)}` : "—"}
+                                    </td>
+                                    <td
+                                      className={`px-3 py-2 text-right font-mono font-bold ${
+                                        mov.saldo < 0 ? "text-rose-600" : "text-slate-900"
+                                      }`}
+                                    >
+                                      ${fmt(mov.saldo)}
+                                    </td>
+                                  </tr>
+                                ))}
 
-                    {/* Meses y Movimientos */}
-                    {acc.months.length === 0 ? (
-                      <div className="py-2 text-slate-400 italic text-[10px]">
-                        Sin movimientos en el período seleccionado.
-                      </div>
-                    ) : (
-                      acc.months.map((m) => (
-                        <div key={m.monthKey} className="space-y-1 my-1.5">
-                          {/* Líneas de Movimiento */}
-                          {m.movements.map((mov) => (
-                            <div
-                              key={mov.id}
-                              className="grid grid-cols-12 gap-2 py-0.5 hover:bg-slate-50 items-center text-[10.5px]"
-                            >
-                              <div className="col-span-1 text-slate-700">{mov.date}</div>
-                              <div className="col-span-1 font-semibold">{mov.mod}</div>
-                              <div className="col-span-1 text-slate-600">{mov.tp}</div>
-                              <div className="col-span-2 font-semibold text-slate-800 truncate" title={mov.asiento}>
-                                {mov.asiento}
-                              </div>
-                              <div className="col-span-1 text-slate-600 truncate" title={mov.referencia}>
-                                {mov.referencia || "—"}
-                              </div>
-                              <div className="col-span-3 text-slate-800 truncate" title={mov.concepto}>
-                                {mov.concepto}
-                              </div>
-                              <div className="col-span-1 text-right font-mono">
-                                {mov.debe > 0 ? fmt4(mov.debe) : ""}
-                              </div>
-                              <div className="col-span-1 text-right font-mono">
-                                {mov.haber > 0 ? fmt4(mov.haber) : ""}
-                              </div>
-                              <div
-                                className={`col-span-1 text-right font-mono font-semibold ${
-                                  mov.saldo < 0 ? "text-rose-700" : "text-slate-900"
-                                }`}
-                              >
-                                {fmt4(mov.saldo)}
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* Subtotal del Mes (TOTAL MES) */}
-                          <div className="grid grid-cols-12 gap-2 py-1 text-slate-800 font-bold border-t border-dotted border-slate-400 mt-1">
-                            <div className="col-span-6 flex items-center pl-8">
-                              <span className="mr-2">TOTAL MES: {m.monthName}</span>
-                              <span className="text-slate-400">-------------&gt;</span>
-                            </div>
-                            <div className="col-span-3 text-right">
-                              {/* Espacio alineado */}
-                            </div>
-                            <div className="col-span-1 text-right font-mono font-bold">
-                              {fmt4(m.totalDebe)}
-                            </div>
-                            <div className="col-span-1 text-right font-mono font-bold">
-                              {fmt4(m.totalHaber)}
-                            </div>
-                            <div
-                              className={`col-span-1 text-right font-mono font-bold ${
-                                m.saldoFinalMes < 0 ? "text-rose-700" : ""
+                                {/* Subtotal del Mes (TOTAL MES) */}
+                                <tr className="bg-purple-50/40 font-bold border-t border-b border-purple-100 text-xs text-purple-950">
+                                  <td colSpan={5} className="px-4 py-2">
+                                    <span className="inline-flex items-center gap-1.5 font-bold text-purple-900">
+                                      <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                                      TOTAL MES: {m.monthName}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-purple-700 text-[11px] font-normal">
+                                    Subtotal del mes:
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-mono text-purple-950">
+                                    ${fmt(m.totalDebe)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-mono text-purple-950">
+                                    ${fmt(m.totalHaber)}
+                                  </td>
+                                  <td
+                                    className={`px-3 py-2 text-right font-mono font-bold ${
+                                      m.saldoFinalMes < 0 ? "text-rose-600" : "text-purple-950"
+                                    }`}
+                                  >
+                                    ${fmt(m.saldoFinalMes)}
+                                  </td>
+                                </tr>
+                              </React.Fragment>
+                            ))
+                          )}
+                        </tbody>
+                        {/* Total Final de la Cuenta (TOTAL AL) */}
+                        <tfoot className="bg-slate-100 font-black border-t-2 border-b-2 border-slate-800 text-xs text-ink-950">
+                          <tr>
+                            <td colSpan={5} className="px-4 py-2.5 uppercase tracking-wide">
+                              TOTAL CUENTA AL {acc.finalDate}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-slate-500 text-[11px] font-semibold">
+                              Movimientos Período:
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-ink-950">
+                              ${fmt(acc.totalDebe)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-ink-950">
+                              ${fmt(acc.totalHaber)}
+                            </td>
+                            <td
+                              className={`px-3 py-2.5 text-right font-mono font-black ${
+                                acc.finalBalance < 0 ? "text-rose-700" : "text-ink-950"
                               }`}
                             >
-                              {fmt4(m.saldoFinalMes)}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-
-                    {/* Total Final de la Cuenta (TOTAL AL) */}
-                    <div className="grid grid-cols-12 gap-2 py-1.5 text-slate-900 font-black border-t-2 border-slate-800 mt-2 bg-slate-50/70">
-                      <div className="col-span-6 flex items-center pl-8">
-                        <span className="mr-2">TOTAL AL: {acc.finalDate}</span>
-                        <span className="text-slate-500">----------------&gt;</span>
-                      </div>
-                      <div className="col-span-3 text-right"></div>
-                      <div className="col-span-1 text-right font-mono">{fmt4(acc.totalDebe)}</div>
-                      <div className="col-span-1 text-right font-mono">{fmt4(acc.totalHaber)}</div>
-                      <div
-                        className={`col-span-1 text-right font-mono ${
-                          acc.finalBalance < 0 ? "text-rose-700" : ""
-                        }`}
-                      >
-                        {fmt4(acc.finalBalance)}
-                      </div>
+                              ${fmt(acc.finalBalance)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   </div>
                 ))}
 
                 {/* Gran Total Mayor General */}
-                <div className="pt-4 border-t-2 border-slate-900 text-xs font-mono font-black text-slate-900">
-                  <div className="grid grid-cols-12 gap-2 items-center py-2 bg-slate-100 px-2 rounded-lg">
-                    <div className="col-span-6">
-                      = RESUMEN MAYOR GENERAL ({mayorAccounts.length} CUENTAS) =
+                <div className="pt-2 text-xs font-black text-slate-900">
+                  <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-sm tracking-wide">
+                        = RESUMEN MAYOR GENERAL ({mayorAccounts.length} CUENTAS) =
+                      </p>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        Consolidación de débitos, créditos y cuadre contable NIIF
+                      </p>
                     </div>
-                    <div className="col-span-3 text-right">SUMAS TOTALES:</div>
-                    <div className="col-span-1 text-right font-mono">${fmt(totalGeneralDebe)}</div>
-                    <div className="col-span-1 text-right font-mono">${fmt(totalGeneralHaber)}</div>
-                    <div className="col-span-1 text-right font-mono">
-                      ${fmt(r2(Math.abs(totalGeneralDebe - totalGeneralHaber)))}
+
+                    <div className="flex items-center gap-4 bg-white/10 rounded-xl px-4 py-2 border border-white/10 flex-wrap">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase text-emerald-300 font-bold block">Suma Débitos</span>
+                        <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralDebe)}</span>
+                      </div>
+                      <div className="w-px h-7 bg-white/20"></div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase text-blue-300 font-bold block">Suma Créditos</span>
+                        <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralHaber)}</span>
+                      </div>
+                      <div className="w-px h-7 bg-white/20"></div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase text-purple-300 font-bold block">Cuadre NIIF</span>
+                        <span className="font-mono text-sm font-bold text-white">
+                          ${fmt(r2(Math.abs(totalGeneralDebe - totalGeneralHaber)))}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
