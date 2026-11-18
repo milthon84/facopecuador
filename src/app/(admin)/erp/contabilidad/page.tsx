@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import Link from "next/link";
-import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck, ListTree, FileCheck2, Calendar, CheckCircle2 } from "lucide-react";
+import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, FileSpreadsheet, DollarSign, Lock, Building2, ShieldCheck, ListTree, FileCheck2, Calendar, CheckCircle2, Download } from "lucide-react";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 import ExportarExcelContableButton from "./ExportarExcelContableButton";
@@ -13,6 +13,15 @@ export const dynamic = "force-dynamic";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmt(n: number) { return n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function getTipoId(doc: string): string {
+  const d = (doc ?? "").trim();
+  if (d === "9999999999999") return "07";
+  if (d.length === 13) return "04";
+  if (d.length === 10 && /^\d+$/.test(d)) return "05";
+  if (/^[A-Za-z]/.test(d)) return "06";
+  return "08";
+}
 
 function periodLabel(period: string) {
   if (period === "all") return "Todo el Historial";
@@ -207,6 +216,36 @@ export default async function ContabilidadPage({
     entriesQuery,
     prevLinesPromise,
   ]);
+
+  // Cargar datos ATS si la pestaña activa es ATS
+  let atsVentas: any[] = [];
+  let atsCompras: any[] = [];
+
+  if (tab === "ats") {
+    const [atsYear, atsMonth] = (period === "all" ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}` : period).split("-").map(Number);
+    const atsFrom = period === "all" ? "2024-01-01" : new Date(atsYear, atsMonth - 1, 1).toISOString().split("T")[0];
+    const atsTo   = period === "all" ? new Date().toISOString().split("T")[0] : new Date(atsYear, atsMonth, 0).toISOString().split("T")[0];
+
+    const [{ data: invs }, { data: exps }] = await Promise.all([
+      supabase
+        .from("invoices")
+        .select("invoice_number, created_at, client_name, client_document, subtotal_0, subtotal_15, iva_amount, total, sri_authorization_number, sri_environment")
+        .gte("created_at", atsFrom + "T00:00:00")
+        .lte("created_at", atsTo   + "T23:59:59")
+        .eq("sri_status", "authorized")
+        .order("created_at"),
+      supabase
+        .from("expenses")
+        .select("document_number, expense_date, supplier_name, supplier_ruc, subtotal_0, subtotal_15, iva_amount, total, category")
+        .gte("expense_date", atsFrom)
+        .lte("expense_date", atsTo)
+        .eq("status", "registered")
+        .order("expense_date"),
+    ]);
+
+    atsVentas = invs ?? [];
+    atsCompras = exps ?? [];
+  }
 
   const allEntries = entries ?? [];
 
@@ -674,11 +713,11 @@ export default async function ContabilidadPage({
   traverseNodes("", 0);
 
   const tabs = [
-    { key: "diario",    label: "Libro Diario",           icon: <BookOpen size={14} />, href: `/erp/contabilidad?tab=diario&period=${period}` },
-    { key: "mayor",     label: "Libro Mayor",            icon: <BookOpen size={14} />, href: `/erp/contabilidad/mayor` },
-    { key: "resultados",label: "Estado de Resultados",   icon: <TrendingUp size={14} />, href: `/erp/contabilidad?tab=resultados&period=${period}` },
-    { key: "balance",   label: "Bal. de Comprobación",   icon: <Scale size={14} />, href: `/erp/contabilidad?tab=balance&period=${period}` },
-    { key: "iva",       label: "Resumen IVA (Form. 104)",icon: <Receipt size={14} />, href: `/erp/contabilidad?tab=iva&period=${period}` },
+    { key: "diario",     label: "Libro Diario",                icon: <BookOpen size={14} />, href: `/erp/contabilidad?tab=diario&period=${period}` },
+    { key: "resultados", label: "Estado de Resultados",        icon: <TrendingUp size={14} />, href: `/erp/contabilidad?tab=resultados&period=${period}` },
+    { key: "balance",    label: "Bal. de Comprobación",        icon: <Scale size={14} />, href: `/erp/contabilidad?tab=balance&period=${period}` },
+    { key: "iva",        label: "Resumen IVA (Form. 104)",     icon: <Receipt size={14} />, href: `/erp/contabilidad?tab=iva&period=${period}` },
+    { key: "ats",        label: "ATS Anexo Transaccional (SRI)", icon: <FileSpreadsheet size={14} />, href: `/erp/contabilidad?tab=ats&period=${period}` },
   ];
 
   const quickLinks = [
@@ -688,7 +727,6 @@ export default async function ContabilidadPage({
     { href: "/erp/contabilidad/caja-chica-liquidaciones",       label: "Liquidación y Rendición de Caja Chica", icon: <ShieldCheck size={14} className="text-purple-600" />, desc: "Auditoría de comprobantes, restitución de fondo fijo y legalización" },
     { href: "/erp/contabilidad/cierre-anual",                  label: "Cierre Anual Fiscal de Empresas",icon: <Building2 size={14} className="text-amber-600" />,          desc: "Ejercicio fiscal, 15% trabajadores, 25% impuesto a la renta y NIIF" },
     { href: `/erp/contabilidad/cierre?period=${period}`,      label: "Cierre Mensual Contable",        icon: <Lock size={14} className="text-lilac-600" />,           desc: "Consolidación de mes, asientos de cierre y bitácora de auditoría" },
-    { href: `/erp/contabilidad/ats?period=${period}`,         label: "ATS — Anexo Transaccional",      icon: <FileSpreadsheet size={14} className="text-lilac-600" />,  desc: "Compras y ventas para SRI" },
     { href: "/erp/contabilidad/dividendos",                    label: "ADI — Dividendos y Utilidades",  icon: <DollarSign size={14} className="text-green-600" />,        desc: "Registro de distribución" },
     { href: `/erp/contabilidad/balance`,                       label: "Balance General",                icon: <Scale size={14} className="text-blue-600" />,              desc: "Situación financiera (Activos / Pasivos / Patrimonio)" },
   ];
@@ -1453,6 +1491,165 @@ export default async function ContabilidadPage({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── PESTAÑA: ATS — Anexo Transaccional SRI ── */}
+      {tab === "ats" && (
+        <div className="space-y-4">
+          <div className="bg-white border border-lilac-100 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={18} className="text-lilac-600" />
+                <h2 className="font-bold text-sm text-ink-900">ATS — Anexo Transaccional Simplificado</h2>
+              </div>
+              <p className="text-xs text-ink-500">
+                Compras y ventas SRI para el período {periodLabel(period)} ({atsVentas.length} ventas / {atsCompras.length} compras)
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href={`/erp/contabilidad/declaraciones?period=${period}`}
+                className="flex items-center gap-1.5 text-xs border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-3 py-2 rounded-xl transition-colors font-medium shadow-2xs"
+                title="Ver o subir respaldos de declaraciones y talón ATS de este mes"
+              >
+                <FileCheck2 size={14} className="text-emerald-600" /> Respaldos del Mes
+              </Link>
+              <a
+                href={`/api/admin/contabilidad/ats-csv?period=${period}`}
+                className="flex items-center gap-1.5 text-xs bg-lilac-600 hover:bg-lilac-700 text-white px-3 py-2 rounded-xl transition-colors font-medium shadow-sm"
+              >
+                <Download size={14} /> Exportar CSV
+              </a>
+            </div>
+          </div>
+
+          {/* ── VENTAS ───────────────────────────────────────────────────── */}
+          <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-lilac-50 bg-green-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={15} className="text-green-600" />
+                <h3 className="font-semibold text-sm text-ink-800">Ventas (Facturas Emitidas SRI)</h3>
+              </div>
+              <span className="text-xs text-ink-500 font-medium">{atsVentas.length} comprobantes</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-lilac-50/50 text-ink-500 uppercase">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Fecha</th>
+                    <th className="px-3 py-2 text-left">N° Factura</th>
+                    <th className="px-3 py-2 text-left">T.Id</th>
+                    <th className="px-3 py-2 text-left">Identificación</th>
+                    <th className="px-3 py-2 text-left">Razón Social</th>
+                    <th className="px-3 py-2 text-right">Base 0%</th>
+                    <th className="px-3 py-2 text-right">Base 15%</th>
+                    <th className="px-3 py-2 text-right">IVA</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-lilac-50">
+                  {atsVentas.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-ink-400">
+                        Sin ventas autorizadas por el SRI en este período.
+                      </td>
+                    </tr>
+                  ) : (
+                    atsVentas.map((v: any, i: number) => (
+                      <tr key={i} className="hover:bg-lilac-50/20">
+                        <td className="px-3 py-2 font-mono text-ink-500">
+                          {new Date(v.created_at).toLocaleDateString("es-EC")}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-700">{v.invoice_number}</td>
+                        <td className="px-3 py-2 text-center font-mono">{getTipoId(v.client_document)}</td>
+                        <td className="px-3 py-2 font-mono">{v.client_document}</td>
+                        <td className="px-3 py-2 text-ink-800 max-w-[140px] truncate">{v.client_name}</td>
+                        <td className="px-3 py-2 text-right">{fmt(v.subtotal_0 ?? 0)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(v.subtotal_15 ?? 0)}</td>
+                        <td className="px-3 py-2 text-right text-green-700 font-medium">{fmt(v.iva_amount ?? 0)}</td>
+                        <td className="px-3 py-2 text-right font-bold">{fmt(v.total ?? 0)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {atsVentas.length > 0 && (
+                  <tfoot className="bg-lilac-50 text-xs font-bold border-t-2 border-lilac-200">
+                    <tr>
+                      <td colSpan={5} className="px-3 py-2">TOTALES ({atsVentas.length})</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsVentas.reduce((s: number, v: any) => s + Number(v.subtotal_0 ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsVentas.reduce((s: number, v: any) => s + Number(v.subtotal_15 ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right text-green-700">{fmt(atsVentas.reduce((s: number, v: any) => s + Number(v.iva_amount ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsVentas.reduce((s: number, v: any) => s + Number(v.total ?? 0), 0))}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+          {/* ── COMPRAS ───────────────────────────────────────────────────── */}
+          <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-lilac-50 bg-red-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={15} className="text-red-500" />
+                <h3 className="font-semibold text-sm text-ink-800">Compras (Gastos Registrados)</h3>
+              </div>
+              <span className="text-xs text-ink-500 font-medium">{atsCompras.length} comprobantes</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-lilac-50/50 text-ink-500 uppercase">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Fecha</th>
+                    <th className="px-3 py-2 text-left">N° Factura</th>
+                    <th className="px-3 py-2 text-left">RUC Proveedor</th>
+                    <th className="px-3 py-2 text-left">Proveedor</th>
+                    <th className="px-3 py-2 text-left">Categoría</th>
+                    <th className="px-3 py-2 text-right">Base 0%</th>
+                    <th className="px-3 py-2 text-right">Base 15%</th>
+                    <th className="px-3 py-2 text-right">IVA</th>
+                    <th className="px-3 py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-lilac-50">
+                  {atsCompras.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-ink-400">
+                        Sin compras registradas en este período.
+                      </td>
+                    </tr>
+                  ) : (
+                    atsCompras.map((c: any, i: number) => (
+                      <tr key={i} className="hover:bg-lilac-50/20">
+                        <td className="px-3 py-2 font-mono text-ink-500">{c.expense_date}</td>
+                        <td className="px-3 py-2 font-mono text-ink-700">{c.document_number ?? "—"}</td>
+                        <td className="px-3 py-2 font-mono">{c.supplier_ruc ?? "—"}</td>
+                        <td className="px-3 py-2 text-ink-800 max-w-[120px] truncate">{c.supplier_name}</td>
+                        <td className="px-3 py-2 text-ink-500">{c.category}</td>
+                        <td className="px-3 py-2 text-right">{fmt(c.subtotal_0 ?? 0)}</td>
+                        <td className="px-3 py-2 text-right">{fmt(c.subtotal_15 ?? 0)}</td>
+                        <td className="px-3 py-2 text-right text-blue-700 font-medium">{fmt(c.iva_amount ?? 0)}</td>
+                        <td className="px-3 py-2 text-right font-bold">{fmt(c.total ?? 0)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {atsCompras.length > 0 && (
+                  <tfoot className="bg-lilac-50 text-xs font-bold border-t-2 border-lilac-200">
+                    <tr>
+                      <td colSpan={5} className="px-3 py-2">TOTALES ({atsCompras.length})</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsCompras.reduce((s: number, c: any) => s + Number(c.subtotal_0 ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsCompras.reduce((s: number, c: any) => s + Number(c.subtotal_15 ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right text-blue-700">{fmt(atsCompras.reduce((s: number, c: any) => s + Number(c.iva_amount ?? 0), 0))}</td>
+                      <td className="px-3 py-2 text-right">{fmt(atsCompras.reduce((s: number, c: any) => s + Number(c.total ?? 0), 0))}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </div>
         </div>
       )}
