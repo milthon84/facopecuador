@@ -24,8 +24,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     percentage: 10,
     accountCode: "1.2.01.01",
     accountName: "Equipos Médicos y Odontológicos",
-    depExpCode: "5.2.08",
-    depExpName: "Depreciaciones",
+    depExpCode: "5.2.08.01",
+    depExpName: "Depreciación Equipos Médicos y Odontológicos",
   },
   mobiliario: {
     id: "mobiliario",
@@ -36,8 +36,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     percentage: 10,
     accountCode: "1.2.01.02",
     accountName: "Mobiliario y Enseres",
-    depExpCode: "5.2.08",
-    depExpName: "Depreciaciones",
+    depExpCode: "5.2.08.02",
+    depExpName: "Depreciación Mobiliario y Enseres",
   },
   computacion: {
     id: "computacion",
@@ -48,8 +48,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     percentage: 33.33,
     accountCode: "1.2.01.03",
     accountName: "Equipos de Computación y Software",
-    depExpCode: "5.2.08",
-    depExpName: "Depreciaciones",
+    depExpCode: "5.2.08.03",
+    depExpName: "Depreciación Equipos de Computación y Software",
   },
   inmuebles: {
     id: "inmuebles",
@@ -60,8 +60,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     percentage: 5,
     accountCode: "1.2.01.04",
     accountName: "Inmuebles e Instalaciones",
-    depExpCode: "5.2.08",
-    depExpName: "Depreciaciones",
+    depExpCode: "5.2.08.04",
+    depExpName: "Depreciación Inmuebles e Instalaciones",
   },
   vehiculos: {
     id: "vehiculos",
@@ -72,8 +72,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     percentage: 20,
     accountCode: "1.2.01.05",
     accountName: "Vehículos y Transporte",
-    depExpCode: "5.2.08",
-    depExpName: "Depreciaciones",
+    depExpCode: "5.2.08.05",
+    depExpName: "Depreciación Vehículos y Equipos de Transporte",
   },
 };
 

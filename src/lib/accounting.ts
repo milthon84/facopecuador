@@ -1061,29 +1061,32 @@ export async function createCajaGeneralDepositJournalEntry(params: {
 
 // ── Mapeo: categoría de activo → cuentas contables ────────────────────────
 const ASSET_ACCOUNTS: Record<string, { asset: string; assetName: string; dep: string; depName: string; depExp: string; depExpName: string }> = {
-  // ⚠️ depExp apunta a cuentas de movimiento hijas de 5.2.08 (cuando existan) —
-  //    por ahora 5.2.08 es el único grupo de Depreciaciones sin hijas creadas aún;
-  //    se mantiene para no romper asientos existentes hasta que se creen las subcuentas.
-  "Equipos odontológicos":      { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
-  "Muebles y enseres":          { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08", depExpName: "Depreciaciones" },
-  "Equipos de computación":     { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08", depExpName: "Depreciaciones" },
-  "Otros equipos y maquinaria": { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
+  "Equipos odontológicos":      { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08.01", depExpName: "Depreciación Equipos Médicos y Odontológicos" },
+  "Muebles y enseres":          { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08.02", depExpName: "Depreciación Mobiliario y Enseres" },
+  "Equipos de computación":     { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08.03", depExpName: "Depreciación Equipos de Computación y Software" },
+  "Otros equipos y maquinaria": { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08.01", depExpName: "Depreciación Equipos Médicos y Odontológicos" },
 };
 
 function assetAccounts(category: string, account_code?: string) {
   if (account_code) {
-    if (account_code === "1.2.01.01") return { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" };
-    if (account_code === "1.2.01.02") return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08", depExpName: "Depreciaciones" };
-    if (account_code === "1.2.01.03") return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08", depExpName: "Depreciaciones" };
-    if (account_code === "1.2.01.04") return { asset: "1.2.01.04", assetName: "Inmuebles e Instalaciones",        dep: "1.2.02.01", depName: "Deprec. Acum. Inmuebles",        depExp: "5.2.08", depExpName: "Depreciaciones" };
-    if (account_code === "1.2.01.05") return { asset: "1.2.01.05", assetName: "Vehículos y Transporte",          dep: "1.2.02.01", depName: "Deprec. Acum. Vehículos",        depExp: "5.2.08", depExpName: "Depreciaciones" };
+    if (account_code === "1.2.01.01") return { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08.01", depExpName: "Depreciación Equipos Médicos y Odontológicos" };
+    if (account_code === "1.2.01.02") return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08.02", depExpName: "Depreciación Mobiliario y Enseres" };
+    if (account_code === "1.2.01.03") return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08.03", depExpName: "Depreciación Equipos de Computación y Software" };
+    if (account_code === "1.2.01.04") return { asset: "1.2.01.04", assetName: "Inmuebles e Instalaciones",        dep: "1.2.02.04", depName: "Deprec. Acum. Inmuebles",        depExp: "5.2.08.04", depExpName: "Depreciación Inmuebles e Instalaciones" };
+    if (account_code === "1.2.01.05") return { asset: "1.2.01.05", assetName: "Vehículos y Transporte",          dep: "1.2.02.05", depName: "Deprec. Acum. Vehículos",        depExp: "5.2.08.05", depExpName: "Depreciación Vehículos y Equipos de Transporte" };
   }
   const cat = (category || "").toLowerCase();
   if (cat.includes("comput") || cat.includes("software")) {
-    return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software", dep: "1.2.02.03", depName: "Deprec. Acum. Computación", depExp: "5.2.08", depExpName: "Depreciaciones" };
+    return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software", dep: "1.2.02.03", depName: "Deprec. Acum. Computación", depExp: "5.2.08.03", depExpName: "Depreciación Equipos de Computación y Software" };
   }
   if (cat.includes("mueble") || cat.includes("mobiliario") || cat.includes("enseres")) {
-    return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres", dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario", depExp: "5.2.08", depExpName: "Depreciaciones" };
+    return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres", dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario", depExp: "5.2.08.02", depExpName: "Depreciación Mobiliario y Enseres" };
+  }
+  if (cat.includes("inmueble") || cat.includes("edificio")) {
+    return { asset: "1.2.01.04", assetName: "Inmuebles e Instalaciones", dep: "1.2.02.04", depName: "Deprec. Acum. Inmuebles", depExp: "5.2.08.04", depExpName: "Depreciación Inmuebles e Instalaciones" };
+  }
+  if (cat.includes("vehiculo") || cat.includes("vehículo") || cat.includes("transporte")) {
+    return { asset: "1.2.01.05", assetName: "Vehículos y Transporte", dep: "1.2.02.05", depName: "Deprec. Acum. Vehículos", depExp: "5.2.08.05", depExpName: "Depreciación Vehículos y Equipos de Transporte" };
   }
   return ASSET_ACCOUNTS[category] ?? ASSET_ACCOUNTS["Otros equipos y maquinaria"];
 }

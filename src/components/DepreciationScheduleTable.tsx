@@ -315,8 +315,8 @@ export default function DepreciationScheduleTable({
                       {/* Fallback ilustrativo si las líneas aún no se habían indexado */}
                       <tr className="hover:bg-slate-50/50">
                         <td className="px-3.5 py-2.5">
-                          <div className="font-mono font-bold text-purple-900 text-xs">5.2.08</div>
-                          <div className="text-[11px] text-ink-600 font-medium">Depreciaciones (Gasto)</div>
+                          <div className="font-mono font-bold text-purple-900 text-xs">5.2.08.01</div>
+                          <div className="text-[11px] text-ink-600 font-medium">Depreciación Equipos Médicos y Odontológicos</div>
                         </td>
                         <td className="px-3 py-2.5 text-ink-500 text-[11px]">
                           Cuota mensual {selectedEntry?.period}
@@ -328,8 +328,8 @@ export default function DepreciationScheduleTable({
                       </tr>
                       <tr className="hover:bg-slate-50/50">
                         <td className="px-3.5 py-2.5">
-                          <div className="font-mono font-bold text-purple-900 text-xs">1.2.02</div>
-                          <div className="text-[11px] text-ink-600 font-medium">Depreciación Acumulada</div>
+                          <div className="font-mono font-bold text-purple-900 text-xs">1.2.02.01</div>
+                          <div className="text-[11px] text-ink-600 font-medium">Deprec. Acum. Equipos Médicos</div>
                         </td>
                         <td className="px-3 py-2.5 text-ink-500 text-[11px]">
                           Acumulación {selectedEntry?.period}

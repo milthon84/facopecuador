@@ -297,7 +297,7 @@ export default function ProcesarDepreciacionModal({ assets, depreciations }: Pro
               <ArrowRight size={13} className="text-purple-600" /> Asiento Contable Automático a Generar:
             </p>
             <p className="text-purple-800">
-              • <strong>Débito (Debe):</strong> Cuenta <code>5.2.08 Depreciaciones</code> por ${preview.pendingTotal.toFixed(2)}
+              • <strong>Débito (Debe):</strong> Cuentas <code>5.2.08.xx Depreciaciones (Gasto)</code> por ${preview.pendingTotal.toFixed(2)}
             </p>
             <p className="text-purple-800">
               • <strong>Crédito (Haber):</strong> Cuentas <code>1.2.02.xx Depreciación Acumulada</code> correspondientes
