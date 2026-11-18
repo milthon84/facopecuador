@@ -2,22 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Landmark, Plus, AlertCircle, Loader2, DollarSign, Sparkles, Building2, Layers } from "lucide-react";
+import { Landmark, Plus, AlertCircle, Loader2 } from "lucide-react";
 import StandardModal from "@/components/StandardModal";
 import { createAssetAction } from "@/app/(admin)/erp/activos/actions";
 import { ASSET_TYPES } from "@/lib/fixed-assets-utils";
 
-interface BankAccount {
-  id: string;
-  bank_name: string;
-  account_number: string | null;
-}
-
 interface Props {
-  bankAccounts: BankAccount[];
+  bankAccounts?: any[];
 }
 
-export default function NuevoActivoModal({ bankAccounts }: Props) {
+export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,13 +22,6 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
   const [assetTypeKey, setAssetTypeKey] = useState("equipos_medicos");
   const [purchaseDate, setPurchaseDate] = useState(today);
   const [purchaseValue, setPurchaseValue] = useState("");
-  const [bankAccountId, setBankAccountId] = useState("");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [supplierName, setSupplierName] = useState("");
-  const [supplierRuc, setSupplierRuc] = useState("");
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [description, setDescription] = useState("");
-  const [registerInExpenses, setRegisterInExpenses] = useState(false);
 
   const currentType = ASSET_TYPES[assetTypeKey] || ASSET_TYPES.equipos_medicos;
 
@@ -43,13 +30,6 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
     setAssetTypeKey("equipos_medicos");
     setPurchaseDate(today);
     setPurchaseValue("");
-    setBankAccountId("");
-    setPaymentReference("");
-    setSupplierName("");
-    setSupplierRuc("");
-    setInvoiceNumber("");
-    setDescription("");
-    setRegisterInExpenses(false);
     setErrorMsg(null);
     setIsOpen(true);
   }
@@ -78,13 +58,6 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
         purchase_value: val,
         salvage_value: 0,
         useful_life_years: currentType.years,
-        bank_account_id: bankAccountId || null,
-        payment_reference: paymentReference.trim() || null,
-        supplier_name: supplierName.trim() || null,
-        supplier_ruc: supplierRuc.trim() || null,
-        invoice_number: invoiceNumber.trim() || null,
-        description: description.trim() || null,
-        register_in_expenses: registerInExpenses,
       });
 
       setIsOpen(false);
@@ -111,10 +84,10 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
         isOpen={isOpen}
         onClose={handleClose}
         title="Registrar Activo Fijo"
-        subtitle="Ingresa el bien adquirido. El código secuencial, vida útil y porcentaje SRI se asignan automáticamente."
+        subtitle="Ingresa el bien. El código secuencial, vida útil y porcentaje SRI se asignan automáticamente."
         icon={<Landmark size={20} className="text-lilac-600" />}
         loading={loading}
-        maxWidth="max-w-xl"
+        maxWidth="max-w-lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {errorMsg && (
@@ -195,7 +168,7 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-ink-700 mb-1">
-                Fecha de Adquisición *
+                Fecha de Adquisición / Registro *
               </label>
               <input
                 type="date"
@@ -209,7 +182,7 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
 
             <div>
               <label className="block text-xs font-semibold text-ink-700 mb-1">
-                Valor de Compra ($ Costo) *
+                Valor del Activo ($ Costo) *
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-xs font-semibold">
@@ -230,78 +203,8 @@ export default function NuevoActivoModal({ bankAccounts }: Props) {
             </div>
           </div>
 
-          {/* Forma de Pago */}
-          <div>
-            <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Forma de Pago / Origen de Fondos
-            </label>
-            <select
-              value={bankAccountId}
-              onChange={(e) => setBankAccountId(e.target.value)}
-              disabled={loading}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-lilac-500 focus:bg-white cursor-pointer"
-            >
-              <option value="">A crédito / Por pagar (Cuentas por Pagar Proveedores)</option>
-              {bankAccounts.map((b) => (
-                <option key={b.id} value={b.id}>
-                  Pago directo con Banco: {b.bank_name} {b.account_number ? `(${b.account_number})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Proveedor y Factura (Opcionales / Colapsables) */}
-          <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-ink-700">
-              <span>Datos del Comprobante / Proveedor (Opcional)</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-medium text-ink-500 mb-0.5">
-                  Proveedor
-                </label>
-                <input
-                  type="text"
-                  value={supplierName}
-                  onChange={(e) => setSupplierName(e.target.value)}
-                  disabled={loading}
-                  placeholder="Empresa o persona"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-lilac-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-medium text-ink-500 mb-0.5">
-                  N° Factura
-                </label>
-                <input
-                  type="text"
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  disabled={loading}
-                  placeholder="001-002-000123456"
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-lilac-500"
-                />
-              </div>
-            </div>
-
-            <div className="pt-1">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-ink-800">
-                <input
-                  type="checkbox"
-                  checked={registerInExpenses}
-                  onChange={(e) => setRegisterInExpenses(e.target.checked)}
-                  className="accent-lilac-600 rounded"
-                />
-                <span className="font-medium">
-                  Registrar también como Factura de Compra en el módulo de Gastos
-                </span>
-              </label>
-            </div>
-          </div>
-
           {/* Botones de Acción */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={handleClose}
