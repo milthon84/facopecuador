@@ -133,6 +133,12 @@ export default function LibroMayorClient({
   const [f8Target, setF8Target] = useState<"cuenta" | "cuentaDesde" | "cuentaHasta">("cuenta");
   const [f8Search, setF8Search] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Desactivar bloqueo de pantalla cuando se completen los cálculos y lleguen los nuevos datos
+  useEffect(() => {
+    setIsGenerating(false);
+  }, [mayorAccounts, searchParams]);
 
   // Escuchar tecla F8 en el teclado
   useEffect(() => {
@@ -182,6 +188,7 @@ export default function LibroMayorClient({
 
   const handleGenerar = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    setIsGenerating(true);
     const params = new URLSearchParams();
     params.set("generar", "1");
     if (desde) params.set("desde", desde);
@@ -370,6 +377,51 @@ export default function LibroMayorClient({
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
+      {/* ── BLOQUEO DE PANTALLA MIENTRAS GENERA EL LIBRO MAYOR (Como el resto de procesos del sistema) ── */}
+      {(isGenerating || isPending) && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-white/95 border border-purple-100 rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            {/* Spinner contable con detalles lilas */}
+            <div className="relative mb-6">
+              <div className="h-16 w-16 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center text-purple-600">
+                <BookOpen className="w-6 h-6 animate-pulse" />
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-ink-900 mb-2">
+              Generando Libro Mayor...
+            </h3>
+            <p className="text-xs text-ink-500 leading-relaxed mb-4">
+              Calculando saldos iniciales, movimientos cronológicos y saldos acumulados progresivos. Por favor, espere un momento.
+            </p>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200 text-[11px] font-semibold text-purple-700">
+              <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+              Procesamiento contable NIIF
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BLOQUEO MIENTRAS EXPORTA A EXCEL ── */}
+      {exportingExcel && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-white/95 border border-emerald-100 rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative mb-6">
+              <div className="h-16 w-16 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center text-emerald-600">
+                <FileSpreadsheet className="w-6 h-6 animate-pulse" />
+              </div>
+            </div>
+            <h3 className="text-lg font-bold text-ink-900 mb-2">
+              Exportando a Excel...
+            </h3>
+            <p className="text-xs text-ink-500 leading-relaxed">
+              Generando archivo .xlsx estructurado por cuenta con saldos y subtotales.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── BARRA SUPERIOR DE ACCIONES (Oculta en Impresión) ── */}
       <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-lilac-100 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-3">
