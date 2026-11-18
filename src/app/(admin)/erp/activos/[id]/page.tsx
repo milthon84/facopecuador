@@ -21,12 +21,12 @@ function buildSchedule(asset: {
   const totalMonths = asset.useful_life_years * 12;
   const monthly = depreciable / totalMonths;
 
-  const start = new Date(asset.purchase_date);
+  const start = new Date(asset.purchase_date + "T12:00:00");
   let accumulated = 0;
   const rows = [];
 
   for (let i = 0; i < totalMonths; i++) {
-    const d = new Date(start.getFullYear(), start.getMonth() + i + 1, 1);
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
     const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     accumulated = r2(accumulated + monthly);
     const bookValue = r2(Math.max(asset.purchase_value - accumulated, asset.salvage_value));
@@ -50,17 +50,26 @@ async function registerDepreciation(formData: FormData) {
   // Obtener datos del activo para el asiento
   const { data: asset } = await supabase
     .from("fixed_assets")
-    .select("name, category")
+    .select("id, name, category, code, account_code, description")
     .eq("id", asset_id)
     .single();
 
   if (!asset) throw new Error("Activo no encontrado");
 
+  const assetCode = extractAssetCode(asset);
+  const fullName = assetCode ? `[${assetCode}] ${asset.name}` : asset.name;
+
   let journal_entry_id: string | null = null;
   try {
     journal_entry_id = await createDepreciationJournalEntry({
-      asset_id, asset_name: asset.name, category: asset.category,
-      period, monthly_amount, user_id: user?.id, user_email: user?.email,
+      asset_id,
+      asset_name: fullName,
+      category: asset.category,
+      account_code: asset.account_code || undefined,
+      period,
+      monthly_amount,
+      user_id: user?.id,
+      user_email: user?.email,
     });
   } catch (e) { console.error("Asiento no generado:", e); }
 

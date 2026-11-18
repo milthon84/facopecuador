@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { assertWritePermission } from "@/lib/auth-action";
-import { createAssetPurchaseJournalEntry } from "@/lib/accounting";
-import { ASSET_TYPES } from "@/lib/fixed-assets-utils";
+import { createAssetPurchaseJournalEntry, createDepreciationJournalEntry } from "@/lib/accounting";
+import { ASSET_TYPES, extractAssetCode } from "@/lib/fixed-assets-utils";
 import { getNextAssetCode } from "@/lib/fixed-assets-server";
 
 export async function createAssetAction(data: {
@@ -184,4 +184,134 @@ export async function createAssetAction(data: {
   revalidatePath("/erp/gastos");
   revalidatePath("/erp/bancos");
   return { success: true, assetId: asset.id, code: nextCode };
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+export async function processBatchDepreciationAction(data: { period: string }) {
+  await assertWritePermission("/erp/activos");
+
+  const period = data.period?.trim();
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+    throw new Error("El período debe tener el formato YYYY-MM (ej. 2026-11).");
+  }
+
+  const [targetYear, targetMonth] = period.split("-").map(Number);
+
+  const supabase = createAdminClient();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+
+  // 1. Obtener activos fijos activos
+  const { data: assets, error: assetsErr } = await supabase
+    .from("fixed_assets")
+    .select("id, name, code, category, account_code, description, purchase_date, purchase_value, salvage_value, useful_life_years, status")
+    .eq("status", "active")
+    .order("purchase_date", { ascending: true });
+
+  if (assetsErr || !assets) {
+    throw new Error("No se pudieron cargar los activos fijos: " + (assetsErr?.message || ""));
+  }
+
+  // 2. Obtener depreciaciones ya registradas en este período
+  const { data: existingDeps } = await supabase
+    .from("asset_depreciations")
+    .select("asset_id, period")
+    .eq("period", period);
+
+  const registeredSet = new Set((existingDeps || []).map((d) => d.asset_id));
+
+  let processedCount = 0;
+  let totalAmount = 0;
+  let alreadyRegisteredCount = 0;
+  let futureCount = 0;
+  let finishedCount = 0;
+
+  for (const asset of assets) {
+    // Si ya está registrado en este período, omitir
+    if (registeredSet.has(asset.id)) {
+      alreadyRegisteredCount++;
+      continue;
+    }
+
+    const start = new Date(asset.purchase_date + "T12:00:00");
+    const startYear = start.getFullYear();
+    const startMonth = start.getMonth() + 1; // 1..12
+
+    // Meses transcurridos desde adquisición
+    const monthsElapsed = (targetYear - startYear) * 12 + (targetMonth - startMonth);
+
+    // Si aún no se había adquirido en este período
+    if (monthsElapsed < 0) {
+      futureCount++;
+      continue;
+    }
+
+    const usefulLife = Number(asset.useful_life_years || 10);
+    const totalMonths = usefulLife * 12;
+
+    // Si ya completó su vida útil antes de este mes
+    if (monthsElapsed >= totalMonths) {
+      finishedCount++;
+      continue;
+    }
+
+    const purchaseVal = Number(asset.purchase_value || 0);
+    const salvageVal = Number(asset.salvage_value || 0);
+    const depreciable = purchaseVal - salvageVal;
+    if (depreciable <= 0) continue;
+
+    const monthly = r2(depreciable / totalMonths);
+    const accumulated = r2(monthly * (monthsElapsed + 1));
+    const bookValue = r2(Math.max(purchaseVal - accumulated, salvageVal));
+
+    const assetCode = extractAssetCode(asset);
+    const fullName = assetCode ? `[${assetCode}] ${asset.name}` : asset.name;
+
+    // 3. Crear Asiento Contable
+    let journal_entry_id: string | null = null;
+    try {
+      journal_entry_id = await createDepreciationJournalEntry({
+        asset_id: asset.id,
+        asset_name: fullName,
+        category: asset.category,
+        account_code: asset.account_code || undefined,
+        period,
+        monthly_amount: monthly,
+        user_id: user?.id,
+        user_email: user?.email,
+      });
+    } catch (e) {
+      console.error(`Error generando asiento de depreciación para ${fullName}:`, e);
+    }
+
+    // 4. Guardar en asset_depreciations
+    await supabase.from("asset_depreciations").upsert({
+      asset_id: asset.id,
+      period,
+      monthly_amount: monthly,
+      accumulated,
+      book_value: bookValue,
+      journal_entry_id,
+    }, { onConflict: "asset_id,period" });
+
+    processedCount++;
+    totalAmount = r2(totalAmount + monthly);
+  }
+
+  revalidatePath("/erp/activos");
+  revalidatePath("/erp/contabilidad/diario");
+  revalidatePath("/erp/contabilidad/mayor");
+  revalidatePath("/erp/contabilidad/balance");
+  revalidatePath("/erp/contabilidad/cierre");
+
+  return {
+    success: true,
+    period,
+    processedCount,
+    totalAmount,
+    alreadyRegisteredCount,
+    futureCount,
+    finishedCount,
+  };
 }

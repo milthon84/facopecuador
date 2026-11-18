@@ -1070,7 +1070,21 @@ const ASSET_ACCOUNTS: Record<string, { asset: string; assetName: string; dep: st
   "Otros equipos y maquinaria": { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" },
 };
 
-function assetAccounts(category: string) {
+function assetAccounts(category: string, account_code?: string) {
+  if (account_code) {
+    if (account_code === "1.2.01.01") return { asset: "1.2.01.01", assetName: "Equipos Médicos y Odontológicos", dep: "1.2.02.01", depName: "Deprec. Acum. Equipos Médicos", depExp: "5.2.08", depExpName: "Depreciaciones" };
+    if (account_code === "1.2.01.02") return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres",            dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario",      depExp: "5.2.08", depExpName: "Depreciaciones" };
+    if (account_code === "1.2.01.03") return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software",dep: "1.2.02.03", depName: "Deprec. Acum. Computación",      depExp: "5.2.08", depExpName: "Depreciaciones" };
+    if (account_code === "1.2.01.04") return { asset: "1.2.01.04", assetName: "Inmuebles e Instalaciones",        dep: "1.2.02.01", depName: "Deprec. Acum. Inmuebles",        depExp: "5.2.08", depExpName: "Depreciaciones" };
+    if (account_code === "1.2.01.05") return { asset: "1.2.01.05", assetName: "Vehículos y Transporte",          dep: "1.2.02.01", depName: "Deprec. Acum. Vehículos",        depExp: "5.2.08", depExpName: "Depreciaciones" };
+  }
+  const cat = (category || "").toLowerCase();
+  if (cat.includes("comput") || cat.includes("software")) {
+    return { asset: "1.2.01.03", assetName: "Equipos de Computación y Software", dep: "1.2.02.03", depName: "Deprec. Acum. Computación", depExp: "5.2.08", depExpName: "Depreciaciones" };
+  }
+  if (cat.includes("mueble") || cat.includes("mobiliario") || cat.includes("enseres")) {
+    return { asset: "1.2.01.02", assetName: "Mobiliario y Enseres", dep: "1.2.02.02", depName: "Deprec. Acum. Mobiliario", depExp: "5.2.08", depExpName: "Depreciaciones" };
+  }
   return ASSET_ACCOUNTS[category] ?? ASSET_ACCOUNTS["Otros equipos y maquinaria"];
 }
 
@@ -1080,12 +1094,13 @@ export async function createAssetPurchaseJournalEntry(params: {
   purchase_date:  string;
   asset_name:     string;
   category:       string;
+  account_code?:  string;
   purchase_value: number;
   on_credit:      boolean;
   user_id?:       string | null;
   user_email?:    string | null;
 }) {
-  const accts = assetAccounts(params.category);
+  const accts = assetAccounts(params.category, params.account_code);
   const creditAcct = params.on_credit
     ? { code: "2.1.01.01", name: "Cuentas por Pagar Proveedores" }
     : { code: "1.1.01.03", name: "Bancos Cuentas Corrientes y Ahorros" };
@@ -1109,12 +1124,13 @@ export async function createDepreciationJournalEntry(params: {
   asset_id:       string;
   asset_name:     string;
   category:       string;
+  account_code?:  string;
   period:         string;   // 'YYYY-MM'
   monthly_amount: number;
   user_id?:       string | null;
   user_email?:    string | null;
 }) {
-  const accts = assetAccounts(params.category);
+  const accts = assetAccounts(params.category, params.account_code);
 
   return insertJournalEntry({
     entry_date:     `${params.period}-01`,

@@ -3,6 +3,7 @@ import { Landmark, TrendingDown, DollarSign, Package, Plus } from "lucide-react"
 import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import NuevoActivoModal from "@/components/NuevoActivoModal";
+import ProcesarDepreciacionModal from "@/components/ProcesarDepreciacionModal";
 import { extractAssetCode } from "@/lib/fixed-assets-utils";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,7 @@ export default async function ActivosPage() {
   const canEdit = await hasWritePermission("/erp/activos");
   const supabase = createAdminClient();
 
-  const [{ data: assets }, { data: bankAccounts }] = await Promise.all([
+  const [{ data: assets }, { data: bankAccounts }, { data: depreciations }] = await Promise.all([
     supabase
       .from("fixed_assets")
       .select("*")
@@ -68,6 +69,9 @@ export default async function ActivosPage() {
       .select("id, bank_name, account_number")
       .eq("is_active", true)
       .order("bank_name"),
+    supabase
+      .from("asset_depreciations")
+      .select("asset_id, period, monthly_amount"),
   ]);
 
   const list = (assets as FixedAsset[]) || [];
@@ -88,7 +92,13 @@ export default async function ActivosPage() {
           <p className="text-sm text-ink-600">Registro, depreciación y gestión de bienes de capital.</p>
         </div>
         {canEdit && (
-          <NuevoActivoModal bankAccounts={bankAccounts || []} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProcesarDepreciacionModal
+              assets={active}
+              depreciations={depreciations || []}
+            />
+            <NuevoActivoModal bankAccounts={bankAccounts || []} />
+          </div>
         )}
       </div>
 
@@ -179,8 +189,12 @@ export default async function ActivosPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link href={`/erp/activos/${asset.id}`}
-                          className="text-xs text-lilac-600 hover:underline font-medium">Ver →</Link>
+                        <Link
+                          href={`/erp/activos/${asset.id}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-lilac-700 bg-lilac-50 hover:bg-lilac-100 border border-lilac-200 px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
+                        >
+                          Ver Detalle / Tabla →
+                        </Link>
                       </td>
                     </tr>
                   );
