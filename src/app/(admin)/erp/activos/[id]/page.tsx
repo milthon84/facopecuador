@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { assertPermission, assertWritePermission, hasWritePermission } from "@/lib/auth-action";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { extractAssetCode } from "@/lib/fixed-assets-utils";
+import { extractAssetCode, getAssetAccountInfo } from "@/lib/fixed-assets-utils";
 import DepreciationScheduleTable from "@/components/DepreciationScheduleTable";
 
 export const dynamic = "force-dynamic";
@@ -133,6 +133,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
 
   const today = new Date().toISOString().split("T")[0];
   const assetCode = extractAssetCode(asset);
+  const acctInfo = getAssetAccountInfo(asset);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -152,7 +153,9 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
               )}
               <h1 className="text-xl font-bold text-ink-900 truncate">{asset.name}</h1>
             </div>
-            <p className="text-sm text-ink-500 mt-0.5">{asset.category} · {asset.useful_life_years} años · Línea recta</p>
+            <p className="text-sm text-ink-500 mt-0.5">
+              <span className="font-semibold text-purple-900">{acctInfo.full}</span> · {asset.useful_life_years} años · Línea recta
+            </p>
           </div>
         </div>
         <span className={`self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full shrink-0 ${asset.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>

@@ -84,7 +84,7 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
         isOpen={isOpen}
         onClose={handleClose}
         title="Registrar Activo Fijo"
-        subtitle="Ingresa el bien. El código secuencial, vida útil y porcentaje SRI se asignan automáticamente."
+        subtitle="Ingresa el bien. La cuenta del Plan de Cuentas define su código, vida útil y porcentaje de depreciación."
         icon={<Landmark size={20} className="text-lilac-600" />}
         loading={loading}
         maxWidth="max-w-lg"
@@ -113,10 +113,10 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
             />
           </div>
 
-          {/* Tipo de Activo Fijo (SRI) */}
+          {/* Cuenta de Activo Fijo (Plan de Cuentas) */}
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Tipo de Activo Fijo (Tabla Oficial SRI) *
+              Cuenta de Activo Fijo (Plan de Cuentas) *
             </label>
             <select
               value={assetTypeKey}

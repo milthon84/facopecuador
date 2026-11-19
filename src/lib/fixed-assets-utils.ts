@@ -12,13 +12,13 @@ export interface AssetTypeDefinition {
 }
 
 /**
- * Tabla oficial de tipos de activos y depreciación SRI (Ecuador)
+ * Tabla oficial de cuentas de activos fijos del Plan de Cuentas y depreciación SRI (Ecuador)
  */
 export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
   equipos_medicos: {
     id: "equipos_medicos",
-    label: "Equipos Médicos y Odontológicos (Maquinaria y Equipo)",
-    category: "Instalaciones, maquinarias, equipos y muebles",
+    label: "1.2.01.01 — Equipos Médicos y Odontológicos",
+    category: "Equipos Médicos y Odontológicos",
     prefix: "EQM",
     years: 10,
     percentage: 10,
@@ -29,8 +29,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
   },
   mobiliario: {
     id: "mobiliario",
-    label: "Mobiliario y Enseres (Instalaciones y Muebles)",
-    category: "Instalaciones, maquinarias, equipos y muebles",
+    label: "1.2.01.02 — Mobiliario y Enseres",
+    category: "Mobiliario y Enseres",
     prefix: "MUE",
     years: 10,
     percentage: 10,
@@ -41,8 +41,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
   },
   computacion: {
     id: "computacion",
-    label: "Equipos de Cómputo y Software",
-    category: "Equipos de cómputo y software",
+    label: "1.2.01.03 — Equipos de Computación y Software",
+    category: "Equipos de Computación y Software",
     prefix: "COM",
     years: 3,
     percentage: 33.33,
@@ -53,8 +53,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
   },
   inmuebles: {
     id: "inmuebles",
-    label: "Inmuebles (Edificios, naves, excepto terrenos)",
-    category: "Inmuebles",
+    label: "1.2.01.04 — Inmuebles e Instalaciones",
+    category: "Inmuebles e Instalaciones",
     prefix: "INM",
     years: 20,
     percentage: 5,
@@ -65,8 +65,8 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
   },
   vehiculos: {
     id: "vehiculos",
-    label: "Vehículos, Equipos de Transporte",
-    category: "Vehículos, equipos de transporte y equipo caminero móvil",
+    label: "1.2.01.05 — Vehículos y Transporte",
+    category: "Vehículos y Transporte",
     prefix: "VEH",
     years: 5,
     percentage: 20,
@@ -76,6 +76,71 @@ export const ASSET_TYPES: Record<string, AssetTypeDefinition> = {
     depExpName: "Depreciación Vehículos y Equipos de Transporte",
   },
 };
+
+/**
+ * Obtiene la cuenta contable y descripción formateada para visualización de un activo
+ */
+export function getAssetAccountInfo(asset: {
+  account_code?: string | null;
+  category?: string | null;
+  description?: string | null;
+}): { code: string; name: string; full: string } {
+  const code = (asset.account_code || "").trim();
+  if (code) {
+    const match = Object.values(ASSET_TYPES).find((t) => t.accountCode === code);
+    if (match) {
+      return {
+        code: match.accountCode,
+        name: match.accountName,
+        full: `${match.accountCode} · ${match.accountName}`,
+      };
+    }
+  }
+
+  // Deducir por categoría o descripción histórica
+  const cat = `${asset.category || ""} ${asset.description || ""}`.toLowerCase();
+  if (cat.includes("médic") || cat.includes("odont") || cat.includes("maquinaria") || cat.includes("sillon")) {
+    return {
+      code: "1.2.01.01",
+      name: "Equipos Médicos y Odontológicos",
+      full: "1.2.01.01 · Equipos Médicos y Odontológicos",
+    };
+  }
+  if (cat.includes("mobil") || cat.includes("mueble") || cat.includes("enser") || cat.includes("oficina")) {
+    return {
+      code: "1.2.01.02",
+      name: "Mobiliario y Enseres",
+      full: "1.2.01.02 · Mobiliario y Enseres",
+    };
+  }
+  if (cat.includes("comput") || cat.includes("softw") || cat.includes("cómputo") || cat.includes("laptop")) {
+    return {
+      code: "1.2.01.03",
+      name: "Equipos de Computación y Software",
+      full: "1.2.01.03 · Equipos de Computación y Software",
+    };
+  }
+  if (cat.includes("inmuebl") || cat.includes("edific")) {
+    return {
+      code: "1.2.01.04",
+      name: "Inmuebles e Instalaciones",
+      full: "1.2.01.04 · Inmuebles e Instalaciones",
+    };
+  }
+  if (cat.includes("vehíc") || cat.includes("transp") || cat.includes("camion") || cat.includes("auto")) {
+    return {
+      code: "1.2.01.05",
+      name: "Vehículos y Transporte",
+      full: "1.2.01.05 · Vehículos y Transporte",
+    };
+  }
+
+  return {
+    code: code || "1.2.01",
+    name: asset.category || "Propiedad, Planta y Equipo",
+    full: `${code || "1.2.01"} · ${asset.category || "Propiedad, Planta y Equipo"}`,
+  };
+}
 
 /**
  * Resuelve el tipo de activo según el código de cuenta o descripción del gasto

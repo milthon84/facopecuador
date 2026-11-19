@@ -43,7 +43,7 @@ export default async function NuevoActivoPage() {
         <div>
           <h1 className="text-xl font-bold text-ink-900">Registrar Activo Fijo</h1>
           <p className="text-xs text-ink-500">
-            El código secuencial, vida útil y porcentaje SRI se asignan automáticamente.
+            La cuenta del Plan de Cuentas define su código, vida útil y porcentaje de depreciación.
           </p>
         </div>
       </div>
@@ -65,7 +65,7 @@ export default async function NuevoActivoPage() {
 
           <div>
             <label className="block text-xs font-semibold text-ink-700 mb-1">
-              Tipo de Activo Fijo (Tabla Oficial SRI) *
+              Cuenta de Activo Fijo (Plan de Cuentas) *
             </label>
             <select
               name="asset_type"

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import NuevoActivoModal from "@/components/NuevoActivoModal";
 import ProcesarDepreciacionModal from "@/components/ProcesarDepreciacionModal";
-import { extractAssetCode } from "@/lib/fixed-assets-utils";
+import { extractAssetCode, getAssetAccountInfo } from "@/lib/fixed-assets-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 type FixedAsset = {
   id: string;
   code?: string | null;
+  account_code?: string | null;
   name: string;
   category: string;
   description?: string | null;
@@ -47,13 +48,12 @@ function pctDepreciated(asset: FixedAsset): number {
   return Math.min(Math.round((monthsElapsed / (asset.useful_life_years * 12)) * 100), 100);
 }
 
-const CATEGORY_COLOR: Record<string, string> = {
-  "Inmuebles":                  "bg-blue-50 text-blue-700 border-blue-200",
-  "Equipos odontológicos":      "bg-lilac-50 text-lilac-700 border-lilac-200",
-  "Equipos de computación":     "bg-cyan-50 text-cyan-700 border-cyan-200",
-  "Muebles y enseres":          "bg-amber-50 text-amber-700 border-amber-200",
-  "Vehículos":                  "bg-green-50 text-green-700 border-green-200",
-  "Otros equipos y maquinaria": "bg-gray-50 text-gray-700 border-gray-200",
+const ACCOUNT_COLOR: Record<string, string> = {
+  "1.2.01.01": "bg-purple-50 text-purple-700 border-purple-200",
+  "1.2.01.02": "bg-amber-50 text-amber-700 border-amber-200",
+  "1.2.01.03": "bg-cyan-50 text-cyan-700 border-cyan-200",
+  "1.2.01.04": "bg-blue-50 text-blue-700 border-blue-200",
+  "1.2.01.05": "bg-green-50 text-green-700 border-green-200",
 };
 
 export default async function ActivosPage() {
@@ -149,7 +149,7 @@ export default async function ActivosPage() {
               <thead className="bg-lilac-50/50 text-xs text-ink-500 uppercase font-semibold">
                 <tr>
                   <th className="px-4 py-3 text-left">Activo</th>
-                  <th className="px-4 py-3 text-left">Categoría</th>
+                  <th className="px-4 py-3 text-left">Cuenta de Activo</th>
                   <th className="px-4 py-3 text-right">Costo</th>
                   <th className="px-4 py-3 text-center">Depreciado</th>
                   <th className="px-4 py-3 text-right">Valor en libros</th>
@@ -162,6 +162,7 @@ export default async function ActivosPage() {
                   const bv  = currentBookValue(asset);
                   const pct = pctDepreciated(asset);
                   const assetCode = extractAssetCode(asset);
+                  const acctInfo = getAssetAccountInfo(asset);
                   return (
                     <tr key={asset.id} className="hover:bg-lilac-50/20 transition-colors">
                       <td className="px-4 py-3">
@@ -188,8 +189,10 @@ export default async function ActivosPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${CATEGORY_COLOR[asset.category] ?? "bg-gray-50 text-gray-700 border-gray-200"}`}>
-                          {asset.category}
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg border font-mono ${ACCOUNT_COLOR[acctInfo.code] ?? "bg-gray-50 text-gray-700 border-gray-200"}`}>
+                          <strong className="text-purple-900 font-bold">{acctInfo.code}</strong>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-sans font-medium text-ink-800">{acctInfo.name}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono">${asset.purchase_value.toFixed(2)}</td>
