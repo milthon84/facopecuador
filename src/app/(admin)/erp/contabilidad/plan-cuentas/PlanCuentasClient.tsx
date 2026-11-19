@@ -124,7 +124,7 @@ export default function PlanCuentasClient({
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("TODOS");
   const [levelFilter, setLevelFilter] = useState<"TODOS" | "GRUPOS" | "MOVIMIENTO">("TODOS");
-  const [statusFilter, setStatusFilter] = useState<"ACTIVAS" | "TODAS" | "INACTIVAS">("ACTIVAS");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVAS" | "TODAS" | "INACTIVAS">("TODAS");
 
   // Estado para el modal de Crear / Editar
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -311,6 +311,12 @@ export default function PlanCuentasClient({
                 .map((a) => (a.id === editingAccount.id ? (res.account as Account) : a))
                 .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
             } else {
+              const alreadyInList = prev.some((a) => a.id === res.account!.id);
+              if (alreadyInList) {
+                return prev
+                  .map((a) => (a.id === res.account!.id ? (res.account as Account) : a))
+                  .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+              }
               return [...prev, res.account as Account].sort((a, b) =>
                 a.code.localeCompare(b.code, undefined, { numeric: true })
               );
@@ -546,25 +552,25 @@ export default function PlanCuentasClient({
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className={`border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-lilac-200 transition ${
-                statusFilter !== "ACTIVAS"
+                statusFilter !== "TODAS"
                   ? "border-lilac-500 bg-lilac-50 text-lilac-900 font-bold"
                   : "border-lilac-200 bg-white text-ink-700 hover:bg-lilac-50/40"
               }`}
             >
-              <option value="ACTIVAS">Solo Activas</option>
-              <option value="TODAS">Todas</option>
-              <option value="INACTIVAS">Inactivas ({stats.inactiveCount})</option>
+              <option value="TODAS">Estado: Todas ({stats.total})</option>
+              <option value="ACTIVAS">Solo Activas ({stats.total - stats.inactiveCount})</option>
+              <option value="INACTIVAS">Solo Inactivas ({stats.inactiveCount})</option>
             </select>
 
             {/* Botón para restablecer si hay filtros aplicados */}
-            {(search || typeFilter !== "TODOS" || levelFilter !== "TODOS" || statusFilter !== "ACTIVAS") && (
+            {(search || typeFilter !== "TODOS" || levelFilter !== "TODOS" || statusFilter !== "TODAS") && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
                   setTypeFilter("TODOS");
                   setLevelFilter("TODOS");
-                  setStatusFilter("ACTIVAS");
+                  setStatusFilter("TODAS");
                 }}
                 title="Restablecer filtros"
                 className="px-2 py-1.5 rounded-xl border border-lilac-200 hover:bg-lilac-100 text-ink-500 hover:text-ink-800 text-xs font-semibold flex items-center gap-1 transition"
@@ -722,7 +728,7 @@ export default function PlanCuentasClient({
                             Activa
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                             Inactiva
                           </span>
                         )}
@@ -758,14 +764,19 @@ export default function PlanCuentasClient({
                             <button
                               type="button"
                               onClick={() => handleToggleActive(acc)}
-                              title={acc.active !== false ? "Desactivar cuenta" : "Activar cuenta"}
-                              className={`p-1 rounded-lg transition ${
+                              title={
                                 acc.active !== false
-                                  ? "text-emerald-600 hover:bg-emerald-50"
-                                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                                  ? "Desactivar cuenta (no podrá seleccionarse en nuevos gastos/asientos)"
+                                  : "Reactivar cuenta (volverá a estar disponible para gastos y asientos)"
+                              }
+                              className={`rounded-lg transition flex items-center gap-1 ${
+                                acc.active !== false
+                                  ? "p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
+                                  : "px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs"
                               }`}
                             >
                               <Check size={13} />
+                              {acc.active === false && <span>Activar</span>}
                             </button>
 
                             {/* Botón Eliminar con confirmación */}

@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Landmark, TrendingDown, DollarSign, Package, Plus } from "lucide-react";
+import { Landmark, TrendingDown, DollarSign, Package, Plus, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import NuevoActivoModal from "@/components/NuevoActivoModal";
@@ -93,15 +93,24 @@ export default async function ActivosPage() {
           </h1>
           <p className="text-sm text-ink-600">Registro, depreciación y gestión de bienes de capital.</p>
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <ProcesarDepreciacionModal
-              assets={active}
-              depreciations={depreciations || []}
-            />
-            <NuevoActivoModal bankAccounts={bankAccounts || []} />
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/erp/activos/reporte"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-xl bg-lilac-600 hover:bg-lilac-700 text-white shadow-sm transition-all"
+          >
+            <FileSpreadsheet size={16} />
+            Cédula y Reporte Anual
+          </Link>
+          {canEdit && (
+            <>
+              <ProcesarDepreciacionModal
+                assets={active}
+                depreciations={depreciations || []}
+              />
+              <NuevoActivoModal bankAccounts={bankAccounts || []} />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stats */}

@@ -4,7 +4,6 @@ import { BookOpen, TrendingUp, TrendingDown, Scale, FileBarChart2, Receipt, File
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { formatAsientoCode, formatEgresoCode, formatIngresoCode } from "@/lib/accounting-codes";
 import ExportarExcelContableButton from "./ExportarExcelContableButton";
-import SincronizarAsientosButton from "./SincronizarAsientosButton";
 import { getOfficialExpenseAccountName } from "@/lib/expense-accounts";
 import NuevoAsientoManualModal from "./NuevoAsientoManualModal";
 import EliminarAsientoManualButton from "./EliminarAsientoManualButton";
@@ -874,7 +873,6 @@ export default async function ContabilidadPage({
                 defaultDate={period !== "all" ? `${period}-01` : undefined}
                 canEdit={canWrite}
               />
-              <SincronizarAsientosButton period={period} />
               <ExportarExcelContableButton
                 tab="diario"
                 period={period}

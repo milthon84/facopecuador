@@ -50,11 +50,36 @@ export async function saveAccountAction(data: AccountFormData) {
     // Validar unicidad del código
     const { data: existing } = await supabase
       .from("accounts")
-      .select("id, code")
+      .select("id, code, active")
       .eq("code", code)
       .maybeSingle();
 
     if (existing) {
+      if (!existing.active) {
+        // La cuenta existía pero estaba inactiva/archivada; la reactivamos y actualizamos con los datos provistos
+        const { data: reactivated, error } = await supabase
+          .from("accounts")
+          .update({
+            name,
+            type,
+            subtype,
+            parent_code,
+            is_movement,
+            active: true,
+          })
+          .eq("id", existing.id)
+          .select()
+          .single();
+
+        if (error || !reactivated) {
+          return { success: false, error: error?.message || "Error al reactivar la cuenta." };
+        }
+
+        revalidatePath("/erp/contabilidad/plan-cuentas");
+        revalidatePath("/erp/contabilidad");
+        return { success: true, account: reactivated, reactivated: true };
+      }
+
       return { success: false, error: `Ya existe una cuenta con el código "${code}".` };
     }
 
@@ -157,6 +182,8 @@ export async function toggleAccountActiveAction(id: string, active: boolean) {
 
   revalidatePath("/erp/contabilidad/plan-cuentas");
   revalidatePath("/erp/contabilidad");
+  revalidatePath("/erp/gastos");
+  revalidatePath("/erp/gastos/nuevo");
   return { success: true };
 }
 
@@ -212,5 +239,7 @@ export async function deleteAccountAction(id: string) {
 
   revalidatePath("/erp/contabilidad/plan-cuentas");
   revalidatePath("/erp/contabilidad");
+  revalidatePath("/erp/gastos");
+  revalidatePath("/erp/gastos/nuevo");
   return { success: true };
 }

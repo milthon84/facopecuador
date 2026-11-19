@@ -18,7 +18,6 @@ export async function getExpenseAccountsCatalog(): Promise<ExpenseAccountsCatalo
     .from("accounts")
     .select("code, name, type, subtype, is_movement, active")
     .or("type.eq.GASTO,code.like.1.2.01%")
-    .eq("active", true)
     .order("code", { ascending: true });
 
   if (error || !accounts || accounts.length === 0) {
@@ -34,8 +33,15 @@ export async function getExpenseAccountsCatalog(): Promise<ExpenseAccountsCatalo
     };
   }
 
-  // Filtrar grupos (cuentas que NO son de movimiento y tienen nivel de subgrupo ej. 5.1.01, 5.2.03, etc.)
-  const rawGroups = accounts.filter((a) => {
+  // Identificar cuentas y grupos que fueron explícitamente desactivados en el Plan de Cuentas
+  const inactiveCodes = new Set(
+    accounts.filter((a) => a.active === false).map((a) => a.code)
+  );
+
+  const activeAccounts = accounts.filter((a) => a.active !== false);
+
+  // Filtrar grupos activos (cuentas que NO son de movimiento y tienen nivel de subgrupo ej. 5.1.01, 5.2.03, etc.)
+  const rawGroups = activeAccounts.filter((a) => {
     const segments = a.code.split(".");
     return !a.is_movement && segments.length === 3;
   });
@@ -45,15 +51,16 @@ export async function getExpenseAccountsCatalog(): Promise<ExpenseAccountsCatalo
     groupsMap.set(g.code, { code: g.code, name: g.name, type: g.type });
   }
   for (const fg of FALLBACK_EXPENSE_GROUPS) {
-    if (!groupsMap.has(fg.code)) {
+    // Si el grupo fue desactivado en el Plan de Cuentas, no se agrega desde fallback
+    if (!groupsMap.has(fg.code) && !inactiveCodes.has(fg.code)) {
       groupsMap.set(fg.code, fg);
     }
   }
 
   const groups = Array.from(groupsMap.values()).sort((a, b) => a.code.localeCompare(b.code));
 
-  // Filtrar cuentas de movimiento (cuentas con is_movement = true)
-  const rawMovements = accounts.filter((a) => a.is_movement);
+  // Filtrar cuentas de movimiento activas (cuentas con is_movement = true y active = true)
+  const rawMovements = activeAccounts.filter((a) => a.is_movement);
   const movementsMap = new Map<string, ExpenseMovementAccount>();
 
   for (const m of rawMovements) {
@@ -68,7 +75,8 @@ export async function getExpenseAccountsCatalog(): Promise<ExpenseAccountsCatalo
   }
 
   for (const fm of FALLBACK_EXPENSE_MOVEMENTS) {
-    if (!movementsMap.has(fm.code)) {
+    // Si la cuenta fue desactivada en el Plan de Cuentas, NUNCA se reincorpora
+    if (!movementsMap.has(fm.code) && !inactiveCodes.has(fm.code)) {
       movementsMap.set(fm.code, fm);
     }
   }

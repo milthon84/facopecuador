@@ -26,7 +26,7 @@ export default function EliminarAsientoManualButton({ entryId, entryCode, isPeri
 
   async function handleDelete() {
     const ok = window.confirm(
-      `¿Deseas eliminar permanentemente el asiento manual ${entryCode}?\n\nEsta acción revertirá las imputaciones en el Libro Diario y Balances.`
+      `¿Deseas anular y revertir el asiento manual ${entryCode}?\n\nEsta acción eliminará el asiento del Libro Diario y revertirá su saldo en el Libro Mayor y Balances.`
     );
     if (!ok) return;
 
@@ -34,10 +34,10 @@ export default function EliminarAsientoManualButton({ entryId, entryCode, isPeri
     try {
       const res = await deleteManualJournalEntryAction(entryId);
       if (!res.success) {
-        alert(res.error || "No se pudo eliminar el asiento manual.");
+        alert(res.error || "No se pudo anular el asiento manual.");
       }
     } catch (err: any) {
-      alert(err.message || "Error al eliminar el asiento manual.");
+      alert(err.message || "Error al anular el asiento manual.");
     } finally {
       setLoading(false);
     }
@@ -48,10 +48,11 @@ export default function EliminarAsientoManualButton({ entryId, entryCode, isPeri
       type="button"
       onClick={handleDelete}
       disabled={loading}
-      title={`Eliminar Asiento Manual ${entryCode}`}
-      className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+      title={`Anular asiento manual ${entryCode}`}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100/80 border border-red-200 transition-colors disabled:opacity-50"
     >
-      {loading ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+      {loading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+      <span>Anular</span>
     </button>
   );
 }
