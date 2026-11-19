@@ -44,7 +44,13 @@ function getEntryBadge(refType: string, desc: string) {
     return { label: "Nota de Crédito", color: "bg-amber-50 text-amber-800 border-amber-200" };
   }
   if (refType === "manual") {
-    return { label: "Asiento Manual", color: "bg-purple-100 text-purple-900 border-purple-300 font-bold" };
+    return { label: "MAN · Asiento Manual", color: "bg-purple-100 text-purple-900 border-purple-300 font-bold" };
+  }
+  if (refType === "asset_purchase" || d.includes("compra activo fijo") || d.includes("activo fijo")) {
+    return { label: "Activo Fijo", color: "bg-lilac-100 text-lilac-900 border-lilac-300 font-bold" };
+  }
+  if (refType === "depreciation" || d.includes("depreciación") || d.includes("depreciacion")) {
+    return { label: "Depreciación", color: "bg-indigo-100 text-indigo-900 border-indigo-300 font-bold" };
   }
   if (d.includes("depósito") || d.includes("deposito")) {
     return { label: "Depósito Bancario", color: "bg-sky-50 text-sky-800 border-sky-200" };
@@ -973,7 +979,7 @@ export default async function ContabilidadPage({
                                             ? "bg-emerald-700 text-white"
                                             : isPayment
                                             ? "bg-blue-600 text-white"
-                                            : entry.reference_type === "manual"
+                                            : entry.reference_type === "manual" || entry.reference_type === "asset_purchase" || entry.reference_type === "depreciation"
                                             ? "bg-purple-700 text-white"
                                             : "bg-lilac-800 text-white"
                                         }`}>
@@ -1000,7 +1006,10 @@ export default async function ContabilidadPage({
                                       </div>
 
                                       <div className="flex items-center gap-1.5 shrink-0">
-                                        {entry.reference_type === "manual" && canWrite && (
+                                        {canWrite &&
+                                          (entry.reference_type === "manual" ||
+                                            entry.reference_type === "asset_purchase" ||
+                                            entry.reference_type === "depreciation") && (
                                           <EliminarAsientoManualButton
                                             entryId={entry.id}
                                             entryCode={entryCode}

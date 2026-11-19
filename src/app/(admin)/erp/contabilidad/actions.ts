@@ -54,8 +54,11 @@ export async function createManualJournalEntryAction(data: CreateManualJournalEn
     });
 
     revalidatePath("/erp/contabilidad");
+    revalidatePath("/erp/contabilidad/mayor");
     revalidatePath("/erp/contabilidad/balance");
     revalidatePath("/erp/contabilidad/resultados");
+    revalidatePath("/erp/activos");
+    revalidatePath("/erp/activos/reporte");
     return { success: true, id: entryId };
   } catch (err: any) {
     console.error("Error en createManualJournalEntryAction:", err);
@@ -69,8 +72,11 @@ export async function deleteManualJournalEntryAction(entryId: string) {
     await deleteManualJournalEntry(entryId);
 
     revalidatePath("/erp/contabilidad");
+    revalidatePath("/erp/contabilidad/mayor");
     revalidatePath("/erp/contabilidad/balance");
     revalidatePath("/erp/contabilidad/resultados");
+    revalidatePath("/erp/activos");
+    revalidatePath("/erp/activos/reporte");
     return { success: true };
   } catch (err: any) {
     console.error("Error en deleteManualJournalEntryAction:", err);

@@ -1418,7 +1418,7 @@ export async function deleteManualJournalEntry(entryId: string) {
 
   const { data: entry, error: fetchErr } = await supabase
     .from("journal_entries")
-    .select("id, entry_date, reference_type")
+    .select("id, entry_date, reference_type, reference_id")
     .eq("id", entryId)
     .maybeSingle();
 
@@ -1426,11 +1426,20 @@ export async function deleteManualJournalEntry(entryId: string) {
     throw new Error("Asiento no encontrado.");
   }
 
-  if (entry.reference_type !== "manual") {
-    throw new Error("Solo se permite anular o eliminar asientos registrados manualmente.");
+  const allowedTypes = ["manual", "asset_purchase", "depreciation"];
+  if (!allowedTypes.includes(entry.reference_type)) {
+    throw new Error("Solo se permite anular asientos manuales, compras de activo fijo y depreciaciones. Las facturas o gastos deben anularse en sus módulos de origen.");
   }
 
   await assertMonthOpen(entry.entry_date);
+
+  // Si es un asiento de depreciación, limpiar registro en asset_depreciations
+  if (entry.reference_type === "depreciation") {
+    await supabase
+      .from("asset_depreciations")
+      .delete()
+      .eq("journal_entry_id", entryId);
+  }
 
   const { error: linesErr } = await supabase
     .from("journal_lines")
