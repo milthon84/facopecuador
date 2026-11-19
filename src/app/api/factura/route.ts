@@ -433,8 +433,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // 11. Registrar en bancos y contabilidad SOLO si la factura fue autorizada o enviada con éxito al SRI
-    if (sri_status === "authorized" || sri_status === "submitted") {
+    // 11. Registrar en bancos y contabilidad ÚNICAMENTE si la factura fue autorizada por el SRI
+    if (sri_status === "authorized") {
       // Actualizar payment_status
       // Efectivo = cobrado inmediatamente; con cuenta bancaria = cobrado; resto = pendiente
       const isPaidImmediately = payment_method === "efectivo" || !!bank_account_id;

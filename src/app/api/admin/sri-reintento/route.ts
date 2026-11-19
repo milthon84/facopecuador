@@ -53,12 +53,10 @@ export async function POST(req: Request) {
       ...(mensajes            ? { sri_error_messages:       mensajes            } : {}),
     }).eq("id", invoice_id);
 
-    if (nuevo_estado === "authorized") {
-      try {
-        await syncInvoiceJournalEntries(invoice_id);
-      } catch (jErr) {
-        console.warn("No se pudo auto-sincronizar asiento de factura autorizada:", jErr);
-      }
+    try {
+      await syncInvoiceJournalEntries(invoice_id);
+    } catch (jErr) {
+      console.warn("No se pudo sincronizar asiento de factura tras reintento SRI:", jErr);
     }
 
     return NextResponse.json({ estado: nuevo_estado, autorizacion });

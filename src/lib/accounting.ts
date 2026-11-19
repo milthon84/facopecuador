@@ -238,6 +238,18 @@ export async function createInvoiceJournalEntry(params: {
   user_id?:     string | null;
   user_email?:  string | null;
 }) {
+  const supabase = createAdminClient();
+  const { data: invCheck } = await supabase
+    .from("invoices")
+    .select("sri_status")
+    .eq("id", params.invoice_id)
+    .maybeSingle();
+
+  if (invCheck && invCheck.sri_status !== "authorized") {
+    console.warn(`createInvoiceJournalEntry omitido: factura ${params.invoice_id} no autorizada (${invCheck.sri_status})`);
+    return null;
+  }
+
   const subtotalTotal = r2(params.subtotal_0 + params.subtotal_15);
   const area = (params.billing_area || "clinica").toLowerCase();
 
@@ -334,6 +346,18 @@ export async function createInvoicePaymentJournalEntry(params: {
   user_id?:           string | null;
   user_email?:        string | null;
 }) {
+  const supabase = createAdminClient();
+  const { data: invCheck } = await supabase
+    .from("invoices")
+    .select("sri_status")
+    .eq("id", params.invoice_id)
+    .maybeSingle();
+
+  if (invCheck && invCheck.sri_status !== "authorized") {
+    console.warn(`createInvoicePaymentJournalEntry omitido: factura ${params.invoice_id} no autorizada (${invCheck.sri_status})`);
+    return null;
+  }
+
   const area = (params.billing_area || "clinica").toLowerCase();
 
   let cxcAccount = {
@@ -900,8 +924,9 @@ export async function syncInvoiceJournalEntries(
     await supabase.from("journal_entries").delete().in("id", ids);
   }
 
-  // 2. Si la factura está anulada, terminamos
-  if (inv.sri_status === "cancelled" || inv.payment_status === "cancelled") {
+  // 2. SOLO las facturas AUTORIZADAS por el SRI deben generar asiento contable
+  // Si la factura está rechazada, devuelta, en proceso de envío, en borrador o anulada, NO generar ningún asiento.
+  if (inv.sri_status !== "authorized" || inv.payment_status === "cancelled") {
     return;
   }
 
@@ -982,7 +1007,7 @@ export async function syncInvoiceJournalEntries(
  */
 export async function syncPeriodInvoicesJournalEntries(period: string) {
   const supabase = createAdminClient();
-  let query = supabase.from("invoices").select("id, issue_date, created_at");
+  let query = supabase.from("invoices").select("id, issue_date, created_at, sri_status");
 
   if (period !== "all") {
     const [year, month] = period.split("-").map(Number);
@@ -998,7 +1023,9 @@ export async function syncPeriodInvoicesJournalEntries(period: string) {
   for (const inv of invoices) {
     try {
       await syncInvoiceJournalEntries(inv.id);
-      count++;
+      if (inv.sri_status === "authorized") {
+        count++;
+      }
     } catch (err) {
       console.warn(`Error sincronizando asiento de factura ${inv.id}:`, err);
     }

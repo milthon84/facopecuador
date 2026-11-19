@@ -216,248 +216,263 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     console.warn("No se pudieron consultar asientos de journal_entries para factura:", jErr);
   }
 
-  // Si no hay asientos físicos en journal_entries (facturas previas sin asiento o recién autorizadas), sincronizar y persistir automáticamente en la base de datos
-  if (journalEntries.length === 0 && invoice.sri_status !== "cancelled" && invoice.sri_status !== "draft") {
-    try {
-      await syncInvoiceJournalEntries(id);
-      const { data: refreshed } = await supabase
-        .from("journal_entries")
-        .select(`
-          id,
-          entry_number,
-          entry_code,
-          entry_date,
-          description,
-          reference_type,
-          reference_id,
-          status,
-          created_at,
-          journal_lines (
+  // Solo las facturas con estado AUTORIZADO generan asiento contable.
+  const isAuthorized = invoice.sri_status === "authorized";
+
+  if (isAuthorized) {
+    // Si no hay asientos físicos en journal_entries (facturas previas sin asiento o recién autorizadas), sincronizar y persistir automáticamente en la base de datos
+    if (journalEntries.length === 0) {
+      try {
+        await syncInvoiceJournalEntries(id);
+        const { data: refreshed } = await supabase
+          .from("journal_entries")
+          .select(`
             id,
-            account_code,
-            account_name,
-            debit,
-            credit,
-            description
-          )
-        `)
-        .in("reference_type", ["invoice", "credit_note"])
-        .in("reference_id", refIds)
-        .order("created_at", { ascending: true });
+            entry_number,
+            entry_code,
+            entry_date,
+            description,
+            reference_type,
+            reference_id,
+            status,
+            created_at,
+            journal_lines (
+              id,
+              account_code,
+              account_name,
+              debit,
+              credit,
+              description
+            )
+          `)
+          .in("reference_type", ["invoice", "credit_note"])
+          .in("reference_id", refIds)
+          .order("created_at", { ascending: true });
 
-      if (refreshed && refreshed.length > 0) {
-        journalEntries = refreshed as any[];
+        if (refreshed && refreshed.length > 0) {
+          journalEntries = refreshed as any[];
+        }
+      } catch (syncErr) {
+        console.warn("No se pudo auto-sincronizar asiento de factura en detalle:", syncErr);
       }
-    } catch (syncErr) {
-      console.warn("No se pudo auto-sincronizar asiento de factura en detalle:", syncErr);
     }
-  }
 
-  // Si no hay asiento registrado de venta en journal_entries, proyectar el devengo NIIF (fallback)
-  const hasSaleEntry = journalEntries.some(
-    (e) =>
-      e.reference_type === "invoice" &&
-      e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("4."))
-  );
+    // Si no hay asiento registrado de venta en journal_entries, proyectar el devengo NIIF (fallback)
+    const hasSaleEntry = journalEntries.some(
+      (e) =>
+        e.reference_type === "invoice" &&
+        e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("4."))
+    );
 
-  const tot = Number(invoice.total || 0);
-  const subtotalTotal = Number(invoice.subtotal_0 || 0) + Number(invoice.subtotal_15 || 0);
-  const ivaAmt = Number(invoice.iva_amount || 0);
-  const invDate =
-    invoice.issue_date ||
-    (invoice.created_at ? invoice.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
+    const tot = Number(invoice.total || 0);
+    const subtotalTotal = Number(invoice.subtotal_0 || 0) + Number(invoice.subtotal_15 || 0);
+    const ivaAmt = Number(invoice.iva_amount || 0);
+    const invDate =
+      invoice.issue_date ||
+      (invoice.created_at ? invoice.created_at.split("T")[0] : new Date().toISOString().split("T")[0]);
 
-  // Resolver cuentas contables NIIF según origen (Clínica, Cursos, Coworking u Otros)
-  const area = (invoice.billing_area || invoice.area || "").toLowerCase();
-  let cxcCode = "1.1.02.01";
-  let cxcName = "Cuentas por Cobrar Pacientes (Clínica)";
-  let incCode = "4.1.01.01";
-  let incName = "Servicios Odontológicos";
+    // Resolver cuentas contables NIIF según origen (Clínica, Cursos, Coworking u Otros)
+    const area = (invoice.billing_area || invoice.area || "").toLowerCase();
+    let cxcCode = "1.1.02.01";
+    let cxcName = "Cuentas por Cobrar Pacientes (Clínica)";
+    let incCode = "4.1.01.01";
+    let incName = "Servicios Odontológicos";
 
-  if (area === "cursos") {
-    cxcCode = "1.1.02.02";
-    cxcName = "Cuentas por Cobrar Alumnos (Cursos)";
-    incCode = "4.2.01.01";
-    incName = "Servicios de Capacitación y Cursos";
-  } else if (area === "coworking") {
-    cxcCode = "1.1.02.03";
-    cxcName = "Cuentas por Cobrar Inquilinos (Coworking)";
-    incCode = "4.3.01.01";
-    incName = "Alquiler de Espacios y Sillones Odontológicos";
-  } else if (area === "otros") {
-    cxcCode = "1.1.02.04";
-    cxcName = "Anticipos a Proveedores y Otras Ctas. por Cobrar";
-    incCode = "4.4.01.01";
-    incName = "Otros Ingresos No Operacionales";
-  }
+    if (area === "cursos") {
+      cxcCode = "1.1.02.02";
+      cxcName = "Cuentas por Cobrar Alumnos (Cursos)";
+      incCode = "4.2.01.01";
+      incName = "Servicios de Capacitación y Cursos";
+    } else if (area === "coworking") {
+      cxcCode = "1.1.02.03";
+      cxcName = "Cuentas por Cobrar Inquilinos (Coworking)";
+      incCode = "4.3.01.01";
+      incName = "Alquiler de Espacios y Sillones Odontológicos";
+    } else if (area === "otros") {
+      cxcCode = "1.1.02.04";
+      cxcName = "Anticipos a Proveedores y Otras Ctas. por Cobrar";
+      incCode = "4.4.01.01";
+      incName = "Otros Ingresos No Operacionales";
+    }
 
-  if (!hasSaleEntry) {
-    const saleLines: JournalLineItem[] = [
-      {
-        account_code: cxcCode,
-        account_name: cxcName,
-        debit: tot,
-        credit: 0,
-        description: invoice.client_name,
-      },
-      {
-        account_code: incCode,
-        account_name: incName,
-        debit: 0,
-        credit: subtotalTotal > 0 ? subtotalTotal : tot,
-      },
-    ];
+    if (!hasSaleEntry) {
+      const saleLines: JournalLineItem[] = [
+        {
+          account_code: cxcCode,
+          account_name: cxcName,
+          debit: tot,
+          credit: 0,
+          description: invoice.client_name,
+        },
+        {
+          account_code: incCode,
+          account_name: incName,
+          debit: 0,
+          credit: subtotalTotal > 0 ? subtotalTotal : tot,
+        },
+      ];
 
-    if (ivaAmt > 0) {
-      saleLines.push({
-        account_code: "2.1.03.01",
-        account_name: "IVA en Ventas por Pagar",
-        debit: 0,
-        credit: ivaAmt,
+      if (ivaAmt > 0) {
+        saleLines.push({
+          account_code: "2.1.03.01",
+          account_name: "IVA en Ventas por Pagar",
+          debit: 0,
+          credit: ivaAmt,
+        });
+      }
+
+      journalEntries.unshift({
+        id: "proj-invoice-sale",
+        entry_date: invDate,
+        description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
+        reference_type: "invoice",
+        reference_id: invoice.id,
+        journal_lines: saleLines,
       });
     }
 
-    journalEntries.unshift({
-      id: "proj-invoice-sale",
-      entry_date: invDate,
-      description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
-      reference_type: "invoice",
-      reference_id: invoice.id,
-      journal_lines: saleLines,
-    });
-  }
+    // Verificar si hay cobros/pagos registrados para mostrarlos en el asiento
+    const hasPaymentEntry = journalEntries.some(
+      (e) =>
+        e.journal_lines.some(
+          (l) =>
+            (l.account_code === "1.1.01.03" ||
+             l.account_code === "1.1.01.02" ||
+             l.account_code === "1.1.01.01" ||
+             l.account_code === "2.1.05.01" ||
+             l.account_code.startsWith("1.1.01") ||
+             l.account_code.startsWith("2.1.05")) &&
+            Number(l.debit) > 0
+        ) ||
+        (e.reference_type === "invoice" &&
+         e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("1.1.02")) &&
+         (e.description.toLowerCase().includes("cobro") ||
+          e.description.toLowerCase().includes("recauda") ||
+          e.description.toLowerCase().includes("liquidac") ||
+          e.description.toLowerCase().includes("pago") ||
+          e.description.toLowerCase().includes("cruce")))
+    );
 
-  // Verificar si hay cobros/pagos registrados para mostrarlos en el asiento
-  const hasPaymentEntry = journalEntries.some(
-    (e) =>
-      e.journal_lines.some(
-        (l) =>
-          (l.account_code === "1.1.01.03" ||
-           l.account_code === "1.1.01.02" ||
-           l.account_code === "1.1.01.01" ||
-           l.account_code === "2.1.05.01" ||
-           l.account_code.startsWith("1.1.01") ||
-           l.account_code.startsWith("2.1.05")) &&
-          Number(l.debit) > 0
-      ) ||
-      (e.reference_type === "invoice" &&
-       e.journal_lines.some((l) => Number(l.credit) > 0 && l.account_code.startsWith("1.1.02")) &&
-       (e.description.toLowerCase().includes("cobro") ||
-        e.description.toLowerCase().includes("recauda") ||
-        e.description.toLowerCase().includes("liquidac") ||
-        e.description.toLowerCase().includes("pago") ||
-        e.description.toLowerCase().includes("cruce")))
-  );
+    if (!hasPaymentEntry) {
+      if (payments && payments.length > 0) {
+        payments.forEach((p: any, idx: number) => {
+          const pAmt = Number(p.amount || 0);
+          const pDate = p.payment_date || p.created_at?.split("T")[0] || invDate;
+          const pMethod = (p.payment_method || "").toLowerCase();
+          const isEfectivo = pMethod === "efectivo";
+          const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
+          const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
+          const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
 
-  if (!hasPaymentEntry) {
-    if (payments && payments.length > 0) {
-      payments.forEach((p: any, idx: number) => {
-        const pAmt = Number(p.amount || 0);
-        const pDate = p.payment_date || p.created_at?.split("T")[0] || invDate;
-        const pMethod = (p.payment_method || "").toLowerCase();
+          journalEntries.push({
+            id: `proj-pay-${p.id || idx}`,
+            entry_date: pDate,
+            description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : p.payment_method || "Cobro"})`,
+            reference_type: "invoice",
+            reference_id: invoice.id,
+            journal_lines: [
+              {
+                account_code: payCode,
+                account_name: payName,
+                debit: pAmt,
+                credit: 0,
+              },
+              {
+                account_code: cxcCode,
+                account_name: cxcName,
+                debit: 0,
+                credit: pAmt,
+                description: `Liquidación cobro factura ${invoice.client_name}`,
+              },
+            ],
+          });
+        });
+      } else if (invoice.payment_status === "paid") {
+        const pMethod = (invoice.payment_method || "").toLowerCase();
         const isEfectivo = pMethod === "efectivo";
         const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
         const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
         const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
 
         journalEntries.push({
-          id: `proj-pay-${p.id || idx}`,
-          entry_date: pDate,
-          description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : p.payment_method || "Cobro"})`,
+          id: "proj-pay-full",
+          entry_date: invDate,
+          description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
           reference_type: "invoice",
           reference_id: invoice.id,
           journal_lines: [
             {
               account_code: payCode,
               account_name: payName,
-              debit: pAmt,
+              debit: tot,
               credit: 0,
             },
             {
               account_code: cxcCode,
               account_name: cxcName,
               debit: 0,
-              credit: pAmt,
-              description: `Liquidación cobro factura ${invoice.client_name}`,
+              credit: tot,
+              description: `Cobro total paciente ${invoice.client_name}`,
             },
           ],
         });
+      }
+    }
+
+    // Verificar si hay Nota de Crédito asociada y reflejarla si no tiene asiento físico
+    const hasCnEntry = journalEntries.some(
+      (e) => e.reference_type === "credit_note" || e.description.toLowerCase().includes("crédito")
+    );
+
+    if (existingCreditNote && !hasCnEntry) {
+      const cnTotal = Number(existingCreditNote.total || tot);
+      const cnSubtotal = Math.max(0, cnTotal - (ivaAmt > 0 ? (cnTotal * 0.15) / 1.15 : 0));
+      const cnIva = Math.round((cnTotal - cnSubtotal) * 100) / 100;
+      const cnDate = existingCreditNote.created_at?.split("T")[0] || invDate;
+
+      const cnLines: JournalLineItem[] = [
+        {
+          account_code: incCode,
+          account_name: `${incName} (Reversión)`,
+          debit: Math.round(cnSubtotal * 100) / 100,
+          credit: 0,
+        },
+      ];
+      if (cnIva > 0) {
+        cnLines.push({
+          account_code: "2.1.03.01",
+          account_name: "IVA en Ventas por Pagar (Reversión)",
+          debit: cnIva,
+          credit: 0,
+        });
+      }
+      cnLines.push({
+        account_code: cxcCode,
+        account_name: cxcName,
+        debit: 0,
+        credit: cnTotal,
+        description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""}`,
       });
-    } else if (invoice.payment_status === "paid") {
-      const pMethod = (invoice.payment_method || "").toLowerCase();
-      const isEfectivo = pMethod === "efectivo";
-      const isPrestamo = pMethod.includes("prestamo") || pMethod.includes("accionista");
-      const payCode = isEfectivo ? "1.1.01.01" : isPrestamo ? "2.1.05.01" : "1.1.01.03";
-      const payName = isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas por Pagar" : "Bancos Cuentas Corrientes y Ahorros";
 
       journalEntries.push({
-        id: "proj-pay-full",
-        entry_date: invDate,
-        description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
-        reference_type: "invoice",
-        reference_id: invoice.id,
-        journal_lines: [
-          {
-            account_code: payCode,
-            account_name: payName,
-            debit: tot,
-            credit: 0,
-          },
-          {
-            account_code: cxcCode,
-            account_name: cxcName,
-            debit: 0,
-            credit: tot,
-            description: `Cobro total paciente ${invoice.client_name}`,
-          },
-        ],
+        id: `proj-cn-${existingCreditNote.id}`,
+        entry_date: cnDate,
+        description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""} — Reversión Factura ${invoice.invoice_number}`,
+        reference_type: "credit_note",
+        reference_id: existingCreditNote.id,
+        journal_lines: cnLines,
       });
     }
-  }
-
-  // Verificar si hay Nota de Crédito asociada y reflejarla si no tiene asiento físico
-  const hasCnEntry = journalEntries.some(
-    (e) => e.reference_type === "credit_note" || e.description.toLowerCase().includes("crédito")
-  );
-
-  if (existingCreditNote && !hasCnEntry) {
-    const cnTotal = Number(existingCreditNote.total || tot);
-    const cnSubtotal = Math.max(0, cnTotal - (ivaAmt > 0 ? (cnTotal * 0.15) / 1.15 : 0));
-    const cnIva = Math.round((cnTotal - cnSubtotal) * 100) / 100;
-    const cnDate = existingCreditNote.created_at?.split("T")[0] || invDate;
-
-    const cnLines: JournalLineItem[] = [
-      {
-        account_code: incCode,
-        account_name: `${incName} (Reversión)`,
-        debit: Math.round(cnSubtotal * 100) / 100,
-        credit: 0,
-      },
-    ];
-    if (cnIva > 0) {
-      cnLines.push({
-        account_code: "2.1.03.01",
-        account_name: "IVA en Ventas por Pagar (Reversión)",
-        debit: cnIva,
-        credit: 0,
-      });
+  } else {
+    // Si la factura NO está autorizada (rechazada, devuelta, enviada, borrador, etc.), purgar cualquier asiento erróneo existente
+    if (journalEntries.length > 0) {
+      try {
+        await syncInvoiceJournalEntries(id);
+      } catch (cleanErr) {
+        console.warn("No se pudieron limpiar asientos de factura no autorizada:", cleanErr);
+      }
+      journalEntries = [];
     }
-    cnLines.push({
-      account_code: cxcCode,
-      account_name: cxcName,
-      debit: 0,
-      credit: cnTotal,
-      description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""}`,
-    });
-
-    journalEntries.push({
-      id: `proj-cn-${existingCreditNote.id}`,
-      entry_date: cnDate,
-      description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""} — Reversión Factura ${invoice.invoice_number}`,
-      reference_type: "credit_note",
-      reference_id: existingCreditNote.id,
-      journal_lines: cnLines,
-    });
   }
 
   return (
