@@ -15,14 +15,12 @@ import {
   ArrowLeft,
   Filter,
   Layers,
-  Check,
 } from "lucide-react";
 import Link from "next/link";
 import {
   AccountFormData,
   saveAccountAction,
   deleteAccountAction,
-  toggleAccountActiveAction,
 } from "./actions";
 
 type Account = {
@@ -329,30 +327,6 @@ export default function PlanCuentasClient({
         }
       } catch (err: any) {
         setFormError(err.message || "Error al procesar la solicitud.");
-      }
-    });
-  }
-
-  // Activar o desactivar cuenta
-  async function handleToggleActive(acc: Account) {
-    const nextState = acc.active === false;
-    startTransition(async () => {
-      try {
-        const res = await toggleAccountActiveAction(acc.id, nextState);
-        if (res.success) {
-          setAccounts((prev) =>
-            prev.map((a) => (a.id === acc.id ? { ...a, active: nextState } : a))
-          );
-          showToast(
-            nextState
-              ? `Cuenta "${acc.code}" activada.`
-              : `Cuenta "${acc.code}" desactivada.`
-          );
-        } else {
-          showToast(res.error || "No se pudo cambiar el estado.", "error");
-        }
-      } catch (err: any) {
-        showToast(err.message || "Error al actualizar estado.", "error");
       }
     });
   }
@@ -758,25 +732,6 @@ export default function PlanCuentasClient({
                               className="p-1 rounded-lg text-ink-500 hover:bg-ink-100 hover:text-ink-900 transition"
                             >
                               <Edit2 size={13} />
-                            </button>
-
-                            {/* Botón Activar / Desactivar */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleActive(acc)}
-                              title={
-                                acc.active !== false
-                                  ? "Desactivar cuenta (no podrá seleccionarse en nuevos gastos/asientos)"
-                                  : "Reactivar cuenta (volverá a estar disponible para gastos y asientos)"
-                              }
-                              className={`rounded-lg transition flex items-center gap-1 ${
-                                acc.active !== false
-                                  ? "p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
-                                  : "px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs"
-                              }`}
-                            >
-                              <Check size={13} />
-                              {acc.active === false && <span>Activar</span>}
                             </button>
 
                             {/* Botón Eliminar con confirmación */}
