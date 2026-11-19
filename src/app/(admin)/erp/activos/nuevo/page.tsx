@@ -16,12 +16,14 @@ async function saveAsset(formData: FormData) {
   const asset_type = (formData.get("asset_type") as string) || "equipos_medicos";
   const purchase_date = formData.get("purchase_date") as string;
   const purchase_value = Number(formData.get("purchase_value"));
+  const create_journal_entry = formData.get("create_journal_entry") === "true";
 
   await createAssetAction({
     name,
     asset_type,
     purchase_date,
     purchase_value,
+    create_journal_entry,
   });
 
   redirect("/erp/activos");
@@ -114,6 +116,46 @@ export default async function NuevoActivoPage() {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Opción de asiento contable */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+            <div className="text-xs font-bold text-ink-900">
+              ¿Generar asiento contable de compra en Libro Diario?
+            </div>
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs">
+              <input
+                type="radio"
+                name="create_journal_entry"
+                value="false"
+                defaultChecked
+                className="mt-0.5 text-lilac-600 focus:ring-lilac-500"
+              />
+              <div>
+                <span className="font-semibold text-ink-800 block">
+                  No generar asiento (Factura ya registrada previamente en Gastos/Compras)
+                </span>
+                <span className="text-[11px] text-ink-500 block">
+                  Registra el activo para inventario y depreciaciones sin duplicar la contabilización de compra.
+                </span>
+              </div>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs pt-1.5 border-t border-slate-200">
+              <input
+                type="radio"
+                name="create_journal_entry"
+                value="true"
+                className="mt-0.5 text-lilac-600 focus:ring-lilac-500"
+              />
+              <div>
+                <span className="font-semibold text-ink-800 block">
+                  Sí, generar nuevo asiento de compra en Libro Diario
+                </span>
+                <span className="text-[11px] text-ink-500 block">
+                  Crea automáticamente el asiento de adquisición en el Libro Diario.
+                </span>
+              </div>
+            </label>
           </div>
 
           <div className="flex justify-end pt-2">

@@ -22,6 +22,7 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
   const [assetTypeKey, setAssetTypeKey] = useState("equipos_medicos");
   const [purchaseDate, setPurchaseDate] = useState(today);
   const [purchaseValue, setPurchaseValue] = useState("");
+  const [createJournalEntry, setCreateJournalEntry] = useState(false);
 
   const currentType = ASSET_TYPES[assetTypeKey] || ASSET_TYPES.equipos_medicos;
 
@@ -30,6 +31,7 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
     setAssetTypeKey("equipos_medicos");
     setPurchaseDate(today);
     setPurchaseValue("");
+    setCreateJournalEntry(false);
     setErrorMsg(null);
     setIsOpen(true);
   }
@@ -58,6 +60,7 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
         purchase_value: val,
         salvage_value: 0,
         useful_life_years: currentType.years,
+        create_journal_entry: createJournalEntry,
       });
 
       setIsOpen(false);
@@ -201,6 +204,52 @@ export default function NuevoActivoModal({ bankAccounts = [] }: Props) {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Contabilización de la Compra / Evitar duplicados */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+            <div className="text-xs font-bold text-ink-900 flex items-center justify-between">
+              <span>¿Generar asiento contable de compra?</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${createJournalEntry ? "bg-purple-100 text-purple-800" : "bg-emerald-100 text-emerald-800"}`}>
+                {createJournalEntry ? "Generará Asiento" : "Sin Duplicar Asiento"}
+              </span>
+            </div>
+            
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs">
+              <input
+                type="radio"
+                name="journal_choice"
+                checked={!createJournalEntry}
+                onChange={() => setCreateJournalEntry(false)}
+                className="mt-0.5 text-lilac-600 focus:ring-lilac-500"
+              />
+              <div>
+                <span className="font-semibold text-ink-800 block">
+                  No generar asiento (Factura ya registrada previamente en Gastos/Compras)
+                </span>
+                <span className="text-[11px] text-ink-500 block">
+                  Registra el activo para inventario y depreciaciones mensuales sin duplicar el asiento contable de la compra.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs pt-1.5 border-t border-slate-200">
+              <input
+                type="radio"
+                name="journal_choice"
+                checked={createJournalEntry}
+                onChange={() => setCreateJournalEntry(true)}
+                className="mt-0.5 text-lilac-600 focus:ring-lilac-500"
+              />
+              <div>
+                <span className="font-semibold text-ink-800 block">
+                  Sí, generar nuevo asiento de compra en Libro Diario
+                </span>
+                <span className="text-[11px] text-ink-500 block">
+                  Crea automáticamente el asiento de adquisición debitando {currentType.accountCode} ({currentType.accountName}).
+                </span>
+              </div>
+            </label>
           </div>
 
           {/* Botones de Acción */}

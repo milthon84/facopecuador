@@ -23,6 +23,8 @@ export async function createAssetAction(data: {
   bank_account_id?: string | null;
   payment_reference?: string | null;
   register_in_expenses?: boolean;
+  create_journal_entry?: boolean;
+  expense_id?: string | null;
 }) {
   await assertWritePermission("/erp/activos");
 
@@ -162,14 +164,17 @@ export async function createAssetAction(data: {
     }
   }
 
-  // 6. Asiento contable de compra (si no se delegó a gastos)
-  if (asset && !data.register_in_expenses) {
+  // 6. Asiento contable de compra (solo si se solicita y no se delegó a gastos)
+  const shouldCreateJournal = data.create_journal_entry !== false && !data.register_in_expenses;
+
+  if (asset && shouldCreateJournal) {
     try {
       await createAssetPurchaseJournalEntry({
         asset_id: asset.id,
         purchase_date,
         asset_name: `[${nextCode}] ${name}`,
         category: cleanCategory,
+        account_code: typeDef.accountCode,
         purchase_value,
         on_credit: !data.bank_account_id,
         user_id: user?.id,
