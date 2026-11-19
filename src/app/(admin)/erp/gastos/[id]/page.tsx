@@ -208,11 +208,27 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
   const docType = resolveExpenseDocType(expense);
   const docTypeInfo = DOC_TYPE_CONFIG[docType] || DOC_TYPE_CONFIG.factura;
 
+  const cleanExpDesc = cleanExpenseDescription(expense.description);
+  const cleanDocNum = cleanDocNumberOnly(expense.document_number);
+  const defaultSriDesc = linkedFactura
+    ? (linkedFactura.razon_social ? `${linkedFactura.razon_social} - Factura #${cleanDocNumberOnly(linkedFactura.numero_comprobante) || "SRI"}` : `Factura #${cleanDocNumberOnly(linkedFactura.numero_comprobante) || "SRI"}`)
+    : (expense.supplier_name && cleanDocNum ? `${expense.supplier_name} - Factura #${cleanDocNum}` : (expense.supplier_name || ""));
+
+  const resolvedMainDescription =
+    cleanExpDesc ||
+    defaultSriDesc ||
+    expense.category ||
+    "Gasto registrado";
+
   const displayItems: ExpenseItem[] = items.length > 0 ? items : [
     {
       id: "main-item",
-      description: expense.description || `Concepto principal de gasto - ${expense.category}`,
+      description: resolvedMainDescription,
       category: expense.category,
+      account_code: expense.account_code || null,
+      account_name: expense.account_name || null,
+      group_code: expense.group_code || null,
+      group_name: expense.group_name || null,
       quantity: 1,
       unit_price: Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0) > 0
         ? Number(expense.subtotal_0 || 0) + Number(expense.subtotal_15 || 0)
@@ -316,12 +332,15 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
           it.account_code || expense.account_code,
           it.account_name || expense.account_name
         );
+        const cleanItemLineDesc = (it.description || "")
+          .replace(/^concepto principal de gasto\s*[-–—:]*\s*/i, "")
+          .trim();
         projectedLines.push({
           account_code: it.account_code || itDetail.accountCode || expense.account_code || "5.2.05.01",
           account_name: it.account_name || itDetail.name || expense.account_name || "Gasto Operacional",
           debit: Number(it.subtotal || 0),
           credit: 0,
-          description: it.description || cleanExpenseDescription(expense.description) || expense.supplier_name,
+          description: cleanItemLineDesc || cleanExpDesc || defaultSriDesc || expense.supplier_name || "Gasto registrado",
         });
       }
     } else {
@@ -335,7 +354,7 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
         account_name: expense.account_name || expDetail.name || "Gasto Operacional",
         debit: subtotalTotal > 0 ? subtotalTotal : tot,
         credit: 0,
-        description: cleanExpenseDescription(expense.description) || expense.supplier_name,
+        description: cleanExpDesc || defaultSriDesc || expense.supplier_name || "Gasto registrado",
       });
     }
 
@@ -704,22 +723,33 @@ export default async function GastoDetailPage({ params }: { params: Promise<{ id
 
                 // Resolución de descripción del concepto
                 const cleanExpDesc = cleanExpenseDescription(expense.description);
-                const itDesc = parsed.description?.trim();
+                let itDesc = parsed.description?.trim() || "";
+
+                // Limpiar cualquier prefijo residual de "Concepto principal de gasto - " si existiera
+                itDesc = itDesc.replace(/^concepto principal de gasto\s*[-–—:]*\s*/i, "").trim();
+
                 const isGenericItemDesc =
                   !itDesc ||
                   itDesc.toLowerCase().includes("compra según") ||
                   itDesc.toLowerCase().includes("factura electrónica") ||
                   itDesc.toLowerCase() === "item de gasto" ||
+                  itDesc.toLowerCase() === "gasto registrado" ||
                   itDesc.toLowerCase().startsWith("concepto principal") ||
                   Boolean(expense.supplier_name && itDesc.toLowerCase().includes(expense.supplier_name.toLowerCase().slice(0, 8)));
 
+                const defaultSriDesc = linkedFactura
+                  ? (linkedFactura.razon_social ? `${linkedFactura.razon_social} - Factura #${cleanDocNumberOnly(linkedFactura.numero_comprobante) || "SRI"}` : `Factura #${cleanDocNumberOnly(linkedFactura.numero_comprobante) || "SRI"}`)
+                  : (expense.supplier_name && expense.document_number ? `${expense.supplier_name} - Factura #${cleanDocNumberOnly(expense.document_number)}` : (expense.supplier_name || ""));
+
                 const mainDesc = (cleanExpDesc && (isGenericItemDesc || displayItems.length === 1))
                   ? cleanExpDesc
-                  : (itDesc || cleanExpDesc || "Gasto registrado");
+                  : (!isGenericItemDesc && itDesc
+                    ? itDesc
+                    : (cleanExpDesc || defaultSriDesc || (itDesc && !itDesc.toLowerCase().startsWith("concepto principal") ? itDesc : null) || itemCat || "Gasto registrado"));
 
-                const secondaryDesc = (itDesc && itDesc !== mainDesc && !isGenericItemDesc)
+                const secondaryDesc = (itDesc && itDesc !== mainDesc && !isGenericItemDesc && !itDesc.toLowerCase().startsWith("concepto principal"))
                   ? itDesc
-                  : (cleanExpDesc && cleanExpDesc !== mainDesc ? cleanExpDesc : null);
+                  : (cleanExpDesc && cleanExpDesc !== mainDesc && !cleanExpDesc.toLowerCase().startsWith("concepto principal") ? cleanExpDesc : null);
 
                 return (
                   <tr key={it.id || idx} className="hover:bg-lilac-50/30">

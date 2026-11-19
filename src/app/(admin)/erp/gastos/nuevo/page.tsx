@@ -55,6 +55,22 @@ async function saveExpense(formData: FormData) {
   const authorization_number = (formData.get("authorization_number") as string)?.trim() || null;
   const factura_recibida_clave_acceso = (formData.get("factura_recibida_clave_acceso") as string)?.trim() || null;
   let description = (formData.get("description") as string)?.trim() || null;
+  if (!description) {
+    const rawItemsJson = formData.get("items_json") as string | null;
+    if (rawItemsJson) {
+      try {
+        const parsed = JSON.parse(rawItemsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const itemDescs = parsed
+            .map((it: any) => it.description?.trim())
+            .filter((d: any) => d && !d.toLowerCase().startsWith("concepto principal"));
+          description = itemDescs.join(" | ") || parsed[0]?.description?.trim() || null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
   if (description) {
     description = cleanExpenseDescription(description) || null;
   }

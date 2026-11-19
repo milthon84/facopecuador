@@ -744,6 +744,13 @@ export default function NuevaCompraForm({
         });
 
       formData.set("items_json", JSON.stringify(validItems));
+      const itemDescriptions = validItems
+        .map((it) => it.description.trim())
+        .filter((d) => d && !d.toLowerCase().startsWith("concepto principal"));
+      const mainDescription = itemDescriptions.join(" | ") || (validItems[0]?.description?.trim()) || "";
+      if (mainDescription) {
+        formData.set("description", mainDescription);
+      }
       formData.set("account_code", validItems[0]?.account_code || "");
       formData.set("account_name", validItems[0]?.account_name || "");
       formData.set("group_code", validItems[0]?.group_code || "");
