@@ -87,15 +87,30 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   if (!invoice) notFound();
 
   let existingCreditNote: any = null;
+  const metaCnId = (invoice.sri_error_messages as any)?.credit_note?.credit_note_id;
   try {
-    const { data: cn } = await supabase
-      .from("credit_notes")
-      .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo, sri_error_messages")
-      .eq("invoice_id", id)
-      .maybeSingle();
-    existingCreditNote = cn;
-  } catch {
-    // Si la tabla no está creada aún en la base de datos
+    if (metaCnId) {
+      const { data: cnById } = await supabase
+        .from("credit_notes")
+        .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo, sri_error_messages")
+        .eq("id", metaCnId)
+        .maybeSingle();
+      if (cnById) existingCreditNote = cnById;
+    }
+
+    if (!existingCreditNote) {
+      const { data: cns } = await supabase
+        .from("credit_notes")
+        .select("id, credit_note_number, sri_status, sri_authorization_number, total, created_at, motivo, sri_error_messages")
+        .eq("invoice_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (cns && cns.length > 0) {
+        existingCreditNote = cns[0];
+      }
+    }
+  } catch (cnErr) {
+    console.warn("Error cargando nota de credito:", cnErr);
   }
 
   // Obtener fotos registradas en invoice_photos (si existe la tabla)
@@ -205,7 +220,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           description
         )
       `)
-      .in("reference_type", ["invoice", "credit_note"])
+      .in("reference_type", ["invoice", "credit_note", "manual"])
       .in("reference_id", refIds)
       .order("created_at", { ascending: true });
 
@@ -218,10 +233,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   // Solo las facturas con estado AUTORIZADO generan asiento contable.
   const isAuthorized = invoice.sri_status === "authorized";
+  const hasAuthorizedCn = Boolean(existingCreditNote && existingCreditNote.sri_status === "authorized");
+  const existingHasCnEntry = journalEntries.some(
+    (e) => e.reference_id === existingCreditNote?.id || (e.description && e.description.toLowerCase().includes("nota de crédito"))
+  );
 
   if (isAuthorized) {
-    // Si no hay asientos físicos en journal_entries (facturas previas sin asiento o recién autorizadas), sincronizar y persistir automáticamente en la base de datos
-    if (journalEntries.length === 0) {
+    // Si no hay asientos físicos en journal_entries o falta el asiento de la nota de crédito autorizada, sincronizar
+    if (journalEntries.length === 0 || (hasAuthorizedCn && !existingHasCnEntry)) {
       try {
         await syncInvoiceJournalEntries(id);
         const { data: refreshed } = await supabase
@@ -245,7 +264,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               description
             )
           `)
-          .in("reference_type", ["invoice", "credit_note"])
+          .in("reference_type", ["invoice", "credit_note", "manual"])
           .in("reference_id", refIds)
           .order("created_at", { ascending: true });
 

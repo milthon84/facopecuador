@@ -51,6 +51,10 @@ function extractReference(description: string, refType: string): string {
 function determineModuleAndType(refType: string, description: string): { mod: string; tp: string } {
   const desc = (description || "").toLowerCase();
   
+  if (refType === "credit_note" || desc.includes("nota de crédito") || desc.includes("nota de credito") || desc.startsWith("nc ")) {
+    return { mod: "NC", tp: "04" };
+  }
+
   if (refType === "invoice") {
     if (desc.includes("cobro") || desc.includes("recauda")) {
       return { mod: "ING", tp: "01" };
@@ -63,10 +67,6 @@ function determineModuleAndType(refType: string, description: string): { mod: st
       return { mod: "EGR", tp: "02" };
     }
     return { mod: "GAS", tp: "02" };
-  }
-  
-  if (refType === "credit_note") {
-    return { mod: "NC", tp: "04" };
   }
   
   if (refType === "manual") {
@@ -226,10 +226,10 @@ export default async function LibroMayorPage({
 
       // Filtro Tipo
       if (tipoFiltro !== "todos") {
-        if (tipoFiltro === "manual" && refType !== "manual") return false;
+        if (tipoFiltro === "manual" && (refType !== "manual" || descLower.includes("nota de crédito") || descLower.includes("nota de credito"))) return false;
         if (tipoFiltro === "invoice" && refType !== "invoice") return false;
         if (tipoFiltro === "expense" && refType !== "expense") return false;
-        if (tipoFiltro === "credit_note" && refType !== "credit_note") return false;
+        if (tipoFiltro === "credit_note" && refType !== "credit_note" && !descLower.includes("nota de crédito") && !descLower.includes("nota de credito") && !descLower.startsWith("nc ")) return false;
         if (tipoFiltro === "cierre" && refType !== "monthly_closure") return false;
         if (tipoFiltro === "pago" && !descLower.includes("pago") && !descLower.includes("cruce") && !descLower.includes("egreso")) return false;
         if (tipoFiltro === "cobro" && !descLower.includes("cobro") && !descLower.includes("recauda") && !descLower.includes("ingreso")) return false;

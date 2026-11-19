@@ -40,7 +40,7 @@ function getEntryBadge(refType: string, desc: string) {
     }
     return { label: "Venta", color: "bg-purple-50 text-purple-800 border-purple-200" };
   }
-  if (refType === "credit_note") {
+  if (refType === "credit_note" || d.includes("nota de crédito") || d.includes("nota de credito") || d.startsWith("nc ")) {
     return { label: "Nota de Crédito", color: "bg-amber-50 text-amber-800 border-amber-200" };
   }
   if (refType === "manual") {

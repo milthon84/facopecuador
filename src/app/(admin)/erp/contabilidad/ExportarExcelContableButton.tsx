@@ -75,12 +75,13 @@ export default function ExportarExcelContableButton({
 
         entries.forEach((entry: any, entryIdx: number) => {
           const entryNum = entry.entry_number || entryIdx + 1;
+          const descLower = (entry.description || "").toLowerCase();
           const refType =
             entry.reference_type === "invoice"
               ? "Venta (Factura)"
               : entry.reference_type === "expense"
               ? "Gasto (Compra)"
-              : entry.reference_type === "credit_note"
+              : entry.reference_type === "credit_note" || descLower.includes("nota de crédito") || descLower.includes("nota de credito")
               ? "Nota de Crédito"
               : entry.reference_type === "manual"
               ? "Asiento Manual / Ajuste"

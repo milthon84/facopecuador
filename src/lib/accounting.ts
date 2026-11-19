@@ -450,7 +450,7 @@ export async function createCreditNoteJournalEntry(params: {
   const { data: existingEntry } = await supabase
     .from("journal_entries")
     .select("id")
-    .eq("reference_type", "credit_note")
+    .in("reference_type", ["credit_note", "manual"])
     .eq("reference_id", params.credit_note_id)
     .maybeSingle();
 
@@ -458,9 +458,9 @@ export async function createCreditNoteJournalEntry(params: {
     return existingEntry;
   }
 
-  // 2. Cuentas contables por defecto NIIF
+  // 2. Cuentas contables por defecto NIIF (usar cuentas de movimiento, nunca códigos de grupo)
   let cxcAccount = { code: "1.1.02.01", name: "Cuentas por Cobrar Pacientes (Clínica)" };
-  let revenueAccount = { code: "4.1.01", name: "Servicios de Prevención e Higiene" };
+  let revenueAccount = { code: "4.1.01.01", name: "Servicios Odontológicos" };
   let ivaAccount = { code: "2.1.03.01", name: "IVA en Ventas por Pagar" };
 
   // Si se provee la factura original, buscar su asiento para espejar y netear con exactamente las mismas cuentas
@@ -477,12 +477,16 @@ export async function createCreditNoteJournalEntry(params: {
         if (line.account_code.startsWith("1.1.02") && Number(line.debit) > 0) {
           cxcAccount = { code: line.account_code, name: line.account_name };
         } else if (line.account_code.startsWith("4.") && Number(line.credit) > 0) {
-          revenueAccount = { code: line.account_code, name: line.account_name };
+          if (!FORBIDDEN_GROUP_CODES.has(line.account_code)) {
+            revenueAccount = { code: line.account_code, name: line.account_name };
+          }
         } else if (
           (line.account_code.startsWith("2.1.02") || line.account_code.startsWith("2.1.03")) &&
           Number(line.credit) > 0
         ) {
-          ivaAccount = { code: line.account_code, name: line.account_name };
+          if (!FORBIDDEN_GROUP_CODES.has(line.account_code)) {
+            ivaAccount = { code: line.account_code, name: line.account_name };
+          }
         }
       }
     }
@@ -925,8 +929,7 @@ export async function syncInvoiceJournalEntries(
   }
 
   // 2. SOLO las facturas AUTORIZADAS por el SRI deben generar asiento contable
-  // Si la factura está rechazada, devuelta, en proceso de envío, en borrador o anulada, NO generar ningún asiento.
-  if (inv.sri_status !== "authorized" || inv.payment_status === "cancelled") {
+  if (inv.sri_status !== "authorized") {
     return;
   }
 
@@ -1000,6 +1003,61 @@ export async function syncInvoiceJournalEntries(
       user_email:         options?.user_email,
     });
   }
+
+  // Asiento 3: Si existe Nota de Crédito AUTORIZADA para esta factura, asegurar su asiento de reversión
+  const { data: cns } = await supabase
+    .from("credit_notes")
+    .select("*")
+    .eq("invoice_id", invoiceId)
+    .eq("sri_status", "authorized");
+
+  if (cns && cns.length > 0) {
+    for (const cn of cns) {
+      await createCreditNoteJournalEntry({
+        credit_note_id:     cn.id,
+        credit_note_number: cn.credit_note_number,
+        credit_note_date:   cn.issue_date || (cn.created_at ? String(cn.created_at).split("T")[0] : issueDate),
+        invoice_id:         inv.id,
+        invoice_number:     inv.invoice_number,
+        client_name:        cn.client_name || inv.client_name,
+        subtotal_0:         Number(cn.subtotal_0 || 0),
+        subtotal_15:        Number(cn.subtotal_15 || 0),
+        iva_amount:         Number(cn.iva_amount || 0),
+        total:              Number(cn.total || 0),
+        motivo:             cn.motivo || "Anulación/Modificación de factura",
+        user_id:            options?.user_id,
+        user_email:         options?.user_email,
+      });
+    }
+  } else {
+    const metaCn = (inv.sri_error_messages as any)?.credit_note;
+    if (metaCn?.credit_note_id) {
+      const { data: cnFromMeta } = await supabase
+        .from("credit_notes")
+        .select("*")
+        .eq("id", metaCn.credit_note_id)
+        .eq("sri_status", "authorized")
+        .maybeSingle();
+
+      if (cnFromMeta) {
+        await createCreditNoteJournalEntry({
+          credit_note_id:     cnFromMeta.id,
+          credit_note_number: cnFromMeta.credit_note_number,
+          credit_note_date:   cnFromMeta.issue_date || (cnFromMeta.created_at ? String(cnFromMeta.created_at).split("T")[0] : issueDate),
+          invoice_id:         inv.id,
+          invoice_number:     inv.invoice_number,
+          client_name:        cnFromMeta.client_name || inv.client_name,
+          subtotal_0:         Number(cnFromMeta.subtotal_0 || 0),
+          subtotal_15:        Number(cnFromMeta.subtotal_15 || 0),
+          iva_amount:         Number(cnFromMeta.iva_amount || 0),
+          total:              Number(cnFromMeta.total || 0),
+          motivo:             cnFromMeta.motivo || metaCn.motivo || "Anulación/Modificación de factura",
+          user_id:            options?.user_id,
+          user_email:         options?.user_email,
+        });
+      }
+    }
+  }
 }
 
 /**
@@ -1029,6 +1087,37 @@ export async function syncPeriodInvoicesJournalEntries(period: string) {
     } catch (err) {
       console.warn(`Error sincronizando asiento de factura ${inv.id}:`, err);
     }
+  }
+
+  // Sincronizar también Notas de Crédito autorizadas
+  try {
+    let cnQuery = supabase.from("credit_notes").select("*").eq("sri_status", "authorized");
+    if (period !== "all") {
+      const [year, month] = period.split("-").map(Number);
+      const from = new Date(year, month - 1, 1).toISOString().split("T")[0];
+      const to = new Date(year, month, 0).toISOString().split("T")[0];
+      cnQuery = cnQuery.gte("issue_date", from).lte("issue_date", to);
+    }
+    const { data: cns } = await cnQuery;
+    if (cns && cns.length > 0) {
+      for (const cn of cns) {
+        await createCreditNoteJournalEntry({
+          credit_note_id:     cn.id,
+          credit_note_number: cn.credit_note_number,
+          credit_note_date:   cn.issue_date || (cn.created_at ? String(cn.created_at).split("T")[0] : new Date().toISOString().split("T")[0]),
+          invoice_id:         cn.invoice_id,
+          invoice_number:     cn.num_doc_modificado,
+          client_name:        cn.client_name,
+          subtotal_0:         Number(cn.subtotal_0 || 0),
+          subtotal_15:        Number(cn.subtotal_15 || 0),
+          iva_amount:         Number(cn.iva_amount || 0),
+          total:              Number(cn.total || 0),
+          motivo:             cn.motivo || "Anulación/Modificación de factura",
+        });
+      }
+    }
+  } catch (cnSyncErr) {
+    console.warn("Error sincronizando notas de crédito en período:", cnSyncErr);
   }
 
   return { count };
