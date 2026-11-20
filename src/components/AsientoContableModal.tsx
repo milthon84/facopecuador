@@ -71,6 +71,12 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
     incName = "Otros Ingresos No Operacionales";
   }
 
+  // Extraer secuencial para correlativo visual si aún no tiene asiento en base de datos
+  const invSecMatch = (invoice.invoice_number || "").match(/\d{9}$|\d+$/);
+  const invSecNum = invSecMatch ? parseInt(invSecMatch[0], 10) : (invoice.secuencial ? Number(invoice.secuencial) : null);
+  const invEntryCode = invSecNum ? formatAsientoCode(invSecNum, invDate, "diario") : undefined;
+  const invIngCode = invSecNum ? formatIngresoCode(invSecNum, invDate) : undefined;
+
   // 1. Asiento de Venta / Devengo
   const saleLines: JournalLineItem[] = [
     {
@@ -99,6 +105,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
   entries.push({
     id: `inv-${invoice.id}-sale`,
+    entry_number: invSecNum || undefined,
+    entry_code: invEntryCode,
     entry_date: invDate,
     description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
     reference_type: "invoice",
@@ -116,6 +124,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
     entries.push({
       id: `inv-${invoice.id}-pay`,
+      entry_number: invSecNum || undefined,
+      entry_code: invIngCode,
       entry_date: invDate,
       description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
       reference_type: "invoice",
@@ -144,6 +154,9 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
     const cnSubtotal = Math.max(0, cnTotal - (ivaAmt > 0 ? (cnTotal * 0.15) / 1.15 : 0));
     const cnIva = Math.round((cnTotal - cnSubtotal) * 100) / 100;
     const cnDate = linkedCn.created_at ? String(linkedCn.created_at).split("T")[0] : invDate;
+    const cnSecMatch = (linkedCn.credit_note_number || "").match(/\d{9}$|\d+$/);
+    const cnSecNum = cnSecMatch ? parseInt(cnSecMatch[0], 10) : (linkedCn.secuencial ? Number(linkedCn.secuencial) : null);
+    const cnEntryCode = cnSecNum ? formatAsientoCode(cnSecNum, cnDate, "nc") : undefined;
 
     const cnLines: JournalLineItem[] = [
       {
@@ -171,6 +184,8 @@ export function buildInvoiceJournalEntries(invoice: any, linkedCn?: any): Journa
 
     entries.push({
       id: `cn-${linkedCn.id || "mod"}`,
+      entry_number: cnSecNum || undefined,
+      entry_code: cnEntryCode,
       entry_date: cnDate,
       description: `Nota de Crédito ${linkedCn.credit_note_number || ""} — Reversión Factura ${invoice.invoice_number}`,
       reference_type: "credit_note",
@@ -186,10 +201,10 @@ export function getEntryKind(entry: JournalEntryItem) {
   const desc = (entry.description || "").toLowerCase();
   const ref = (entry.reference_type || "").toLowerCase();
 
-  if (ref === "credit_note" || desc.includes("nota de crédito") || desc.includes("credito")) {
+  if (ref === "credit_note" || desc.includes("nota de crédito") || desc.includes("credito") || desc.startsWith("nc ")) {
     return {
       title: "Nota de Crédito (Reversión Contable)",
-      voucherType: "diario" as const,
+      voucherType: "nc" as const,
       voucherLabel: "Nota de Crédito",
       voucherColor: "bg-amber-100 text-amber-900 border-amber-300",
     };
@@ -364,6 +379,7 @@ export default function AsientoContableModal({
                       const defaultAsientoCode = formatAsientoCode(entryNum, entry.entry_date, "diario");
                       const defaultEgresoCode = entry.egreso_number ? String(entry.egreso_number) : formatEgresoCode(entryNum, entry.entry_date);
                       const defaultIngresoCode = formatIngresoCode(entryNum, entry.entry_date);
+                      const defaultNcCode = formatAsientoCode(entryNum, entry.entry_date, "nc");
 
                       let codeStr = entry.entry_code;
                       if (!codeStr) {
@@ -372,6 +388,8 @@ export default function AsientoContableModal({
                             ? defaultEgresoCode
                             : kind.voucherType === "ingreso"
                             ? defaultIngresoCode
+                            : kind.voucherType === "nc"
+                            ? defaultNcCode
                             : defaultAsientoCode;
                       }
 

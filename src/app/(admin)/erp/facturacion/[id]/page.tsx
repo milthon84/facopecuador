@@ -12,6 +12,7 @@ import EmitirNotaCreditoModal from "@/components/EmitirNotaCreditoModal";
 import SyncNotaCreditoButton from "@/components/SyncNotaCreditoButton";
 import InvoicePhotosSection, { InvoicePhoto } from "@/components/InvoicePhotosSection";
 import AsientoContableModal, { JournalEntryItem, JournalLineItem } from "@/components/AsientoContableModal";
+import { formatAsientoCode, formatIngresoCode } from "@/lib/accounting-codes";
 import { getTipoIdentificacion } from "@/lib/sri";
 import { assertPermission, hasWritePermission } from "@/lib/auth-action";
 import { syncInvoiceJournalEntries } from "@/lib/accounting";
@@ -314,6 +315,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       incName = "Otros Ingresos No Operacionales";
     }
 
+    // Extraer secuencial para correlativo visual si aún no tiene asiento en base de datos
+    const invSecMatch = (invoice.invoice_number || "").match(/\d{9}$|\d+$/);
+    const invSecNum = invSecMatch ? parseInt(invSecMatch[0], 10) : (invoice.secuencial ? Number(invoice.secuencial) : null);
+    const invEntryCode = invSecNum ? formatAsientoCode(invSecNum, invDate, "diario") : undefined;
+    const invIngCode = invSecNum ? formatIngresoCode(invSecNum, invDate) : undefined;
+
     if (!hasSaleEntry) {
       const saleLines: JournalLineItem[] = [
         {
@@ -342,6 +349,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
       journalEntries.unshift({
         id: "proj-invoice-sale",
+        entry_number: invSecNum || undefined,
+        entry_code: invEntryCode,
         entry_date: invDate,
         description: `Factura de Venta (${cxcName}) — ${invoice.client_name}`,
         reference_type: "invoice",
@@ -385,6 +394,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
           journalEntries.push({
             id: `proj-pay-${p.id || idx}`,
+            entry_number: invSecNum || undefined,
+            entry_code: invIngCode,
             entry_date: pDate,
             description: `Cobro Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : p.payment_method || "Cobro"})`,
             reference_type: "invoice",
@@ -415,6 +426,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
         journalEntries.push({
           id: "proj-pay-full",
+          entry_number: invSecNum || undefined,
+          entry_code: invIngCode,
           entry_date: invDate,
           description: `Cobro Total Factura ${invoice.invoice_number || ""} (${isEfectivo ? "Caja General" : isPrestamo ? "Préstamos Accionistas" : "Bancos"})`,
           reference_type: "invoice",
@@ -473,8 +486,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""}`,
       });
 
+      const cnSecMatch = (existingCreditNote.credit_note_number || "").match(/\d{9}$|\d+$/);
+      const cnSecNum = cnSecMatch ? parseInt(cnSecMatch[0], 10) : (existingCreditNote.secuencial ? Number(existingCreditNote.secuencial) : null);
+      const cnEntryCode = cnSecNum ? formatAsientoCode(cnSecNum, cnDate, "nc") : undefined;
+
       journalEntries.push({
         id: `proj-cn-${existingCreditNote.id}`,
+        entry_number: cnSecNum || undefined,
+        entry_code: cnEntryCode,
         entry_date: cnDate,
         description: `Nota de Crédito ${existingCreditNote.credit_note_number || ""} — Reversión Factura ${invoice.invoice_number}`,
         reference_type: "credit_note",
