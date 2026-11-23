@@ -536,6 +536,53 @@ export default async function ContabilidadPage({
   const totalFinalDebit = balanceRows.reduce((s, r) => s + r.finalDebit, 0);
   const totalFinalCredit = balanceRows.reduce((s, r) => s + r.finalCredit, 0);
 
+  // ── Cuadre Formal de Sumas y Saldos NIIF (Deudor vs Acreedor) ──
+  const totalPrevDeudor = balanceRows.reduce(
+    (s, r) => s + (r.nature === "deudora" ? r.prevBalance : 0),
+    0
+  );
+  const totalPrevAcreedor = balanceRows.reduce(
+    (s, r) => s + (r.nature === "acreedora" ? r.prevBalance : 0),
+    0
+  );
+
+  const totalFinalDeudor = balanceRows.reduce(
+    (s, r) => s + (r.nature === "deudora" ? r.finalBalance : 0),
+    0
+  );
+  const totalFinalAcreedor = balanceRows.reduce(
+    (s, r) => s + (r.nature === "acreedora" ? r.finalBalance : 0),
+    0
+  );
+
+  // ── División del Balance de Comprobación: Situación Financiera y PyG ──
+  // 1. Situación Financiera
+  const totalActivos = balanceRows
+    .filter(r => r.code.startsWith("1."))
+    .reduce((s, r) => s + r.finalBalance, 0);
+
+  const totalPasivos = balanceRows
+    .filter(r => r.code.startsWith("2."))
+    .reduce((s, r) => s + r.finalBalance, 0);
+
+  const totalPatrimonio = balanceRows
+    .filter(r => r.code.startsWith("3."))
+    .reduce((s, r) => s + r.finalBalance, 0);
+
+  // 2. Estado de Resultados (PyG Acumulado al Corte)
+  const totalIngresosAcum = balanceRows
+    .filter(r => r.code.startsWith("4."))
+    .reduce((s, r) => s + r.finalBalance, 0);
+
+  const totalGastosAcum = balanceRows
+    .filter(r => r.code.startsWith("5.") || r.code.startsWith("6."))
+    .reduce((s, r) => s + r.finalBalance, 0);
+
+  const utilidadNetaAcum = totalIngresosAcum - totalGastosAcum;
+  const totalPasivoPatrimonioUtilidad = totalPasivos + totalPatrimonio + utilidadNetaAcum;
+  const diferenciaCuadreEcuacion = Math.round(Math.abs(totalActivos - totalPasivoPatrimonioUtilidad) * 100) / 100;
+  const isEcuacionCuadrada = diferenciaCuadreEcuacion < 0.01;
+
   // ── Construcción de Balance Jerárquico NIIF (con Grupos y Subtotales = TOTAL =) ──
   type HierarchyRow = {
     type: "header" | "movement" | "subtotal";
@@ -1099,13 +1146,17 @@ export default async function ContabilidadPage({
         </div>
       )}
 
-      {/* ── ESTADO DE RESULTADOS ──────────────────────────────────────────── */}
+      {/* ── ESTADO DE RESULTADOS (PyG) ──────────────────────────────────── */}
       {tab === "resultados" && (
         <div className="bg-white border border-lilac-100 rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-lilac-50 bg-lilac-50/30 flex items-center justify-between flex-wrap gap-2">
             <div>
-              <h2 className="font-semibold text-sm text-ink-800">Estado de Resultados — {periodLabel(period)}</h2>
-              <p className="text-xs text-ink-400">Ingresos, costos y utilidad neta NIIF</p>
+              <h2 className="font-semibold text-sm text-ink-800">
+                Estado de Resultados (PyG) — {periodLabel(period)}
+              </h2>
+              <p className="text-xs text-ink-400">
+                Ingresos, costos y utilidad neta NIIF (Comparativa Mensual y Acumulada al Corte)
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <ExportarExcelContableButton
@@ -1125,49 +1176,165 @@ export default async function ContabilidadPage({
               </Link>
             </div>
           </div>
-          <div className="p-5 space-y-4">
-            {/* Ingresos */}
-            <div>
-              <h3 className="text-xs font-bold text-green-700 uppercase tracking-wide mb-2">Ingresos</h3>
-              {balanceRows.filter(r => r.code.startsWith("4.") && r.credit > 0).map(r => (
-                <div key={r.code} className="flex justify-between text-sm py-1 border-b border-lilac-50">
-                  <span className="text-ink-700 flex items-center gap-2">
-                    <span className="text-xs font-mono text-ink-400">{r.code}</span>
-                    {r.name}
-                  </span>
-                  <span className="font-medium text-green-700">${fmt(r.credit - r.debit)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-sm pt-2 border-t-2 border-green-200">
-                <span>Total Ingresos</span>
-                <span className="text-green-700">${fmt(ingresos)}</span>
-              </div>
-            </div>
 
-            {/* Gastos */}
-            <div>
-              <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">Gastos</h3>
-              {balanceRows.filter(r => r.code.startsWith("5.") && r.debit > 0).map(r => (
-                <div key={r.code} className="flex justify-between text-sm py-1 border-b border-lilac-50">
-                  <span className="text-ink-700 flex items-center gap-2">
-                    <span className="text-xs font-mono text-ink-400">{r.code}</span>
-                    {r.name}
-                  </span>
-                  <span className="font-medium text-red-600">${fmt(r.debit - r.credit)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-sm pt-2 border-t-2 border-red-200">
-                <span>Total Gastos</span>
-                <span className="text-red-600">${fmt(gastos)}</span>
-              </div>
-            </div>
-
-            {/* Resultado */}
-            <div className={`flex justify-between text-base font-bold p-4 rounded-xl ${
-              utilidad >= 0 ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"
+          {/* Tarjetas Comparativas de Utilidad */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-5 pb-0">
+            <div className={`p-4 rounded-xl border ${
+              utilidad >= 0 ? "bg-emerald-50/60 border-emerald-200 text-emerald-900" : "bg-red-50/60 border-red-200 text-red-900"
             }`}>
-              <span>{utilidad >= 0 ? "UTILIDAD DEL PERÍODO" : "PÉRDIDA DEL PERÍODO"}</span>
-              <span>${fmt(Math.abs(utilidad))}</span>
+              <div className="text-[11px] uppercase font-bold tracking-wide text-ink-500">
+                Resultado del Mes ({periodLabel(period)})
+              </div>
+              <div className="text-2xl font-black font-mono mt-1">
+                ${fmt(utilidad)}
+              </div>
+              <p className="text-[10px] text-ink-500 mt-1">
+                Ingresos del mes (${fmt(ingresos)}) menos gastos del mes (${fmt(gastos)})
+              </p>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${
+              utilidadNetaAcum >= 0 ? "bg-purple-50/60 border-purple-200 text-purple-900" : "bg-amber-50/60 border-amber-200 text-amber-900"
+            }`}>
+              <div className="text-[11px] uppercase font-bold tracking-wide text-purple-700">
+                Resultado Acumulado al Corte (NIIF)
+              </div>
+              <div className="text-2xl font-black font-mono mt-1">
+                ${fmt(utilidadNetaAcum)}
+              </div>
+              <p className="text-[10px] text-purple-700/80 mt-1">
+                Ingresos acum. (${fmt(totalIngresosAcum)}) menos gastos acum. (${fmt(totalGastosAcum)}) → Trasladado a Situación Financiera
+              </p>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-6">
+            {/* ── INGRESOS (Clase 4) ── */}
+            <div>
+              <div className="flex items-center justify-between border-b-2 border-emerald-500 pb-1.5 mb-2">
+                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wide">
+                  1. INGRESOS (CLASE 4)
+                </h3>
+                <div className="flex gap-8 text-[11px] font-bold text-ink-500 pr-2">
+                  <span className="w-28 text-right">Mes Actual</span>
+                  <span className="w-28 text-right">Acumulado Corte</span>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {balanceRows
+                  .filter(
+                    r =>
+                      r.code.startsWith("4.") &&
+                      (Math.abs(r.monthCredit - r.monthDebit) > 0.005 || Math.abs(r.finalBalance) > 0.005)
+                  )
+                  .map(r => {
+                    const mes = r.monthCredit - r.monthDebit;
+                    const acum = r.finalBalance;
+                    return (
+                      <div key={r.code} className="flex items-center justify-between py-2 text-xs hover:bg-slate-50/80 px-2 rounded-lg transition">
+                        <span className="text-ink-800 flex items-center gap-2">
+                          <span className="font-mono text-ink-400 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                            {r.code}
+                          </span>
+                          <span className="font-medium">{r.name}</span>
+                        </span>
+                        <div className="flex gap-8 font-mono text-xs">
+                          <span className={`w-28 text-right ${mes > 0 ? "text-emerald-700 font-semibold" : "text-ink-400"}`}>
+                            {mes !== 0 ? `$${fmt(mes)}` : "—"}
+                          </span>
+                          <span className={`w-28 text-right ${acum > 0 ? "text-emerald-800 font-bold" : "text-ink-400"}`}>
+                            {acum !== 0 ? `$${fmt(acum)}` : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="flex justify-between font-bold text-xs pt-2.5 mt-2 border-t border-emerald-200 bg-emerald-50/30 px-3 py-2 rounded-lg">
+                <span className="text-emerald-900 uppercase">Total Ingresos</span>
+                <div className="flex gap-8 font-mono">
+                  <span className="w-28 text-right text-emerald-700">${fmt(ingresos)}</span>
+                  <span className="w-28 text-right text-emerald-800">${fmt(totalIngresosAcum)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── COSTOS Y GASTOS (Clase 5 y 6) ── */}
+            <div>
+              <div className="flex items-center justify-between border-b-2 border-red-500 pb-1.5 mb-2">
+                <h3 className="text-xs font-bold text-red-800 uppercase tracking-wide">
+                  2. COSTOS Y GASTOS (CLASE 5 / 6)
+                </h3>
+                <div className="flex gap-8 text-[11px] font-bold text-ink-500 pr-2">
+                  <span className="w-28 text-right">Mes Actual</span>
+                  <span className="w-28 text-right">Acumulado Corte</span>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {balanceRows
+                  .filter(
+                    r =>
+                      (r.code.startsWith("5.") || r.code.startsWith("6.")) &&
+                      (Math.abs(r.monthDebit - r.monthCredit) > 0.005 || Math.abs(r.finalBalance) > 0.005)
+                  )
+                  .map(r => {
+                    const mes = r.monthDebit - r.monthCredit;
+                    const acum = r.finalBalance;
+                    return (
+                      <div key={r.code} className="flex items-center justify-between py-2 text-xs hover:bg-slate-50/80 px-2 rounded-lg transition">
+                        <span className="text-ink-800 flex items-center gap-2">
+                          <span className="font-mono text-ink-400 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                            {r.code}
+                          </span>
+                          <span className="font-medium">{r.name}</span>
+                        </span>
+                        <div className="flex gap-8 font-mono text-xs">
+                          <span className={`w-28 text-right ${mes > 0 ? "text-red-600 font-semibold" : "text-ink-400"}`}>
+                            {mes !== 0 ? `$${fmt(mes)}` : "—"}
+                          </span>
+                          <span className={`w-28 text-right ${acum > 0 ? "text-red-700 font-bold" : "text-ink-400"}`}>
+                            {acum !== 0 ? `$${fmt(acum)}` : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="flex justify-between font-bold text-xs pt-2.5 mt-2 border-t border-red-200 bg-red-50/30 px-3 py-2 rounded-lg">
+                <span className="text-red-900 uppercase">Total Costos y Gastos</span>
+                <div className="flex gap-8 font-mono">
+                  <span className="w-28 text-right text-red-600">${fmt(gastos)}</span>
+                  <span className="w-28 text-right text-red-700">${fmt(totalGastosAcum)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RESUMEN UTILIDAD NETA / PÉRDIDA ── */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-2">
+              <div className="flex items-center justify-between text-sm font-bold">
+                <span className="text-ink-900">
+                  {utilidadNetaAcum >= 0 ? "UTILIDAD NETA DEL EJERCICIO (NIIF)" : "PÉRDIDA NETA DEL EJERCICIO"}
+                </span>
+                <div className="flex gap-8 font-mono text-base">
+                  <span className={`w-28 text-right ${utilidad >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    ${fmt(utilidad)}
+                  </span>
+                  <span className={`w-28 text-right ${utilidadNetaAcum >= 0 ? "text-emerald-800 font-black" : "text-red-700 font-black"}`}>
+                    ${fmt(utilidadNetaAcum)}
+                  </span>
+                </div>
+              </div>
+              <div className="text-[11px] text-ink-500 pt-1 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <span>
+                  ↳ Esta utilidad acumulada de <strong className="text-ink-900 font-mono">${fmt(utilidadNetaAcum)}</strong> es el nexo directo que traslada el PyG al Patrimonio en la Situación Financiera.
+                </span>
+                <Link
+                  href={`/erp/contabilidad?tab=balance&period=${period}`}
+                  className="font-semibold text-purple-700 hover:text-purple-900 hover:underline"
+                >
+                  Ver en Balance de Comprobación →
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -1367,10 +1534,16 @@ export default async function ContabilidadPage({
                 <tr>
                   <td className="px-4 py-3 font-mono font-bold text-ink-900">= TOTAL GENERAL =</td>
                   <td className="px-4 py-3 uppercase font-bold text-ink-900">BALANCE DE COMPROBACIÓN NIIF</td>
-                  <td className="px-4 py-3 text-right text-ink-800">${fmt(totalPrevBalance)}</td>
-                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalDebit)}</td>
-                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalCredit)}</td>
-                  <td className="px-4 py-3 text-right text-ink-900">${fmt(totalFinalBalance)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900">
+                    <span className="block text-ink-900 font-bold">${fmt(totalPrevDeudor)}</span>
+                    <span className="text-[10px] text-ink-500 font-normal block">Deudores = Acreedores</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink-900 font-bold">${fmt(totalDebit)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900 font-bold">${fmt(totalCredit)}</td>
+                  <td className="px-4 py-3 text-right text-ink-900">
+                    <span className="block text-ink-900 font-black">${fmt(totalFinalDeudor)}</span>
+                    <span className="text-[10px] text-ink-500 font-normal block">Deudores = Acreedores</span>
+                  </td>
                 </tr>
                 <tr className="border-t border-slate-200 bg-white text-xs font-normal">
                   <td colSpan={6} className="px-4 py-2.5 text-ink-600">
@@ -1390,17 +1563,17 @@ export default async function ContabilidadPage({
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-ink-700">Sumas Acumuladas NIIF:</span>
+                        <span className="font-semibold text-ink-700">Sumas Iguales de Saldos NIIF:</span>
                         <span
                           className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full ${
-                            Math.abs(totalFinalDebit - totalFinalCredit) < 0.01
+                            Math.abs(totalFinalDeudor - totalFinalAcreedor) < 0.01
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               : "bg-red-50 text-red-700 border border-red-200"
                           }`}
                         >
-                          {Math.abs(totalFinalDebit - totalFinalCredit) < 0.01
-                            ? `✓ Cuadrado Total ($${fmt(totalFinalDebit)})`
-                            : `✗ Descuadre Total de $${fmt(Math.abs(totalFinalDebit - totalFinalCredit))}`}
+                          {Math.abs(totalFinalDeudor - totalFinalAcreedor) < 0.01
+                            ? `✓ Saldos Cuadrados ($${fmt(totalFinalDeudor)})`
+                            : `✗ Descuadre en Saldos de $${fmt(Math.abs(totalFinalDeudor - totalFinalAcreedor))}`}
                         </span>
                       </div>
                     </div>
@@ -1408,6 +1581,146 @@ export default async function ContabilidadPage({
                 </tr>
               </tfoot>
             </table>
+          </div>
+
+          {/* ── Conciliación y División NIIF: Situación Financiera vs PyG ── */}
+          <div className="border-t-2 border-slate-200 bg-slate-50/70 p-5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-ink-900 flex items-center gap-2">
+                  <Scale size={16} className="text-lilac-600" />
+                  División del Balance de Comprobación: Situación Financiera y PyG
+                </h3>
+                <p className="text-xs text-ink-500">
+                  Conciliación de saldos acumulados al corte: Ecuación fundamental Activo = Pasivo + Patrimonio + Utilidad
+                </p>
+              </div>
+
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                  isEcuacionCuadrada
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    : "bg-red-100 text-red-800 border border-red-300"
+                }`}
+              >
+                {isEcuacionCuadrada
+                  ? "✓ Ecuación Contable Cuadrada ($0.00)"
+                  : `✗ Descuadre de $${fmt(diferenciaCuadreEcuacion)}`}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Tarjeta 1: Estado de Resultados (PyG) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink-700 uppercase tracking-wide">
+                    1. Estado de Resultados (PyG)
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Acumulado al Corte
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-ink-600">
+                    <span>(+) Ingresos Operacionales (Clase 4):</span>
+                    <span className="font-mono font-medium text-emerald-700">${fmt(totalIngresosAcum)}</span>
+                  </div>
+                  <div className="flex justify-between text-ink-600">
+                    <span>(-) Costos y Gastos (Clases 5 y 6):</span>
+                    <span className="font-mono font-medium text-red-600">${fmt(totalGastosAcum)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1.5 flex justify-between font-bold text-ink-900 text-sm">
+                    <span>(=) Utilidad Neta del Ejercicio:</span>
+                    <span
+                      className={`font-mono ${
+                        utilidadNetaAcum >= 0 ? "text-emerald-800" : "text-red-700"
+                      }`}
+                    >
+                      ${fmt(utilidadNetaAcum)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-ink-400 italic">
+                  ↳ Este resultado se traslada automáticamente al Patrimonio en la Situación Financiera.
+                </p>
+              </div>
+
+              {/* Tarjeta 2: Situación Financiera (Balance General) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink-700 uppercase tracking-wide">
+                    2. Situación Financiera
+                  </span>
+                  <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    Balance General
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-ink-600">
+                    <span>Total Pasivos (Clase 2):</span>
+                    <span className="font-mono font-medium text-ink-800">${fmt(totalPasivos)}</span>
+                  </div>
+                  <div className="flex justify-between text-ink-600">
+                    <span>Total Patrimonio (Clase 3):</span>
+                    <span className="font-mono font-medium text-ink-800">${fmt(totalPatrimonio)}</span>
+                  </div>
+                  <div className="flex justify-between text-ink-600">
+                    <span>(+) Utilidad del PyG trasladada:</span>
+                    <span className="font-mono font-medium text-emerald-700">${fmt(utilidadNetaAcum)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1.5 flex justify-between font-bold text-ink-900 text-sm">
+                    <span>(=) Total Pasivo + Patrimonio:</span>
+                    <span className="font-mono text-ink-900">${fmt(totalPasivoPatrimonioUtilidad)}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-ink-400 italic">
+                  ↳ Pasivos + Patrimonio + Utilidad Neta acumulada al corte.
+                </p>
+              </div>
+
+              {/* Tarjeta 3: Ecuación Contable Fundamental */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-ink-700 uppercase tracking-wide">
+                    3. Ecuación Fundamental
+                  </span>
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                    Activo = Pasivo + Pat.
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-ink-600">
+                    <span>Total Activos (Clase 1):</span>
+                    <span className="font-mono font-bold text-ink-900">${fmt(totalActivos)}</span>
+                  </div>
+                  <div className="flex justify-between text-ink-600">
+                    <span>Total Pasivo + Pat. + Utilidad:</span>
+                    <span className="font-mono font-bold text-ink-900">${fmt(totalPasivoPatrimonioUtilidad)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-1.5 flex justify-between font-bold text-sm">
+                    <span>Diferencia de Cuadre:</span>
+                    <span
+                      className={`font-mono ${
+                        isEcuacionCuadrada ? "text-emerald-700" : "text-red-600"
+                      }`}
+                    >
+                      ${fmt(diferenciaCuadreEcuacion)}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className={`p-2 rounded-lg text-[11px] font-semibold text-center ${
+                    isEcuacionCuadrada
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-red-50 text-red-800 border border-red-200"
+                  }`}
+                >
+                  {isEcuacionCuadrada
+                    ? `✓ Cuadrado perfecto: Activos ($${fmt(totalActivos)}) = Pasivo y Patrimonio ($${fmt(totalPasivoPatrimonioUtilidad)})`
+                    : `✗ Descuadre contable de $${fmt(diferenciaCuadreEcuacion)}`}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

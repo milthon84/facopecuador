@@ -1146,37 +1146,74 @@ export default function LibroMayorClient({
                 ))}
 
                 {/* Gran Total Mayor General */}
-                <div className="pt-2 text-xs font-black text-slate-900 break-inside-avoid">
-                  <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <p className="font-bold text-sm tracking-wide">
-                        = RESUMEN MAYOR GENERAL ({mayorAccounts.length} CUENTAS) =
-                      </p>
-                      <p className="text-[11px] text-slate-300 mt-0.5">
-                        Consolidación de débitos, créditos y cuadre contable NIIF
-                      </p>
-                    </div>
+                {(() => {
+                  const isFilteredByAccount = Boolean(
+                    cuentaDesde || cuentaHasta || initialCuenta || (accountOptions.length > 0 && mayorAccounts.length < accountOptions.length)
+                  );
+                  const diffCuadre = r2(Math.abs(totalGeneralDebe - totalGeneralHaber));
+                  const isCuadrado = diffCuadre < 0.01;
 
-                    <div className="flex items-center gap-4 bg-white/10 rounded-xl px-4 py-2 border border-white/10 flex-wrap">
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase text-emerald-300 font-bold block">Suma Débitos</span>
-                        <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralDebe)}</span>
+                  return (
+                    <div className="pt-2 text-xs font-black text-slate-900 break-inside-avoid">
+                      <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-sm tracking-wide">
+                            = RESUMEN MAYOR {isFilteredByAccount ? "FILTRADO" : "GENERAL"} ({mayorAccounts.length} {mayorAccounts.length === 1 ? "CUENTA" : "CUENTAS"}) =
+                          </p>
+                          <p className="text-[11px] text-slate-300 mt-0.5">
+                            {isFilteredByAccount
+                              ? "Consolidación de débitos, créditos y saldo neto de la selección"
+                              : "Consolidación general de débitos, créditos y partida doble NIIF"}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-4 bg-white/10 rounded-xl px-4 py-2 border border-white/10 flex-wrap">
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase text-emerald-300 font-bold block">Suma Débitos</span>
+                            <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralDebe)}</span>
+                          </div>
+                          <div className="w-px h-7 bg-white/20"></div>
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase text-blue-300 font-bold block">Suma Créditos</span>
+                            <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralHaber)}</span>
+                          </div>
+                          <div className="w-px h-7 bg-white/20"></div>
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase text-purple-300 font-bold block">
+                              {isFilteredByAccount ? "Saldo Neto Período" : "Cuadre NIIF"}
+                            </span>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span className="font-mono text-sm font-bold text-white">
+                                ${fmt(diffCuadre)}
+                              </span>
+                              {!isFilteredByAccount && (
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                    isCuadrado
+                                      ? "bg-emerald-500/30 text-emerald-300 border border-emerald-400/40"
+                                      : "bg-red-500/30 text-red-300 border border-red-400/40"
+                                  }`}
+                                >
+                                  {isCuadrado ? "✓ Cuadrado" : "✗ Descuadre"}
+                                </span>
+                              )}
+                              {isFilteredByAccount && (
+                                <span className="text-[9px] text-purple-200 font-normal">
+                                  {totalGeneralDebe >= totalGeneralHaber ? "Deudor" : "Acreedor"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="w-px h-7 bg-white/20"></div>
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase text-blue-300 font-bold block">Suma Créditos</span>
-                        <span className="font-mono text-sm font-bold text-white">${fmt(totalGeneralHaber)}</span>
-                      </div>
-                      <div className="w-px h-7 bg-white/20"></div>
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase text-purple-300 font-bold block">Cuadre NIIF</span>
-                        <span className="font-mono text-sm font-bold text-white">
-                          ${fmt(r2(Math.abs(totalGeneralDebe - totalGeneralHaber)))}
-                        </span>
-                      </div>
+                      {isFilteredByAccount && (
+                        <p className="text-[10px] text-slate-500 italic mt-1.5 px-2">
+                          * Nota: Al filtrar una o varias cuentas, la diferencia entre débito y crédito representa el saldo neto del período de dichas cuentas. Para verificar la igualdad exacta de partida doble (Débitos = Créditos, diferencia $0.00), consulte el Mayor sin filtro de cuenta o el Balance de Comprobación.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             )}
           </div>
