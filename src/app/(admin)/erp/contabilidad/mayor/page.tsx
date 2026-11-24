@@ -172,12 +172,33 @@ export default async function LibroMayorPage({
 
     const targetAccountCodes = new Set(targetAccounts.map((a) => a.code));
 
-    // A. Consultar saldos anteriores (asientos posted con entry_date < desde)
-    const { data: prevLinesData } = await supabase
-      .from("journal_lines")
-      .select("account_code, debit, credit, journal_entries!inner(entry_date, status)")
-      .lt("journal_entries.entry_date", desde)
-      .eq("journal_entries.status", "posted");
+    // A. Consultar saldos anteriores (asientos posted con entry_date < desde) con paginación
+    const prevLinesData: any[] = [];
+    const PAGE_SIZE = 1000;
+    let pageIdx = 0;
+    let keepFetching = true;
+
+    while (keepFetching) {
+      const fromRange = pageIdx * PAGE_SIZE;
+      const toRange = fromRange + PAGE_SIZE - 1;
+      const { data: pageLines, error } = await supabase
+        .from("journal_lines")
+        .select("account_code, debit, credit, journal_entries!inner(entry_date, status)")
+        .lt("journal_entries.entry_date", desde)
+        .eq("journal_entries.status", "posted")
+        .range(fromRange, toRange);
+
+      if (error || !pageLines || pageLines.length === 0) {
+        keepFetching = false;
+      } else {
+        prevLinesData.push(...pageLines);
+        if (pageLines.length < PAGE_SIZE) {
+          keepFetching = false;
+        } else {
+          pageIdx++;
+        }
+      }
+    }
 
     const prevBalanceMap = new Map<string, { debit: number; credit: number }>();
     for (const pl of prevLinesData || []) {

@@ -200,7 +200,7 @@ export default async function ContabilidadPage({
     .order("entry_date", { ascending: true })
     .order("created_at", { ascending: true });
 
-  let prevLinesPromise: PromiseLike<{ data: any[] | null }> = Promise.resolve({ data: [] });
+  let rawPrevLines: any[] = [];
 
   if (!isAllPeriod) {
     const [year, month] = period.split("-").map(Number);
@@ -209,18 +209,35 @@ export default async function ContabilidadPage({
     const to = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     entriesQuery = entriesQuery.gte("entry_date", from).lte("entry_date", to);
 
-    prevLinesPromise = supabase
-      .from("journal_lines")
-      .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
-      .lt("journal_entries.entry_date", from)
-      .eq("journal_entries.status", "posted")
-      .limit(50000);
+    // Consulta de saldos anteriores con paginación para evitar el límite de 1.000 filas de PostgREST
+    const PAGE_SIZE = 1000;
+    let pageIdx = 0;
+    let keepFetching = true;
+
+    while (keepFetching) {
+      const fromRange = pageIdx * PAGE_SIZE;
+      const toRange = fromRange + PAGE_SIZE - 1;
+      const { data: pageLines, error } = await supabase
+        .from("journal_lines")
+        .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
+        .lt("journal_entries.entry_date", from)
+        .eq("journal_entries.status", "posted")
+        .range(fromRange, toRange);
+
+      if (error || !pageLines || pageLines.length === 0) {
+        keepFetching = false;
+      } else {
+        rawPrevLines.push(...pageLines);
+        if (pageLines.length < PAGE_SIZE) {
+          keepFetching = false;
+        } else {
+          pageIdx++;
+        }
+      }
+    }
   }
 
-  const [{ data: entries }, { data: rawPrevLines }] = await Promise.all([
-    entriesQuery,
-    prevLinesPromise,
-  ]);
+  const { data: entries } = await entriesQuery;
 
   // Cargar datos ATS si la pestaña activa es ATS
   let atsVentas: any[] = [];
