@@ -22,6 +22,7 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterTab, setFilterTab] = useState<"all" | "active" | "retired">("all");
 
   useEffect(() => {
     setMounted(true);
@@ -76,14 +77,29 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
     window.print();
   }
 
-  const filteredStudents = data?.students?.filter((s: any) => 
-    s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.documentNumber.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const isStudentRetired = (s: any) => {
+    const status = (s.enrollmentStatus || "").toLowerCase();
+    return status === "dropped" || status === "retired" || status === "retirado" || status === "withdrawn";
+  };
 
-  const paidCount = data?.students?.filter((s: any) => s.billingStatus === "invoiced").length || 0;
-  const pendingCount = data?.students?.filter((s: any) => s.billingStatus === "pending").length || 0;
-  const freeCount = data?.students?.filter((s: any) => s.billingStatus === "free").length || 0;
+  const allStudents = data?.students || [];
+  const retiredCount = allStudents.filter(isStudentRetired).length;
+  const activeStudentsCount = allStudents.length - retiredCount;
+
+  const paidCount = allStudents.filter((s: any) => s.billingStatus === "invoiced" && !isStudentRetired(s)).length;
+  const pendingCount = allStudents.filter((s: any) => s.billingStatus === "pending" && !isStudentRetired(s)).length;
+  const freeCount = allStudents.filter((s: any) => s.billingStatus === "free" && !isStudentRetired(s)).length;
+
+  const filteredStudents = allStudents.filter((s: any) => {
+    const matchesSearch =
+      s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.documentNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (filterTab === "active") return !isStudentRetired(s);
+    if (filterTab === "retired") return isStudentRetired(s);
+    return true;
+  });
 
   return (
     <>
@@ -164,7 +180,9 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
                       ? data.teachers.map((t: any) => t.full_name).join(", ")
                       : "Sin asignar"}
                   </p>
-                  <p><strong>Total Alumnos:</strong> {data?.students?.length || 0}</p>
+                  <p>
+                    <strong>Total Alumnos:</strong> {allStudents.length} ({activeStudentsCount} activos{retiredCount > 0 ? `, ${retiredCount} retirados` : ""})
+                  </p>
                 </div>
               </div>
 
@@ -180,35 +198,79 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
               ) : (
                 <>
                   {/* Resumen de estados y filtro de búsqueda (No imprimibles) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 no-print">
-                    <div className="bg-lilac-50/50 border border-lilac-100 p-3 rounded-xl">
-                      <span className="text-[10px] font-bold text-ink-500 uppercase tracking-wider block">Total Matriculados</span>
-                      <span className="text-lg font-bold text-ink-950">{data?.students?.length || 0}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 no-print">
+                    <div className="bg-lilac-50/50 border border-lilac-100 p-2.5 rounded-xl">
+                      <span className="text-[10px] font-bold text-ink-500 uppercase tracking-wider block">Total Alumnos</span>
+                      <div className="flex items-baseline gap-1 mt-0.5">
+                        <span className="text-lg font-bold text-ink-950">{allStudents.length}</span>
+                        <span className="text-[10px] text-ink-400 font-medium">({activeStudentsCount} act.)</span>
+                      </div>
                     </div>
-                    <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-xl">
+                    <div className="bg-emerald-50/50 border border-emerald-100 p-2.5 rounded-xl">
                       <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Pagados / Facturados</span>
-                      <span className="text-lg font-bold text-emerald-700">{paidCount}</span>
+                      <span className="text-lg font-bold text-emerald-700 mt-0.5 block">{paidCount}</span>
                     </div>
-                    <div className="bg-amber-50/50 border border-amber-100 p-3 rounded-xl">
+                    <div className="bg-amber-50/50 border border-amber-100 p-2.5 rounded-xl">
                       <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Pendientes de Pago</span>
-                      <span className="text-lg font-bold text-amber-700">{pendingCount}</span>
+                      <span className="text-lg font-bold text-amber-700 mt-0.5 block">{pendingCount}</span>
                     </div>
-                    <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-xl">
+                    <div className="bg-blue-50/50 border border-blue-100 p-2.5 rounded-xl">
                       <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Becados / Gratis</span>
-                      <span className="text-lg font-bold text-blue-700">{freeCount}</span>
+                      <span className="text-lg font-bold text-blue-700 mt-0.5 block">{freeCount}</span>
+                    </div>
+                    <div className="bg-rose-50/50 border border-rose-200 p-2.5 rounded-xl col-span-2 sm:col-span-1">
+                      <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">Retirados</span>
+                      <span className="text-lg font-bold text-rose-700 mt-0.5 block">{retiredCount}</span>
                     </div>
                   </div>
 
-                  {/* Búsqueda */}
-                  <div className="relative no-print">
-                    <Search size={14} className="absolute left-3.5 top-3 text-ink-400" />
-                    <input
-                      type="text"
-                      placeholder="Buscar alumno por nombre o documento..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="input pl-9 text-xs"
-                    />
+                  {/* Búsqueda y Filtros de Estado */}
+                  <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between no-print">
+                    <div className="relative flex-1">
+                      <Search size={14} className="absolute left-3.5 top-3 text-ink-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar alumno por nombre o documento..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="input pl-9 text-xs w-full"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setFilterTab("all")}
+                        className={`px-2.5 py-1 rounded-lg transition ${
+                          filterTab === "all"
+                            ? "bg-white text-ink-900 shadow-2xs font-bold"
+                            : "text-ink-500 hover:text-ink-800"
+                        }`}
+                      >
+                        Todos ({allStudents.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTab("active")}
+                        className={`px-2.5 py-1 rounded-lg transition ${
+                          filterTab === "active"
+                            ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                            : "text-ink-500 hover:text-ink-800"
+                        }`}
+                      >
+                        Activos ({activeStudentsCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTab("retired")}
+                        className={`px-2.5 py-1 rounded-lg transition ${
+                          filterTab === "retired"
+                            ? "bg-white text-rose-700 shadow-2xs font-bold"
+                            : "text-ink-500 hover:text-ink-800"
+                        }`}
+                      >
+                        Retirados ({retiredCount})
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tabla de Alumnos */}
@@ -228,52 +290,91 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
                         {filteredStudents.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="py-8 text-center text-ink-400 italic">
-                              No hay alumnos registrados en este módulo.
+                              No hay alumnos que coincidan con el criterio seleccionado.
                             </td>
                           </tr>
                         ) : (
-                          filteredStudents.map((st: any, idx: number) => (
-                            <tr key={st.moduloInscripcionId} className="hover:bg-lilac-50/20 transition-colors">
-                              <td className="py-2.5 px-3 font-semibold text-center text-ink-500">{idx + 1}</td>
-                              <td className="py-2.5 px-3 font-mono text-ink-800">{st.documentNumber}</td>
-                              <td className="py-2.5 px-3 font-bold text-ink-950">{st.fullName}</td>
-                              <td className="py-2.5 px-3 text-ink-600">{st.phone}</td>
-                              
-                              {/* Selector de Estado de Pago */}
-                              <td className="py-2.5 px-3">
-                                <div className="no-print">
-                                  <select
-                                    value={st.billingStatus}
-                                    disabled={updatingId === st.moduloInscripcionId}
-                                    onChange={(e) => handleStatusChange(st.moduloInscripcionId, e.target.value)}
-                                    className={`text-xs font-bold py-1 px-2 rounded-lg border outline-none cursor-pointer transition ${
-                                      st.billingStatus === "invoiced"
-                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                        : st.billingStatus === "free"
-                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                        : "bg-amber-50 text-amber-700 border-amber-200"
-                                    }`}
-                                  >
-                                    <option value="pending">🔴 Pendiente</option>
-                                    <option value="invoiced">🟢 Pagado / Facturado</option>
-                                    <option value="free">🟡 Becado / Gratis</option>
-                                  </select>
-                                </div>
-                                
-                                {/* Estado visible solo en impresión */}
-                                <div className="hidden print:block font-bold">
-                                  {st.billingStatus === "invoiced" ? "PAGADO" : st.billingStatus === "free" ? "GRATIS" : "PENDIENTE"}
-                                </div>
-                              </td>
+                          filteredStudents.map((st: any, idx: number) => {
+                            const isRetired = isStudentRetired(st);
 
-                              {/* Espacio para firma */}
-                              <td className="py-2.5 px-3 text-center">
-                                <div className="w-36 h-7 border border-dashed border-gray-300 rounded mx-auto flex items-center justify-center text-[10px] text-gray-300">
-                                  Firma
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                            return (
+                              <tr
+                                key={st.moduloInscripcionId}
+                                className={
+                                  isRetired
+                                    ? "bg-rose-50/30 hover:bg-rose-50/50 transition-colors"
+                                    : "hover:bg-lilac-50/20 transition-colors"
+                                }
+                              >
+                                <td className="py-2.5 px-3 font-semibold text-center text-ink-500">{idx + 1}</td>
+                                <td className="py-2.5 px-3 font-mono text-ink-800">{st.documentNumber}</td>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`font-bold ${isRetired ? "text-ink-700" : "text-ink-950"}`}>
+                                      {st.fullName}
+                                    </span>
+                                    {isRetired && (
+                                      <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider shrink-0 no-print">
+                                        Retirado
+                                      </span>
+                                    )}
+                                    {isRetired && (
+                                      <span className="hidden print:inline text-[10px] font-bold text-red-600">
+                                        (RETIRADO)
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 text-ink-600">{st.phone}</td>
+                                
+                                {/* Selector de Estado de Pago */}
+                                <td className="py-2.5 px-3">
+                                  <div className="no-print">
+                                    <select
+                                      value={st.billingStatus}
+                                      disabled={updatingId === st.moduloInscripcionId}
+                                      onChange={(e) => handleStatusChange(st.moduloInscripcionId, e.target.value)}
+                                      className={`text-xs font-bold py-1 px-2 rounded-lg border outline-none cursor-pointer transition ${
+                                        st.billingStatus === "invoiced"
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : st.billingStatus === "free"
+                                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                                          : "bg-amber-50 text-amber-700 border-amber-200"
+                                      }`}
+                                    >
+                                      <option value="pending">🔴 Pendiente</option>
+                                      <option value="invoiced">🟢 Pagado / Facturado</option>
+                                      <option value="free">🟡 Becado / Gratis</option>
+                                    </select>
+                                    {isRetired && (
+                                      <span className="text-[10px] font-bold text-rose-700 mt-1 block">
+                                        • Alumno Retirado
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Estado visible solo en impresión */}
+                                  <div className="hidden print:block font-bold">
+                                    {st.billingStatus === "invoiced" ? "PAGADO" : st.billingStatus === "free" ? "GRATIS" : "PENDIENTE"}
+                                    {isRetired ? " (RETIRADO)" : ""}
+                                  </div>
+                                </td>
+
+                                {/* Espacio para firma */}
+                                <td className="py-2.5 px-3 text-center">
+                                  {isRetired ? (
+                                    <div className="w-36 h-7 bg-slate-100 border border-slate-200 rounded mx-auto flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                      Retirado
+                                    </div>
+                                  ) : (
+                                    <div className="w-36 h-7 border border-dashed border-gray-300 rounded mx-auto flex items-center justify-center text-[10px] text-gray-300">
+                                      Firma
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
