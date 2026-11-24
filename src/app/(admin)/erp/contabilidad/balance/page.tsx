@@ -53,15 +53,9 @@ export default async function BalanceGeneralPage({
   const supabase = createAdminClient();
 
   const [
-    { data: rawLines },
     { data: sriConfig },
     { data: allAccounts },
   ] = await Promise.all([
-    supabase
-      .from("journal_lines")
-      .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
-      .lte("journal_entries.entry_date", toDate)
-      .eq("journal_entries.status", "posted"),
     supabase
       .from("sri_configs")
       .select("razon_social, nombre_comercial, ruc")
@@ -72,6 +66,34 @@ export default async function BalanceGeneralPage({
       .select("code, name")
       .eq("active", true),
   ]);
+
+  // Consultar todas las líneas contables históricas hasta la fecha con paginación
+  const rawLines: any[] = [];
+  const PAGE_SIZE = 1000;
+  let pageIdx = 0;
+  let keepFetching = true;
+
+  while (keepFetching) {
+    const fromRange = pageIdx * PAGE_SIZE;
+    const toRange = fromRange + PAGE_SIZE - 1;
+    const { data: pageLines, error } = await supabase
+      .from("journal_lines")
+      .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
+      .lte("journal_entries.entry_date", toDate)
+      .eq("journal_entries.status", "posted")
+      .range(fromRange, toRange);
+
+    if (error || !pageLines || pageLines.length === 0) {
+      keepFetching = false;
+    } else {
+      rawLines.push(...pageLines);
+      if (pageLines.length < PAGE_SIZE) {
+        keepFetching = false;
+      } else {
+        pageIdx++;
+      }
+    }
+  }
 
   const companyName =
     sriConfig?.razon_social || sriConfig?.nombre_comercial || "FACOP - ODONTOLOGÍA INTEGRAL";

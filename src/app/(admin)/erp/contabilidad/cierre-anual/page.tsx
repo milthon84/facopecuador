@@ -56,15 +56,35 @@ export default async function CierreAnualPage({
 
   const logs = logsData ?? [];
 
-  // Cargar todos los asientos del año para liquidación fiscal
-  const { data: entries } = await supabase
-    .from("journal_entries")
-    .select("*, lines:journal_lines(*)")
-    .gte("entry_date", from)
-    .lte("entry_date", to)
-    .eq("status", "posted");
+  // Cargar todos los asientos del año para liquidación fiscal con paginación
+  const allEntries: any[] = [];
+  const PAGE_SIZE = 1000;
+  let pageIdx = 0;
+  let keepFetching = true;
 
-  const allEntries = entries ?? [];
+  while (keepFetching) {
+    const fromRange = pageIdx * PAGE_SIZE;
+    const toRange = fromRange + PAGE_SIZE - 1;
+    const { data: pageEntries, error } = await supabase
+      .from("journal_entries")
+      .select("*, lines:journal_lines(*)")
+      .gte("entry_date", from)
+      .lte("entry_date", to)
+      .eq("status", "posted")
+      .order("entry_date", { ascending: true })
+      .range(fromRange, toRange);
+
+    if (error || !pageEntries || pageEntries.length === 0) {
+      keepFetching = false;
+    } else {
+      allEntries.push(...pageEntries);
+      if (pageEntries.length < PAGE_SIZE) {
+        keepFetching = false;
+      } else {
+        pageIdx++;
+      }
+    }
+  }
   const allLines = allEntries.flatMap((e: any) => e.lines ?? []);
 
   // Agrupar por Ingresos (4.x) y Gastos (5.x)

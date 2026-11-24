@@ -46,15 +46,39 @@ export default async function EstadoResultadosPage({
 
   const supabase = createAdminClient();
 
-  const [{ data: closedRecords }, { data: rawLines }] = await Promise.all([
-    supabase.from("monthly_closures").select("period").eq("status", "closed"),
-    supabase
+  const { data: closedRecords } = await supabase
+    .from("monthly_closures")
+    .select("period")
+    .eq("status", "closed");
+
+  // Consultar líneas contables del período con paginación para evitar el límite de 1.000 filas de PostgREST
+  const rawLines: any[] = [];
+  const PAGE_SIZE = 1000;
+  let pageIdx = 0;
+  let keepFetching = true;
+
+  while (keepFetching) {
+    const fromRange = pageIdx * PAGE_SIZE;
+    const toRange = fromRange + PAGE_SIZE - 1;
+    const { data: pageLines, error } = await supabase
       .from("journal_lines")
       .select("account_code, account_name, debit, credit, journal_entries!inner(entry_date, status)")
       .gte("journal_entries.entry_date", from)
       .lte("journal_entries.entry_date", to)
-      .eq("journal_entries.status", "posted"),
-  ]);
+      .eq("journal_entries.status", "posted")
+      .range(fromRange, toRange);
+
+    if (error || !pageLines || pageLines.length === 0) {
+      keepFetching = false;
+    } else {
+      rawLines.push(...pageLines);
+      if (pageLines.length < PAGE_SIZE) {
+        keepFetching = false;
+      } else {
+        pageIdx++;
+      }
+    }
+  }
 
   const closedSet = new Set((closedRecords ?? []).map((c: any) => c.period));
 

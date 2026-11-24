@@ -237,7 +237,26 @@ export default async function ContabilidadPage({
     }
   }
 
-  const { data: entries } = await entriesQuery;
+  const entries: any[] = [];
+  let entriesPageIdx = 0;
+  let keepFetchingEntries = true;
+
+  while (keepFetchingEntries) {
+    const fromRange = entriesPageIdx * 1000;
+    const toRange = fromRange + 999;
+    const { data: pageEntries, error } = await entriesQuery.range(fromRange, toRange);
+
+    if (error || !pageEntries || pageEntries.length === 0) {
+      keepFetchingEntries = false;
+    } else {
+      entries.push(...pageEntries);
+      if (pageEntries.length < 1000) {
+        keepFetchingEntries = false;
+      } else {
+        entriesPageIdx++;
+      }
+    }
+  }
 
   // Cargar datos ATS si la pestaña activa es ATS
   let atsVentas: any[] = [];

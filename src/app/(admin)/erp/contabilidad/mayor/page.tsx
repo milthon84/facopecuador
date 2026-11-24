@@ -211,34 +211,54 @@ export default async function LibroMayorPage({
       }
     }
 
-    // B. Consultar movimientos del período (desde <= entry_date <= hasta)
-    const { data: periodEntriesData } = await supabase
-      .from("journal_entries")
-      .select(`
-        id,
-        entry_number,
-        entry_code,
-        entry_date,
-        description,
-        reference_type,
-        reference_id,
-        status,
-        created_at,
-        lines:journal_lines(
+    // B. Consultar movimientos del período (desde <= entry_date <= hasta) con paginación
+    const periodEntriesData: any[] = [];
+    let entryPageIdx = 0;
+    let keepFetchingEntries = true;
+
+    while (keepFetchingEntries) {
+      const fromRange = entryPageIdx * PAGE_SIZE;
+      const toRange = fromRange + PAGE_SIZE - 1;
+      const { data: pageEntries, error } = await supabase
+        .from("journal_entries")
+        .select(`
           id,
-          account_code,
-          account_name,
-          debit,
-          credit,
-          description
-        )
-      `)
-      .gte("entry_date", desde)
-      .lte("entry_date", hasta)
-      .eq("status", "posted")
-      .order("entry_date", { ascending: true })
-      .order("entry_number", { ascending: true })
-      .order("id", { ascending: true });
+          entry_number,
+          entry_code,
+          entry_date,
+          description,
+          reference_type,
+          reference_id,
+          status,
+          created_at,
+          lines:journal_lines(
+            id,
+            account_code,
+            account_name,
+            debit,
+            credit,
+            description
+          )
+        `)
+        .gte("entry_date", desde)
+        .lte("entry_date", hasta)
+        .eq("status", "posted")
+        .order("entry_date", { ascending: true })
+        .order("entry_number", { ascending: true })
+        .order("id", { ascending: true })
+        .range(fromRange, toRange);
+
+      if (error || !pageEntries || pageEntries.length === 0) {
+        keepFetchingEntries = false;
+      } else {
+        periodEntriesData.push(...pageEntries);
+        if (pageEntries.length < PAGE_SIZE) {
+          keepFetchingEntries = false;
+        } else {
+          entryPageIdx++;
+        }
+      }
+    }
 
     // Filtrar entradas por tipo y documento si aplica
     const filteredEntries = (periodEntriesData || []).filter((entry) => {
