@@ -166,8 +166,8 @@ export default async function CursoDetallePage({
     courseInvoices = invData || [];
   }
 
-  // Si el curso está en borrador, la pestaña por defecto es 'modulos'; si está abierto/en ejecución, es 'alumnos'
-  const defaultTab = course.status === "draft" ? "modulos" : "alumnos";
+  // Si el curso está en borrador o en ejecución, la pestaña por defecto es 'modulos'; si está abierto/finalizado, es 'alumnos'
+  const defaultTab = course.status === "draft" || course.status === "in_progress" ? "modulos" : "alumnos";
   const activeTab = tab ?? defaultTab;
 
   const modules = modulesRes.data || [];
