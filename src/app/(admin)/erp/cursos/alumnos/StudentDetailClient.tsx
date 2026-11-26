@@ -9,7 +9,6 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
-import PagoInscripcionModal from "@/components/PagoInscripcionModal";
 import PagoModuloModal from "@/components/PagoModuloModal";
 import { syncStudentModulesAction } from "@/app/(admin)/erp/cursos/actions";
 import { proxyStorageUrl } from "@/lib/storage-proxy";
@@ -391,6 +390,7 @@ export default function StudentDetailClient({
                         <EnrollmentStatusSelector
                           enrollmentId={enroll.id}
                           studentId={student.id}
+                          courseId={curso.id}
                           initialStatus={enroll.status}
                           isMatriculado={isPaidOrMatriculado}
                           action={updateEnrollmentStatusAction}
@@ -413,22 +413,6 @@ export default function StudentDetailClient({
                           ? "Matriculado"
                           : "Inscrito"}
                       </span>
-
-                      {!isPaidOrMatriculado && enroll.status !== "dropped" && canEdit && (
-                        <PagoInscripcionModal
-                          studentName={student.full_name}
-                          studentDoc={student.document_number}
-                          studentEmail={student.email}
-                          studentPhone={student.phone}
-                          courseId={curso.id}
-                          courseName={curso.name}
-                          courseTotalCost={Number(curso.total_cost)}
-                          enrollmentId={enroll.id}
-                          firstModuleCost={sortedModules[0]?.curso_modulos?.cost ? Number(sortedModules[0].curso_modulos.cost) : undefined}
-                          firstModuleName={sortedModules[0]?.curso_modulos?.name}
-                          returnUrl={`/erp/cursos/alumnos?id=${student.id}`}
-                        />
-                      )}
                     </div>
                   </div>
 

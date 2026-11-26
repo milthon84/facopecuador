@@ -15,7 +15,7 @@ import CopyCourseButton from "@/components/CopyCourseButton";
 import AttendanceListModal from "@/components/AttendanceListModal";
 import EditCourseModal from "@/components/EditCourseModal";
 import EnrollStudentModal from "@/components/EnrollStudentModal";
-import PagoInscripcionModal from "@/components/PagoInscripcionModal";
+import EnrollmentStatusSelector from "@/components/EnrollmentStatusSelector";
 import TeacherMultiSelect from "@/components/TeacherMultiSelect";
 import CreateModuleModal from "@/components/CreateModuleModal";
 
@@ -546,42 +546,38 @@ export default async function CursoDetallePage({
                           <div className="text-ink-800">{student.email}</div>
                           <div className="text-ink-500">{student.phone}</div>
                         </td>
-                        <td className="px-5 py-3.5 text-right flex items-center justify-end gap-2">
-                          {isNoFiscal ? (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-indigo-300 bg-indigo-50/90 text-indigo-900 shadow-2xs w-fit whitespace-nowrap">
-                              <CheckCircle2 size={13} className="text-indigo-600" />
-                              <span>Matriculado (Sin Factura)</span>
-                            </div>
-                          ) : isPaidOrMatriculado || e.status === "completed" ? (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
-                              <CheckCircle2 size={13} className="text-green-600" />
-                              <span>Matriculado{paidInvoiceNumber ? ` — № ${paidInvoiceNumber}` : ""}</span>
-                            </div>
-                          ) : e.status === "dropped" ? (
-                            <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-100">
-                              Retirado
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
-                              Inscrito
-                            </span>
-                          )}
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {e.status === "dropped" ? (
+                              <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-100">
+                                Retirado
+                              </span>
+                            ) : isNoFiscal ? (
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-indigo-300 bg-indigo-50/90 text-indigo-900 shadow-2xs w-fit whitespace-nowrap">
+                                <CheckCircle2 size={13} className="text-indigo-600" />
+                                <span>Matriculado (Sin Factura)</span>
+                              </div>
+                            ) : isPaidOrMatriculado || e.status === "completed" ? (
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-green-200 bg-green-50 text-green-700 shadow-sm w-fit whitespace-nowrap">
+                                <CheckCircle2 size={13} className="text-green-600" />
+                                <span>Matriculado{paidInvoiceNumber ? ` — № ${paidInvoiceNumber}` : ""}</span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                                Inscrito
+                              </span>
+                            )}
 
-                          {!isPaidOrMatriculado && e.status !== "dropped" && canEdit && (
-                            <PagoInscripcionModal
-                              studentName={student.full_name}
-                              studentDoc={student.document_number}
-                              studentEmail={student.email}
-                              studentPhone={student.phone}
-                              courseId={course.id}
-                              courseName={course.name}
-                              courseTotalCost={Number(course.total_cost)}
-                              enrollmentId={e.id}
-                              firstModuleCost={modules[0]?.cost ? Number(modules[0].cost) : undefined}
-                              firstModuleName={modules[0]?.name}
-                              returnUrl={`/erp/cursos/${course.id}?tab=alumnos`}
-                            />
-                          )}
+                            {canEdit && (
+                              <EnrollmentStatusSelector
+                                enrollmentId={e.id}
+                                studentId={student.id}
+                                courseId={course.id}
+                                initialStatus={e.status}
+                                isMatriculado={isPaidOrMatriculado}
+                              />
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

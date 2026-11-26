@@ -961,3 +961,89 @@ export async function deleteClassScheduleAction(classId: string) {
   }
 }
 
+export async function updateEnrollmentStatusAction(
+  enrollmentId: string,
+  targetStatus: string,
+  courseId?: string,
+  studentId?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await assertWritePermission("/erp/cursos");
+    if (!enrollmentId) return { success: false, error: "ID de inscripción requerido." };
+
+    const supabase = createAdminClient();
+
+    const [{ data: enrollment }, { data: modInscriptions }] = await Promise.all([
+      supabase
+        .from("curso_inscripciones")
+        .select("id, course_id, student_id, status, payment_type")
+        .eq("id", enrollmentId)
+        .single(),
+      supabase
+        .from("curso_modulo_inscripciones")
+        .select("id, billing_status, invoice_id, invoices(sri_status)")
+        .eq("enrollment_id", enrollmentId),
+    ]);
+
+    if (!enrollment) {
+      return { success: false, error: "Inscripción no encontrada." };
+    }
+
+    const activeModInscriptions = modInscriptions || [];
+    const hasInvoicedModule = activeModInscriptions.some((mi: any) => {
+      if (mi.billing_status !== "invoiced") return false;
+      const sriStatus = mi.invoices?.sri_status;
+      return sriStatus !== "cancelled" && sriStatus !== "rejected" && sriStatus !== "error";
+    });
+
+    const hasAnyModulePayment =
+      hasInvoicedModule ||
+      activeModInscriptions.some((mi: any) => mi.billing_status === "free");
+
+    if (targetStatus === "dropped" && hasInvoicedModule) {
+      return {
+        success: false,
+        error: "No se puede cambiar a Retirado porque el alumno tiene al menos un módulo facturado.",
+      };
+    }
+
+    if (targetStatus === "matriculado" && !hasAnyModulePayment) {
+      return {
+        success: false,
+        error: "No se puede cambiar a Matriculado porque el alumno no tiene ningún pago registrado en los módulos.",
+      };
+    }
+
+    const dbStatus =
+      targetStatus === "matriculado" || targetStatus === "inscrito"
+        ? "enrolled"
+        : targetStatus;
+
+    const { error } = await supabase
+      .from("curso_inscripciones")
+      .update({ status: dbStatus, updated_at: new Date().toISOString() })
+      .eq("id", enrollmentId);
+
+    if (error) {
+      return { success: false, error: parseDbError(error.message) };
+    }
+
+    const targetCourseId = courseId || enrollment.course_id;
+    const targetStudentId = studentId || enrollment.student_id;
+
+    if (targetCourseId) {
+      revalidatePath(`/erp/cursos/${targetCourseId}`);
+    }
+    if (targetStudentId) {
+      revalidatePath(`/erp/cursos/alumnos?id=${targetStudentId}`);
+    }
+    revalidatePath("/erp/cursos/alumnos");
+    revalidatePath("/erp/cursos/clases");
+    revalidatePath("/erp/cursos");
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al actualizar estado de inscripción." };
+  }
+}
+

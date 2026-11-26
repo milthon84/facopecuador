@@ -1,76 +1,112 @@
 "use client";
 
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { updateEnrollmentStatusAction } from "@/app/(admin)/erp/cursos/actions";
+
 interface Props {
   enrollmentId: string;
   studentId: string;
+  courseId?: string;
   initialStatus: string;
   isMatriculado?: boolean;
-  action: (formData: FormData) => Promise<any>;
+  /** Prop opcional mantenido por compatibilidad; si no se pasa, usa updateEnrollmentStatusAction */
+  action?: (formData: FormData) => Promise<any>;
 }
 
+/**
+ * Selector de estado de matrícula (Inscrito / Matriculado / Finalizado / Retirado).
+ * Valida en servidor que no existan módulos facturados antes de retirar,
+ * y que exista al menos un pago en módulo antes de pasar a Matriculado.
+ */
 export default function EnrollmentStatusSelector({
   enrollmentId,
   studentId,
+  courseId,
   initialStatus,
   isMatriculado = false,
-  action,
 }: Props) {
-  // 1. Si el alumno está en estado RETIRADO:
-  //    Permite volver al estado que estuvo antes (Matriculado o Inscrito)
-  if (initialStatus === "dropped") {
-    return (
-      <form action={action} className="flex items-center gap-1.5">
-        <input type="hidden" name="studentId" value={studentId} />
-        <input type="hidden" name="enrollmentId" value={enrollmentId} />
-        <select
-          name="status"
-          defaultValue="dropped"
-          onChange={(e) => e.target.form?.requestSubmit()}
-          className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-lilac-500 font-medium cursor-pointer"
-        >
-          <option value="dropped">Retirado</option>
-          <option value="enrolled">{isMatriculado ? "Matriculado" : "Inscrito"}</option>
-        </select>
-      </form>
-    );
-  }
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 2. Si está en estado INSCRITO (Pendiente de Pago / No matriculado todavía):
-  //    Solo se permite cambiar a Retirado
-  if (!isMatriculado && initialStatus !== "completed") {
-    return (
-      <form action={action} className="flex items-center gap-1.5">
-        <input type="hidden" name="studentId" value={studentId} />
-        <input type="hidden" name="enrollmentId" value={enrollmentId} />
-        <select
-          name="status"
-          defaultValue="enrolled"
-          onChange={(e) => e.target.form?.requestSubmit()}
-          className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-lilac-500 font-medium cursor-pointer"
-        >
-          <option value="enrolled">Inscrito</option>
-          <option value="dropped">Retirado</option>
-        </select>
-      </form>
-    );
-  }
+  const currentSelectValue =
+    initialStatus === "dropped"
+      ? "dropped"
+      : initialStatus === "completed"
+      ? "completed"
+      : isMatriculado
+      ? "matriculado"
+      : "inscrito";
 
-  // 3. Si está en estado MATRICULADO o FINALIZADO:
-  //    Permite cambiar a Finalizado y Retirado
-  return (
-    <form action={action} className="flex items-center gap-1.5">
-      <input type="hidden" name="studentId" value={studentId} />
-      <input type="hidden" name="enrollmentId" value={enrollmentId} />
-      <select
-        name="status"
-        defaultValue={initialStatus === "completed" ? "completed" : "enrolled"}
-        onChange={(e) => e.target.form?.requestSubmit()}
-        className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-lilac-500 font-medium cursor-pointer"
-      >
-        <option value="enrolled">Matriculado</option>
+  const [value, setValue] = useState(currentSelectValue);
+
+  const handleChange = (nextValue: string) => {
+    const previousValue = value;
+    setValue(nextValue);
+    setErrorMsg(null);
+
+    startTransition(async () => {
+      const res = await updateEnrollmentStatusAction(
+        enrollmentId,
+        nextValue,
+        courseId,
+        studentId
+      );
+      if (!res.success) {
+        setValue(previousValue);
+        setErrorMsg(res.error || "No se pudo actualizar el estado.");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const renderOptions = () => {
+    if (initialStatus === "dropped") {
+      return (
+        <>
+          <option value="dropped">Retirado</option>
+          <option value="matriculado">Matriculado</option>
+          {!isMatriculado && <option value="inscrito">Inscrito</option>}
+        </>
+      );
+    }
+
+    if (!isMatriculado && initialStatus !== "completed") {
+      return (
+        <>
+          <option value="inscrito">Inscrito</option>
+          <option value="matriculado">Matriculado</option>
+          <option value="dropped">Retirado</option>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <option value="matriculado">Matriculado</option>
         <option value="completed">Finalizado</option>
         <option value="dropped">Retirado</option>
+      </>
+    );
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <select
+        value={value}
+        disabled={isPending}
+        onChange={(e) => handleChange(e.target.value)}
+        className="text-xs px-2.5 py-1 bg-white border border-lilac-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-lilac-500 font-medium cursor-pointer disabled:opacity-50"
+      >
+        {renderOptions()}
       </select>
-    </form>
+      {errorMsg && (
+        <span className="text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md max-w-[240px] text-right leading-tight">
+          {errorMsg}
+        </span>
+      )}
+    </div>
   );
 }
