@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { 
   ClipboardList, X, Printer, CheckCircle2, AlertCircle, 
-  Loader2, UserCheck, DollarSign, Search, Calendar 
+  Loader2, UserCheck, DollarSign, Search, Calendar, Receipt 
 } from "lucide-react";
 import { getModuleAttendanceDataAction, updateModuleBillingStatusAction } from "@/app/(admin)/erp/cursos/actions";
 
@@ -283,7 +284,7 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
                           <th className="py-2.5 px-3">Nombre del Alumno</th>
                           <th className="py-2.5 px-3">Teléfono</th>
                           <th className="py-2.5 px-3">Estado de Pago</th>
-                          <th className="py-2.5 px-3 text-center">Firma de Asistencia</th>
+                          <th className="py-2.5 px-3">Factura / Motivo</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-lilac-50">
@@ -360,16 +361,46 @@ export default function AttendanceListModal({ moduleId, moduleName, moduleNumber
                                   </div>
                                 </td>
 
-                                {/* Espacio para firma */}
-                                <td className="py-2.5 px-3 text-center">
-                                  {isRetired ? (
-                                    <div className="w-36 h-7 bg-slate-100 border border-slate-200 rounded mx-auto flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                      Retirado
+                                {/* Columna de Factura / Motivo */}
+                                <td className="py-2.5 px-3">
+                                  {st.billingStatus === "invoiced" ? (
+                                    st.invoiceNumber ? (
+                                      st.invoiceId ? (
+                                        <>
+                                          <Link
+                                            href={`/erp/facturacion/${st.invoiceId}`}
+                                            className="no-print inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-2 py-0.5 rounded-lg transition-colors"
+                                            title="Ver detalle de factura"
+                                          >
+                                            <Receipt size={11} />
+                                            <span>#{st.invoiceNumber}</span>
+                                          </Link>
+                                          <span className="hidden print:inline font-mono text-[11px] font-bold">
+                                            #{st.invoiceNumber}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                          <Receipt size={11} />
+                                          <span>#{st.invoiceNumber}</span>
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span className="text-[11px] text-ink-500 italic">Facturado (sin nro.)</span>
+                                    )
+                                  ) : st.billingStatus === "free" ? (
+                                    <div className="space-y-0.5">
+                                      <span className="inline-flex items-center text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                                        {st.noFiscalReason || "Beca / Gratis"}
+                                      </span>
+                                      {st.noFiscalDetail && (
+                                        <p className="text-[10px] text-ink-600 leading-snug max-w-[220px]">
+                                          {st.noFiscalDetail}
+                                        </p>
+                                      )}
                                     </div>
                                   ) : (
-                                    <div className="w-36 h-7 border border-dashed border-gray-300 rounded mx-auto flex items-center justify-center text-[10px] text-gray-300">
-                                      Firma
-                                    </div>
+                                    <span className="text-[11px] text-ink-400">—</span>
                                   )}
                                 </td>
                               </tr>

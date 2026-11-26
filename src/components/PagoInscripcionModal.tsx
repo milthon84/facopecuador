@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Award, Layers, FileX, Loader2, AlertCircle } from "lucide-react";
+import { CreditCard, Award, Layers, FileX, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { registerNoFiscalEnrollmentAction } from "@/app/(admin)/erp/cursos/actions";
 import StandardModal from "@/components/StandardModal";
+import NoFiscalConfirmBox, { NoFiscalReason } from "@/components/NoFiscalConfirmBox";
 
 interface Props {
   studentName: string;
@@ -62,11 +63,11 @@ export default function PagoInscripcionModal({
     setErrorMsg(null);
   };
 
-  const executeNoFiscalRegister = async () => {
+  const executeNoFiscalRegister = async (reason: NoFiscalReason, detail: string) => {
     setLoadingNoFiscal(true);
     setErrorMsg(null);
     try {
-      await registerNoFiscalEnrollmentAction(enrollmentId, courseId);
+      await registerNoFiscalEnrollmentAction(enrollmentId, courseId, reason, detail);
       setOpen(false);
       setConfirmNoFiscal(false);
       router.refresh();
@@ -114,40 +115,16 @@ export default function PagoInscripcionModal({
           )}
 
           {confirmNoFiscal ? (
-            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
-              <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                <FileX size={16} className="text-amber-700 shrink-0" />
-                <span>¿Confirmar registro sin comprobante fiscal?</span>
-              </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                Se registrará a <strong>{studentName}</strong> directamente en el curso sin generar factura electrónica SRI. Útil para becas, exoneraciones o pagos realizados por canales externos.
-              </p>
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-amber-200/60">
-                <button
-                  type="button"
-                  onClick={() => setConfirmNoFiscal(false)}
-                  disabled={loadingNoFiscal}
-                  className="px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-amber-100 rounded-xl transition cursor-pointer"
-                >
-                  Volver atrás
-                </button>
-                <button
-                  type="button"
-                  onClick={executeNoFiscalRegister}
-                  disabled={loadingNoFiscal}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer disabled:opacity-50"
-                >
-                  {loadingNoFiscal ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin" />
-                      <span>Registrando...</span>
-                    </>
-                  ) : (
-                    <span>Confirmar Registro Sin Factura</span>
-                  )}
-                </button>
-              </div>
-            </div>
+            <NoFiscalConfirmBox
+              description={
+                <>
+                  Se registrará a <strong>{studentName}</strong> directamente en el curso sin generar factura electrónica SRI.
+                </>
+              }
+              loading={loadingNoFiscal}
+              onCancel={() => setConfirmNoFiscal(false)}
+              onConfirm={executeNoFiscalRegister}
+            />
           ) : (
             <div className="grid gap-3">
               {/* OPCIÓN 1: PAGO COMPLETO */}

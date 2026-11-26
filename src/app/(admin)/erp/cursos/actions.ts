@@ -662,10 +662,19 @@ export async function getModuleAttendanceDataAction(moduleId: string) {
       .select("profesores(full_name, specialty)")
       .eq("module_id", moduleId);
 
-    const { data: moduleInscriptions } = await supabase
+    let { data: moduleInscriptions, error: miError } = await supabase
       .from("curso_modulo_inscripciones")
-      .select("id, billing_status, invoices(invoice_number, invoice_items(description)), curso_inscripciones(status, payment_type, alumnos(id, full_name, document_number, phone, email))")
+      .select("id, billing_status, invoice_id, no_fiscal_reason, no_fiscal_detail, invoices(id, invoice_number, sri_status, invoice_items(description)), curso_inscripciones(status, payment_type, no_fiscal_reason, no_fiscal_detail, alumnos(id, full_name, document_number, phone, email))")
       .eq("module_id", moduleId);
+
+    // Fallback si la migración de no_fiscal_reason/no_fiscal_detail aún no se ejecuta en BD
+    if (miError && (miError.message.includes("no_fiscal_reason") || miError.message.includes("no_fiscal_detail"))) {
+      const fallbackRes = await supabase
+        .from("curso_modulo_inscripciones")
+        .select("id, billing_status, invoice_id, invoices(id, invoice_number, sri_status, invoice_items(description)), curso_inscripciones(status, payment_type, alumnos(id, full_name, document_number, phone, email))")
+        .eq("module_id", moduleId);
+      moduleInscriptions = fallbackRes.data as any;
+    }
 
     const students = (moduleInscriptions || [])
       .map((mi: any) => {
@@ -685,9 +694,15 @@ export async function getModuleAttendanceDataAction(moduleId: string) {
           status = "pending";
         }
 
+        const isCancelledOrRejected = mi.invoices?.sri_status === "cancelled" || mi.invoices?.sri_status === "rejected" || mi.invoices?.sri_status === "error";
+
         return {
           moduloInscripcionId: mi.id,
           billingStatus: status,
+          invoiceId: !isInscriptionInvoice && !isCancelledOrRejected ? (mi.invoices?.id || mi.invoice_id || null) : null,
+          invoiceNumber: !isInscriptionInvoice && !isCancelledOrRejected ? (mi.invoices?.invoice_number || null) : null,
+          noFiscalReason: mi.no_fiscal_reason || mi.curso_inscripciones?.no_fiscal_reason || null,
+          noFiscalDetail: mi.no_fiscal_detail || mi.curso_inscripciones?.no_fiscal_detail || null,
           enrollmentStatus: mi.curso_inscripciones.status as string,
           studentId: student.id,
           fullName: student.full_name,
@@ -729,26 +744,52 @@ export async function updateModuleBillingStatusAction(moduloInscripcionId: strin
   return { success: true };
 }
 
-export async function registerNoFiscalEnrollmentAction(enrollmentId: string, courseId?: string) {
+export async function registerNoFiscalEnrollmentAction(
+  enrollmentId: string,
+  courseId?: string,
+  reason?: string,
+  detail?: string
+) {
   await assertWritePermission("/erp/cursos");
   if (!enrollmentId) throw new Error("ID de inscripción requerido.");
+  const cleanReason = reason?.trim() || "";
+  const cleanDetail = detail?.trim() || "";
+  if (!cleanReason) throw new Error("Debe seleccionar un motivo (Beca, Gratis u Otro Motivo).");
+  if (!cleanDetail) throw new Error("Debe detallar el motivo del registro sin factura.");
 
   const supabase = createAdminClient();
 
-  // 1. Intentar actualizar el tipo de pago a "no_fiscal"
+  // 1. Intentar actualizar el tipo de pago a "no_fiscal" junto con el motivo y detalle
   let { error: enrollError } = await supabase
     .from("curso_inscripciones")
-    .update({ payment_type: "no_fiscal", updated_at: new Date().toISOString() })
+    .update({
+      payment_type: "no_fiscal",
+      no_fiscal_reason: cleanReason,
+      no_fiscal_detail: cleanDetail,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", enrollmentId);
 
-  // Fallback si la restricción CHECK de Postgres 'curso_inscripciones_payment_type_check' no incluye 'no_fiscal'
-  if (enrollError && (enrollError.message.includes("payment_type") || enrollError.message.includes("check"))) {
-    const { error: fallbackError } = await supabase
-      .from("curso_inscripciones")
-      .update({ payment_type: "full_course", updated_at: new Date().toISOString() })
-      .eq("id", enrollmentId);
+  // Fallback si aún no existen las columnas no_fiscal_reason/no_fiscal_detail o si la restricción CHECK no incluye 'no_fiscal'
+  if (enrollError) {
+    const missingCols = enrollError.message.includes("no_fiscal_reason") || enrollError.message.includes("no_fiscal_detail");
+    const checkErr = enrollError.message.includes("payment_type") || enrollError.message.includes("check");
 
-    enrollError = fallbackError;
+    if (missingCols || checkErr) {
+      const payload: Record<string, any> = {
+        payment_type: checkErr ? "full_course" : "no_fiscal",
+        updated_at: new Date().toISOString(),
+      };
+      if (!missingCols) {
+        payload.no_fiscal_reason = cleanReason;
+        payload.no_fiscal_detail = cleanDetail;
+      }
+      const { error: fallbackError } = await supabase
+        .from("curso_inscripciones")
+        .update(payload)
+        .eq("id", enrollmentId);
+      enrollError = fallbackError;
+    }
   }
 
   // 2. Actualizar la cuota de inscripción / primer módulo a 'free' (Pagado SF), manteniendo los siguientes módulos en 'pending' para su cobro por módulo
@@ -760,10 +801,22 @@ export async function registerNoFiscalEnrollmentAction(enrollmentId: string, cou
 
   if (moduleInscriptions && moduleInscriptions.length > 0) {
     const firstModuleId = moduleInscriptions[0].id;
-    await supabase
+    const { error: modErr } = await supabase
       .from("curso_modulo_inscripciones")
-      .update({ billing_status: "free", updated_at: new Date().toISOString() })
+      .update({
+        billing_status: "free",
+        no_fiscal_reason: cleanReason,
+        no_fiscal_detail: cleanDetail,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", firstModuleId);
+
+    if (modErr && (modErr.message.includes("no_fiscal_reason") || modErr.message.includes("no_fiscal_detail"))) {
+      await supabase
+        .from("curso_modulo_inscripciones")
+        .update({ billing_status: "free", updated_at: new Date().toISOString() })
+        .eq("id", firstModuleId);
+    }
   }
 
   if (courseId) {
@@ -774,16 +827,38 @@ export async function registerNoFiscalEnrollmentAction(enrollmentId: string, cou
   return { success: true };
 }
 
-export async function registerNoFiscalModuleAction(moduleInscriptionId: string, courseId?: string) {
+export async function registerNoFiscalModuleAction(
+  moduleInscriptionId: string,
+  courseId?: string,
+  reason?: string,
+  detail?: string
+) {
   await assertWritePermission("/erp/cursos");
   if (!moduleInscriptionId) throw new Error("ID de inscripción a módulo requerido.");
+  const cleanReason = reason?.trim() || "";
+  const cleanDetail = detail?.trim() || "";
+  if (!cleanReason) throw new Error("Debe seleccionar un motivo (Beca, Gratis u Otro Motivo).");
+  if (!cleanDetail) throw new Error("Debe detallar el motivo del registro sin factura.");
 
   const supabase = createAdminClient();
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("curso_modulo_inscripciones")
-    .update({ billing_status: "free", updated_at: new Date().toISOString() })
+    .update({
+      billing_status: "free",
+      no_fiscal_reason: cleanReason,
+      no_fiscal_detail: cleanDetail,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", moduleInscriptionId);
+
+  if (error && (error.message.includes("no_fiscal_reason") || error.message.includes("no_fiscal_detail"))) {
+    const fallback = await supabase
+      .from("curso_modulo_inscripciones")
+      .update({ billing_status: "free", updated_at: new Date().toISOString() })
+      .eq("id", moduleInscriptionId);
+    error = fallback.error;
+  }
 
   if (error) {
     throw new Error(parseDbError(error.message));
